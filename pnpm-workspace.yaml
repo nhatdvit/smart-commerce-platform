@@ -7,3 +7,14 @@ packages:
   - 'apps/customer-web'
   - 'apps/admin-web'
   - 'packages/*'
+
+# Transitive security patches.
+#
+# Next.js depends on an older postcss that carries two high-severity
+# advisories (path traversal via sourceMappingURL, and ReDoS). Upgrading our
+# own direct dependency does not help, because the vulnerable copy is reached
+# through next>postcss. Same patch line (8.5.x), so it is a drop-in.
+# Re-check against `pnpm audit` whenever Next.js is upgraded; drop the entry
+# once Next ships a patched postcss itself.
+overrides:
+  postcss: '^8.5.32'
