@@ -1,0 +1,158 @@
+# Deployed-environment overrides (staging and production).
+#
+#   docker compose --env-file .env -f infra/compose.yaml -f infra/compose.prod.yaml \
+#     up -d --no-deps api worker scheduler
+#
+# Rules this file encodes (CLAUDE.md §9):
+#   - the gateway is the only service with published ports
+#   - images are pinned to a versioned tag per release, never :latest
+#   - no debug, no database ports, no dev dependencies in the image
+#   - "docker compose down" is NOT a deployment step; update services in place
+#   - migrations are a separate one-off job, run before the rollout
+#
+# Secrets come from the platform secret store, not from a file on the host.
+
+services:
+  gateway:
+    ports:
+      - '80:8080'
+      - '443:8443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ${TLS_CERT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  api:
+    image: ${API_IMAGE:?API_IMAGE must be set to a versioned tag}
+    build: !reset null
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: 'false'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SESSION_SECURE_COOKIE: 'true'
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+      update_config:
+        # Bring the new container up before retiring the old one, so there is
+        # no window with zero capacity.
+        order: start-first
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  worker:
+    image: ${API_IMAGE:?API_IMAGE must be set to a versioned tag}
+    build: !reset null
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: 'false'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+      update_config:
+        # Stop-first for queue consumers: Horizon drains the job in flight on
+        # SIGTERM, and starting a replacement first would briefly double the
+        # consumer count on a queue sized for the configured concurrency.
+        order: stop-first
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  scheduler:
+    image: ${API_IMAGE:?API_IMAGE must be set to a versioned tag}
+    build: !reset null
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_DEBUG: 'false'
+    deploy:
+      # Exactly one. A second scheduler would run every due task twice:
+      # expiring the same reservation, reconciling the same payment.
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+      update_config:
+        order: stop-first
+
+  migrate:
+    image: ${API_IMAGE:?API_IMAGE must be set to a versioned tag}
+    build: !reset null
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+
+  customer-web:
+    image: ${CUSTOMER_WEB_IMAGE:?CUSTOMER_WEB_IMAGE must be set to a versioned tag}
+    build: !reset null
+    environment:
+      NODE_ENV: production
+    deploy:
+      replicas: ${CUSTOMER_WEB_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+      update_config:
+        order: start-first
+
+  admin-web:
+    image: ${ADMIN_WEB_IMAGE:?ADMIN_WEB_IMAGE must be set to a versioned tag}
+    build: !reset null
+    environment:
+      NODE_ENV: production
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+  postgres:
+    # Prefer a managed PostgreSQL in production. If self-hosting, back up
+    # off-host and test the restore (docs/database/DATABASE_SPEC.md §9).
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backups:/backups
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: 2G
+    # Default 64MB is too small for parallel query workers.
+    shm_size: 256mb
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+
+networks:
+  # The data tier gets no route out, so a compromised dependency cannot
+  # exfiltrate from PostgreSQL or Redis. The worker still reaches notification
+  # providers through the separate "egress" network.
+  backend:
+    internal: true

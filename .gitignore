@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+# PHP dependencies are installed from composer.lock; apps/api/.gitignore also
+# covers this, but keep it here so a vendor/ anywhere is ignored.
+vendor/
+
+# Build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Tests / coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+.phpunit.result.cache
+.phpunit.cache/
+
+# Laravel runtime state. The per-directory .gitignore files inside
+# apps/api/storage keep the directory structure and ignore the contents.
+apps/api/storage/phpstan/
+
+# Environment — never commit real credentials.
+# .env holds the database password, APP_KEY and the receiving bank details;
+# only the example files are tracked.
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local docker volumes / database dumps. A dump contains live customer and
+# order data, so it must never reach the repository.
+infra/.data/
+infra/backups/
+*.dump
+*.sql.gz
+
+# NOTE: docs/api/openapi.json IS tracked on purpose. It is generated, but it is
+# the client-facing contract, so it belongs in review and CI diffs it.

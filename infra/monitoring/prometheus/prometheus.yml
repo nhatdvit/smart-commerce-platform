@@ -1,0 +1,33 @@
+# Scrape configuration for the optional local monitoring stack
+# (profile "monitoring").
+#
+# Honest current state: the Laravel API exposes no /metrics endpoint yet, so
+# there is nothing application-level to scrape. PHP-FPM and Nginx both publish
+# status pages, but Prometheus cannot read them without an exporter in front.
+#
+# Metrics the project needs (CLAUDE.md §10) and what each will take:
+#
+#   HTTP p95 and error rate   nginx-prometheus-exporter against the gateway
+#   PHP-FPM pool saturation   php-fpm-exporter against api:9000 (/fpm-status
+#                             is already enabled in php-fpm-pool.conf)
+#   DB connections, locks     postgres-exporter
+#   Redis memory, evictions   redis-exporter
+#   Queue depth and job age   Horizon metrics, or a small exporter reading
+#                             horizon:supervisors from Redis
+#   Order failures, payment   application counters, once the Order and Payment
+#   mismatch, stock           modules exist
+#
+# Add each exporter as a service in compose.dev.yaml under the same profile,
+# then a job here. Scraping a target that does not exist only produces noise,
+# so none are listed before their exporter does.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: local
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

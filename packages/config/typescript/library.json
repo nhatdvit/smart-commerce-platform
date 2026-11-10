@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "_comment": "rootDir and outDir are intentionally NOT set here: TypeScript resolves relative paths against the file that declares them, so a value here would point inside packages/config. Each library sets its own.",
+  "compilerOptions": {
+    "composite": true
+  }
+}

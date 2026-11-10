@@ -1,0 +1,7 @@
+{
+  "extends": "@scp/config/typescript/next.json",
+  "compilerOptions": {
+    "plugins": []
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "tailwind-preset.ts"]
+}

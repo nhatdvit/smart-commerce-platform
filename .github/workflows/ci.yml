@@ -1,0 +1,342 @@
+# Pull-request pipeline (CLAUDE.md §9):
+#   Laravel Pint -> PHPStan/Larastan -> Pest -> frontend ESLint/TypeScript
+#                -> Composer/npm security checks -> Docker build
+#
+# Independent jobs run in parallel. Nothing here deploys.
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_VERSION: '8.4'
+  NODE_VERSION: '22.12.0'
+  PNPM_VERSION: '10.34.9'
+  TURBO_TELEMETRY_DISABLED: '1'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+permissions:
+  contents: read
+
+jobs:
+  # ========================================================== BACKEND (PHP)
+  php-static:
+    name: PHP style and static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: bcmath, intl, pdo_pgsql, redis, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ runner.os }}-${{ hashFiles('apps/api/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install PHP dependencies
+        working-directory: apps/api
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Laravel Pint (code style)
+        working-directory: apps/api
+        run: vendor/bin/pint --test
+
+      - name: PHPStan / Larastan (static analysis)
+        working-directory: apps/api
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  php-tests:
+    name: Pest (PHP tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_DB: smart_commerce_test
+          POSTGRES_USER: scp_app
+          POSTGRES_PASSWORD: scp_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U scp_app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7.4-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      APP_ENV: testing
+      # Test-only key. Real secrets never live in a workflow file.
+      APP_KEY: base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmcx
+      APP_DEBUG: 'true'
+      # Must match the APP_URL the committed OpenAPI document was exported
+      # with, because config/scramble.php derives the Local server URL from it.
+      # A mismatch would make the "OpenAPI document is current" check below
+      # fail on a difference that is not a contract change.
+      APP_URL: http://localhost:8080
+      OPENAPI_VERSION: 1.0.0
+      # Real PostgreSQL, never SQLite: row locking, partial indexes, CHECK
+      # constraints and TIMESTAMPTZ behaviour are load-bearing (CLAUDE.md §12).
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_DATABASE: smart_commerce_test
+      DB_USERNAME: scp_app
+      DB_PASSWORD: scp_test
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      SANCTUM_STATEFUL_DOMAINS: localhost:3001
+      CORS_ALLOWED_ORIGINS: http://localhost:3001
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: bcmath, intl, pdo_pgsql, redis, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ runner.os }}-${{ hashFiles('apps/api/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install PHP dependencies
+        working-directory: apps/api
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Validate configuration
+        working-directory: apps/api
+        run: php artisan app:validate-config
+
+      - name: Run migrations
+        working-directory: apps/api
+        run: php artisan migrate --force --no-interaction
+
+      # Proves the migration set is reversible, so rollback is a real option
+      # rather than a hope (CLAUDE.md §9).
+      - name: Verify migrations roll back and re-apply
+        working-directory: apps/api
+        run: |
+          php artisan migrate:rollback --force --no-interaction
+          php artisan migrate --force --no-interaction
+
+      - name: Seed reference data
+        working-directory: apps/api
+        run: php artisan db:seed --force --no-interaction
+
+      - name: Pest
+        working-directory: apps/api
+        run: vendor/bin/pest --ci
+
+      # The committed document is the client-facing contract, so a stale copy
+      # is a defect: it tells integrators the API behaves in a way it no longer
+      # does. Regenerate and diff, rather than trusting it was remembered
+      # (CLAUDE.md §8, §12).
+      - name: OpenAPI document is current
+        working-directory: apps/api
+        run: |
+          php artisan config:clear --no-interaction
+          php artisan scramble:export --path=storage/app/openapi.json
+          php -r '
+              $path = "storage/app/openapi.json";
+              $document = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+              file_put_contents($path, json_encode(
+                  $document,
+                  JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+              ) . PHP_EOL);
+          '
+          cp storage/app/openapi.json ../../docs/api/openapi.json
+
+      - name: Fail if the OpenAPI document was not regenerated
+        run: |
+          if ! git diff --exit-code -- docs/api/openapi.json; then
+            echo "::error::docs/api/openapi.json is out of date. Run: pnpm api:openapi"
+            exit 1
+          fi
+
+  # ===================================================== FRONTEND (Next.js)
+  web:
+    name: Frontend lint, types and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prettier
+        run: pnpm format:check
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: TypeScript
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+  # ================================================================ SECURITY
+  security:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: bcmath, intl, pdo_pgsql, redis, zip
+          coverage: none
+          tools: composer:v2
+
+      # Fails on a known advisory in the locked PHP dependency tree.
+      - name: Composer audit
+        working-directory: apps/api
+        run: composer audit --locked --no-interaction
+
+      # A lockfile that no longer matches composer.json means the installed
+      # tree in CI differs from what a developer resolved locally.
+      - name: Composer lockfile is current
+        working-directory: apps/api
+        run: composer validate --no-check-publish --no-interaction
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit
+        run: pnpm audit --audit-level high
+
+  # =========================================================== DOCKER BUILD
+  # Builds every image the stack needs, so a broken Dockerfile is caught in the
+  # pull request rather than at deploy time. Images are not pushed from a PR.
+  docker:
+    name: Docker build (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [php-static]
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, customer-web, admin-web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          target: runtime
+          push: false
+          load: false
+          tags: scp-${{ matrix.app }}:ci
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  # ========================================================= INFRASTRUCTURE
+  compose:
+    name: Compose and Nginx configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render dev stack
+        run: |
+          cp .env.example .env
+          sed -i 's|^APP_KEY=.*|APP_KEY=base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmcx|' .env
+          docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml config -q
+
+      - name: Render production stack
+        env:
+          API_IMAGE: scp-api:ci
+          CUSTOMER_WEB_IMAGE: scp-customer-web:ci
+          ADMIN_WEB_IMAGE: scp-admin-web:ci
+        run: docker compose --env-file .env -f infra/compose.yaml -f infra/compose.prod.yaml config -q
+
+      # nginx -t resolves upstream hostnames at parse time, and the compose
+      # network does not exist here, so stub them to loopback.
+      - name: Validate Nginx configuration
+        run: |
+          docker run --rm \
+            --add-host api:127.0.0.1 \
+            --add-host customer-web:127.0.0.1 \
+            --add-host admin-web:127.0.0.1 \
+            -v "$PWD/infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            -v "$PWD/infra/nginx/conf.d:/etc/nginx/conf.d:ro" \
+            nginx:1.27-alpine nginx -t
+
+  # ==================================================================== GATE
+  # One required check for branch protection.
+  ci-ok:
+    name: CI
+    runs-on: ubuntu-latest
+    needs: [php-static, php-tests, web, security, docker, compose]
+    if: always()
+    steps:
+      - name: Fail if any job failed
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "One or more CI jobs failed."
+            exit 1
+          fi
+          echo "All CI jobs passed."

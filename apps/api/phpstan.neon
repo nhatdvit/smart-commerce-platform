@@ -1,0 +1,33 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    # tests/ is deliberately not analysed. The Pest DSL resolves its chained
+    # calls (it(...)->throws(...), expect(...), arch(...)) at runtime, and
+    # PHPStan reports every one as a call on a PendingCall - 36 false positives
+    # that would drown real findings. The tests are validated by running them,
+    # which CI does on every pull request.
+    paths:
+        - app
+        - config
+        - database
+        - routes
+
+    # Level 8 adds strict null handling on top of full type checking. Raise to
+    # 9 once the first business modules land and the remaining mixed types have
+    # concrete shapes.
+    level: 8
+
+    tmpDir: storage/phpstan
+
+    # Trust real types over docblocks: a wrong @var should not silence a real
+    # error.
+    treatPhpDocTypesAsCertain: false
+
+    # A stale entry in ignoreErrors hides a rule that is no longer needed, so
+    # an unmatched pattern is itself an error.
+    reportUnmatchedIgnoredErrors: true
+
+    # Layer boundaries (Domain must not know the framework) are enforced by the
+    # architecture tests in tests/Unit/ArchitectureTest.php, which can express
+    # "namespace X may not depend on Y" directly. PHPStan has no equivalent.

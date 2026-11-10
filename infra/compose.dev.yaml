@@ -1,0 +1,176 @@
+# Local development overrides.
+#
+#   docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml up -d
+#
+# What this adds:
+#   - the gateway published on the host
+#   - PostgreSQL and Redis bound to 127.0.0.1 only, never 0.0.0.0
+#   - OPcache timestamp validation back on, so edited PHP takes effect
+#   - MinIO for S3-compatible storage
+#   - Prometheus and Grafana behind the "monitoring" profile
+
+services:
+  gateway:
+    ports:
+      - '127.0.0.1:${GATEWAY_HTTP_PORT:-8080}:8080'
+
+  api:
+    build:
+      # The dev target carries dev dependencies, so artisan, Pint, PHPStan and
+      # Pest can run inside the same container that serves requests.
+      target: dev
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      # Production disables the stat() on every include; development needs it,
+      # otherwise edited files are ignored until the container restarts.
+      PHP_OPCACHE_VALIDATE_TIMESTAMPS: '1'
+    volumes:
+      # Live code. vendor/ stays inside the image: it is built for Alpine and a
+      # host copy would shadow it with the wrong platform binaries.
+      - ../apps/api/app:/var/www/html/app
+      - ../apps/api/bootstrap/app.php:/var/www/html/bootstrap/app.php:ro
+      - ../apps/api/bootstrap/providers.php:/var/www/html/bootstrap/providers.php:ro
+      - ../apps/api/config:/var/www/html/config
+      - ../apps/api/database:/var/www/html/database
+      - ../apps/api/routes:/var/www/html/routes
+      - ../apps/api/tests:/var/www/html/tests
+      - ../apps/api/public:/var/www/html/public
+      - ../apps/api/phpstan.neon:/var/www/html/phpstan.neon:ro
+      - ../apps/api/phpunit.xml:/var/www/html/phpunit.xml:ro
+      - ../apps/api/pint.json:/var/www/html/pint.json:ro
+
+  worker:
+    build:
+      target: dev
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+    volumes:
+      - ../apps/api/app:/var/www/html/app
+      - ../apps/api/bootstrap/app.php:/var/www/html/bootstrap/app.php:ro
+      - ../apps/api/bootstrap/providers.php:/var/www/html/bootstrap/providers.php:ro
+      - ../apps/api/config:/var/www/html/config
+      - ../apps/api/database:/var/www/html/database
+      - ../apps/api/routes:/var/www/html/routes
+
+  scheduler:
+    build:
+      target: dev
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+    volumes:
+      - ../apps/api/app:/var/www/html/app
+      - ../apps/api/bootstrap/app.php:/var/www/html/bootstrap/app.php:ro
+      - ../apps/api/bootstrap/providers.php:/var/www/html/bootstrap/providers.php:ro
+      - ../apps/api/config:/var/www/html/config
+      - ../apps/api/database:/var/www/html/database
+      - ../apps/api/routes:/var/www/html/routes
+
+  migrate:
+    build:
+      target: dev
+    environment:
+      APP_ENV: local
+    volumes:
+      - ../apps/api/database:/var/www/html/database
+      - ../apps/api/config:/var/www/html/config
+
+  customer-web:
+    environment:
+      NODE_ENV: development
+    ports:
+      - '127.0.0.1:${CUSTOMER_WEB_PORT:-3001}:3001'
+
+  admin-web:
+    environment:
+      NODE_ENV: development
+    ports:
+      - '127.0.0.1:${ADMIN_WEB_PORT:-3002}:3002'
+
+  # Loopback only: convenient for psql and artisan from the host, unreachable
+  # from the local network.
+  postgres:
+    environment:
+      MIGRATION_DB_USERNAME: ${MIGRATION_DB_USERNAME:-scp_migrator}
+      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:-${POSTGRES_PASSWORD}}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+
+  redis:
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+
+  # ------------------------------------------------------------------ minio
+  # Optional (CLAUDE.md §9), and behind a profile so it cannot block the core
+  # stack:
+  #
+  #   docker compose ... --profile storage up -d minio
+  #
+  # Note: MinIO images are no longer served anonymously - neither
+  # docker.io/minio/minio nor quay.io/minio/minio can be pulled without
+  # credentials. Set MINIO_IMAGE to a registry you can read, or leave storage
+  # on the local filesystem disk, which is the default for development.
+  minio:
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:latest}
+    profiles: ['storage']
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    ports:
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9001:9001'
+    networks:
+      - backend
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------------------------- monitoring stack
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    restart: unless-stopped
+    profiles: ['monitoring']
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - '127.0.0.1:${PROMETHEUS_PORT:-9090}:9090'
+    networks:
+      - frontend
+      - backend
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    profiles: ['monitoring']
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - '127.0.0.1:${GRAFANA_PORT:-3030}:3000'
+    depends_on:
+      - prometheus
+    networks:
+      - frontend
+
+volumes:
+  minio-data:
+  prometheus-data:
+  grafana-data:

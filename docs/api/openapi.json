@@ -1,0 +1,107 @@
+{
+    "openapi": "3.1.2",
+    "info": {
+        "title": "Smart Commerce Platform",
+        "version": "1.0.0",
+        "description": "Customer storefront and operations API for the Smart Commerce Platform.\n\n**Money.** Amounts are whole Vietnamese đồng transported as decimal\nstrings (`\"45000\"`), because JSON numbers cannot hold a 64-bit integer\nsafely in every client. Never parse them into a float.\n\n**Errors.** Every failure returns the same envelope with a stable\nmachine-readable `code`; branch on that, never on `message`.\n\n**Store scope.** Admin operations require both the role permission and\nan active membership of the target store. Store context comes from the\nroute or the host, never from a query parameter.\n\n**Payments.** MVP settles in `CASH` or `BANK_TRANSFER` only. A generated\nVietQR is not a confirmation of payment: authorized staff confirm the\nactual bank credit."
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8080/api/v1",
+            "description": "Local"
+        },
+        {
+            "url": "https://staging.example.com/api/v1",
+            "description": "Staging"
+        },
+        {
+            "url": "https://example.com/api/v1",
+            "description": "Production"
+        }
+    ],
+    "paths": {
+        "/": {
+            "get": {
+                "operationId": "index",
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "api_version": {
+                                            "type": "string",
+                                            "const": "v1"
+                                        },
+                                        "request_id": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "name",
+                                        "api_version",
+                                        "request_id"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/me": {
+            "get": {
+                "operationId": "me",
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": []
+                                    },
+                                    "required": [
+                                        "id"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "responses": {
+            "AuthenticationException": {
+                "description": "Unauthenticated",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

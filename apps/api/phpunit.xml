@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         failOnDeprecation="true"
+         beStrictAboutOutputDuringTests="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <!--
+        restrict* confines warning, notice and deprecation reporting to code
+        under <include>. Without it, every test inherits vendor noise - dotenv
+        notices that there is no .env file (correct: containers get their
+        configuration from the environment), and deprecations inside packages
+        we do not control. Our own warnings still fail the build.
+    -->
+    <source restrictDeprecations="true"
+            restrictNotices="true"
+            restrictWarnings="true"
+    >
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="APP_KEY" value="base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmcx"/>
+        <env name="APP_DEBUG" value="true"/>
+        <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
+
+        <!--
+            Tests run against real PostgreSQL, never SQLite. Row locking,
+            partial indexes, CHECK constraints and TIMESTAMPTZ behaviour are
+            load-bearing here, and SQLite silently behaves differently
+            (CLAUDE.md section 12).
+        -->
+        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="DB_HOST" value="127.0.0.1"/>
+        <env name="DB_PORT" value="5432"/>
+        <!--
+            This value is only reached when DB_DATABASE is absent from the
+            environment, which is the case when pest runs on the host against
+            the published PostgreSQL port. Inside the api container compose
+            sets DB_DATABASE to the development database, and PHP fills
+            $_SERVER from the real environment (variables_order=EGPCS), which
+            Laravel reads in preference to anything phpunit sets here -
+            force="true" included. An in-container run must pass the test
+            database explicitly: "pnpm api:test" does, and Tests\TestCase
+            refuses to start when it is missing, because RefreshDatabase runs
+            migrate:fresh and would drop the development schema.
+        -->
+        <env name="DB_DATABASE" value="smart_commerce_test"/>
+
+        <env name="CACHE_STORE" value="array"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="TELESCOPE_ENABLED" value="false"/>
+    </php>
+</phpunit>

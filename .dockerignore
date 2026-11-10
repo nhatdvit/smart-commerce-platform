@@ -1,0 +1,46 @@
+# Keep the build context small and never ship local state or secrets.
+
+# --- JavaScript -------------------------------------------------------------
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+
+# --- PHP --------------------------------------------------------------------
+# vendor/ is installed inside the image from composer.lock, so a host copy
+# would both bloat the context and risk shipping platform-wrong binaries.
+apps/api/vendor
+apps/api/storage/logs/*
+apps/api/storage/framework/cache/*
+apps/api/storage/framework/sessions/*
+apps/api/storage/framework/views/*
+apps/api/storage/phpstan
+apps/api/bootstrap/cache/*
+apps/api/.phpunit.result.cache
+apps/api/.phpunit.cache
+
+# --- Tests and tooling output ----------------------------------------------
+**/coverage
+**/test-results
+**/playwright-report
+**/*.log
+
+# --- Secrets ----------------------------------------------------------------
+**/.env
+**/.env.*
+!**/.env.example
+**/auth.json
+
+# --- Repository metadata ----------------------------------------------------
+.git
+.github
+.vscode
+.idea
+docs
+infra/.data
+infra/backups
+
+# Documentation is not needed at build time, except the architectural contract
+# which is useful when inspecting an image.
+**/*.md
+!CLAUDE.md

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "_comment": "Thin alias so editors and ad-hoc tsc invocations at the repository root pick up the same strict settings. The real definition lives in packages/config/typescript/base.json.",
+  "extends": "@scp/config/typescript/base.json"
+}

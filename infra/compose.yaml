@@ -1,0 +1,308 @@
+# Base Compose stack - the service topology shared by every environment.
+#
+# Overrides:
+#   compose.dev.yaml   local development (published ports, MinIO, monitoring)
+#   compose.prod.yaml  deployed environments (pinned images, limits, no db ports)
+#
+# Usage (run from the repository root so --env-file finds .env):
+#   docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml up -d
+#
+# Networks:
+#   frontend  gateway <-> web apps <-> api            (api is PHP-FPM, not HTTP)
+#   backend   api/worker/scheduler <-> postgres, redis, storage
+#   egress    worker only, for outbound notification providers
+
+name: ${COMPOSE_PROJECT_NAME:-smart-commerce}
+
+# Environment shared by every PHP process. api, worker, scheduler and the
+# migrate job all run the same image and must agree on configuration.
+x-php-env: &php-env
+  APP_NAME: ${APP_NAME:-Smart Commerce Platform}
+  APP_ENV: ${APP_ENV:-production}
+  APP_KEY: ${APP_KEY:?APP_KEY must be set. Generate one with artisan key:generate --show}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  APP_TIMEZONE: UTC
+
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: ${POSTGRES_DB}
+  DB_USERNAME: ${DB_USERNAME}
+  DB_PASSWORD: ${DB_PASSWORD}
+
+  REDIS_CLIENT: ${REDIS_CLIENT:-phpredis}
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-null}
+
+  CACHE_STORE: ${CACHE_STORE:-redis}
+  QUEUE_CONNECTION: ${QUEUE_CONNECTION:-redis}
+  SESSION_DRIVER: ${SESSION_DRIVER:-redis}
+  SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+  SESSION_SAME_SITE: ${SESSION_SAME_SITE:-lax}
+
+  SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+  TRUSTED_PROXIES: ${TRUSTED_PROXIES:-*}
+
+  HORIZON_PREFIX: ${HORIZON_PREFIX:-scp_horizon}
+
+  COMMERCE_DEFAULT_STORE_TIMEZONE: ${COMMERCE_DEFAULT_STORE_TIMEZONE:-Asia/Ho_Chi_Minh}
+  COMMERCE_DEFAULT_STORE_SLUG: ${COMMERCE_DEFAULT_STORE_SLUG:-}
+  COMMERCE_STORE_HOSTS: ${COMMERCE_STORE_HOSTS:-}
+  COMMERCE_ORDER_CODE_PREFIX: ${COMMERCE_ORDER_CODE_PREFIX:-SCP}
+  COMMERCE_BANK_TRANSFER_EXPIRY_MINUTES: ${COMMERCE_BANK_TRANSFER_EXPIRY_MINUTES:-30}
+  COMMERCE_TRANSFER_REFERENCE_PREFIX: ${COMMERCE_TRANSFER_REFERENCE_PREFIX:-SCP}
+  COMMERCE_STOCK_RESERVATION_TTL_MINUTES: ${COMMERCE_STOCK_RESERVATION_TTL_MINUTES:-30}
+  COMMERCE_IDEMPOTENCY_RETENTION_HOURS: ${COMMERCE_IDEMPOTENCY_RETENTION_HOURS:-24}
+  COMMERCE_RATE_LIMIT_READ: ${COMMERCE_RATE_LIMIT_READ:-120}
+  COMMERCE_RATE_LIMIT_WRITE: ${COMMERCE_RATE_LIMIT_WRITE:-20}
+  COMMERCE_NOTIFICATION_EMAIL_PROVIDER: ${COMMERCE_NOTIFICATION_EMAIL_PROVIDER:-none}
+  COMMERCE_NOTIFICATION_SMS_PROVIDER: ${COMMERCE_NOTIFICATION_SMS_PROVIDER:-none}
+
+  LOG_CHANNEL: ${LOG_CHANNEL:-stack}
+  LOG_STACK: ${LOG_STACK:-single}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ---------------------------------------------------------------- gateway
+  # The only service that may publish 80/443. It terminates HTTP, serves the
+  # Next.js apps by proxy and speaks FastCGI to the PHP-FPM api service.
+  gateway:
+    <<: *restart
+    image: nginx:1.27-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+      customer-web:
+        condition: service_started
+      admin-web:
+        condition: service_started
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    networks:
+      - frontend
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8080/nginx-health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # -------------------------------------------------------------------- api
+  # Laravel on PHP-FPM. Speaks FastCGI on 9000, never HTTP, and is reachable
+  # only through the gateway.
+  api:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment: *php-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+    # Declared here rather than relying on the image HEALTHCHECK, because the
+    # dev build target does not carry one and the gateway waits on this.
+    #
+    # It asks the FPM pool whether it is answering. Readiness for traffic is a
+    # separate question, answered by GET /health/ready through the gateway.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          SCRIPT_NAME=/fpm-ping SCRIPT_FILENAME=/fpm-ping REQUEST_METHOD=GET
+          cgi-fcgi -bind -connect 127.0.0.1:9000 2>/dev/null | grep -q pong
+      interval: 15s
+      timeout: 5s
+      start_period: 40s
+      retries: 5
+    stop_grace_period: 30s
+
+  # ----------------------------------------------------------------- worker
+  # Horizon supervises the queue workers. Same image, different entrypoint, so
+  # queue load can never starve request handling.
+  worker:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment: *php-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ['php', 'artisan', 'horizon']
+    networks:
+      # backend is internal in production; egress is the deliberate, worker-only
+      # route out for notification providers (CLAUDE.md §9).
+      - backend
+      - egress
+    healthcheck:
+      test: ['CMD', 'php', 'artisan', 'horizon:status']
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    # Horizon terminates gracefully on SIGTERM: it finishes the job in flight
+    # before exiting, so a deploy does not kill half-processed work.
+    stop_signal: SIGTERM
+    stop_grace_period: 60s
+
+  # -------------------------------------------------------------- scheduler
+  # Exactly one per deployment (CLAUDE.md §16). Two schedulers would run every
+  # due task twice: expiring the same reservation, reconciling twice.
+  scheduler:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment: *php-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ['php', 'artisan', 'schedule:work']
+    networks:
+      - backend
+    deploy:
+      replicas: 1
+    stop_grace_period: 60s
+
+  # ---------------------------------------------------------------- migrate
+  # Explicit one-off job, never part of api startup, so two replicas can never
+  # migrate concurrently (CLAUDE.md §9):
+  #   docker compose --env-file .env -f infra/compose.yaml run --rm migrate
+  migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+      target: runtime
+    environment:
+      <<: *php-env
+      # Elevated DDL credentials, separate from the least-privilege runtime user.
+      DB_USERNAME: ${MIGRATION_DB_USERNAME:-${DB_USERNAME}}
+      DB_PASSWORD: ${MIGRATION_DB_PASSWORD:-${DB_PASSWORD}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['php', 'artisan', 'migrate', '--force', '--no-interaction']
+    restart: 'no'
+    profiles: ['tools']
+    networks:
+      - backend
+
+  # ----------------------------------------------------------- customer-web
+  customer-web:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: apps/customer-web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Smart Commerce Platform}
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://gateway:8080/api/v1}
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - frontend
+
+  # -------------------------------------------------------------- admin-web
+  admin-web:
+    <<: *restart
+    build:
+      context: ..
+      dockerfile: apps/admin-web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_SITE_NAME: ${NEXT_PUBLIC_SITE_NAME:-Smart Commerce Platform}
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3002
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://gateway:8080/api/v1}
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - frontend
+
+  # --------------------------------------------------------------- postgres
+  # Source of truth. No published port in any environment; compose.dev.yaml
+  # binds it to 127.0.0.1 only.
+  postgres:
+    <<: *restart
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Deterministic collation, so index and ORDER BY behaviour match across
+      # developer machines and servers.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    stop_grace_period: 30s
+
+  # ------------------------------------------------------------------ redis
+  # Cache and queue transport. Never authoritative for orders, payments or stock.
+  redis:
+    <<: *restart
+    image: redis:7.4-alpine
+    # appendonly keeps queued jobs across a restart; noeviction stops Redis
+    # silently dropping a queued job when memory fills.
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    # NOT internal here: an internal network cannot publish ports, and local
+    # development needs psql and artisan from the host. compose.dev.yaml binds
+    # those to 127.0.0.1 only; compose.prod.yaml marks this network internal so
+    # the data tier has no route out at all.
+  egress:
+    driver: bridge

@@ -1,0 +1,9 @@
+# JavaScript workspaces only.
+#
+# apps/api is a Laravel application managed by Composer and is deliberately
+# absent: PHP dependencies are not installed through pnpm, and Turborepo does
+# not orchestrate PHP (CLAUDE.md section 4).
+packages:
+  - 'apps/customer-web'
+  - 'apps/admin-web'
+  - 'packages/*'
