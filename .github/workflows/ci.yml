@@ -95,10 +95,13 @@ jobs:
       # Test-only key. Real secrets never live in a workflow file.
       APP_KEY: base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmcx
       APP_DEBUG: 'true'
-      # Must match the APP_URL the committed OpenAPI document was exported
-      # with, because config/scramble.php derives the Local server URL from it.
-      # A mismatch would make the "OpenAPI document is current" check below
-      # fail on a difference that is not a contract change.
+      # These three feed the OpenAPI document, so they must match the values it
+      # was exported with, or the "OpenAPI document is current" check below
+      # fails on a difference that is not a contract change:
+      #   APP_NAME        -> info.title    (Scramble reads config('app.name'))
+      #   APP_URL         -> servers[0]    (config/scramble.php builds it)
+      #   OPENAPI_VERSION -> info.version
+      APP_NAME: Smart Commerce Platform
       APP_URL: http://localhost:8080
       OPENAPI_VERSION: 1.0.0
       # Real PostgreSQL, never SQLite: row locking, partial indexes, CHECK
