@@ -177,6 +177,26 @@ non-production environments. Regenerate it in the same change as the code:
 pnpm api:openapi
 ```
 
+### Reading them locally
+
+Both are rendered on the **admin host only** — the API surface is staff-facing
+information and has no business on the public storefront:
+
+| URL                                       | Shows                               |
+| ----------------------------------------- | ----------------------------------- |
+| `http://admin.localhost:8080/docs/api`    | the generated document, from code   |
+| `http://admin.localhost:8080/docs/design` | the designed document, hand-written |
+
+The designed one is served by the gateway from `docs/api/design-viewer.html`,
+which renders `openapi.yaml` with the same component Scramble's page uses, so a
+reviewer compares content rather than two different presentations. Its banner
+says plainly that most of what it shows is not implemented yet, because landing
+on it from a link gives no other way to tell the two apart.
+
+Development only: `compose.dev.yaml` mounts `docs/api` into the gateway
+read-only, and nothing mounts it in `compose.prod.yaml`, so `/docs/design`
+404s in a deployed environment. A design document is not an API deliverable.
+
 ### How the two are kept honest
 
 ```bash
