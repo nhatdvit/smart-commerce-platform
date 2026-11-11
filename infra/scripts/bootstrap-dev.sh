@@ -53,7 +53,7 @@ echo "==> Applying migrations"
 "${COMPOSE[@]}" run --rm migrate
 
 echo "==> Seeding reference and demo data"
-"${COMPOSE[@]}" run --rm --no-deps --entrypoint php api artisan db:seed --force --no-interaction
+"${COMPOSE[@]}" run --user www-data --rm --no-deps --entrypoint php api artisan db:seed --force --no-interaction
 
 echo "==> Starting the rest of the stack"
 "${COMPOSE[@]}" up -d

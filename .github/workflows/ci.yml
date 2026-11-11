@@ -224,6 +224,40 @@ jobs:
       - name: Build
         run: pnpm build
 
+  # ================================================================ CONTRACT
+  # The designed contract and the implemented one must agree.
+  #
+  # Needs no database and no stack: both inputs are committed files. The
+  # php-tests job guarantees openapi.json still matches the code; this job
+  # guarantees the code matches docs/api/openapi.yaml, which is written and
+  # reviewed as a design before any of it is built.
+  #
+  # Conformance, not equality: an operation that is designed but not yet
+  # implemented is reported as remaining work, never as a failure.
+  contract:
+    name: OpenAPI design conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Implemented API conforms to the designed contract
+        env:
+          OPENAPI_CONFORMANCE_VERBOSE: '1'
+        run: pnpm openapi:conformance
+
   # ================================================================ SECURITY
   security:
     name: Dependency audit
@@ -333,7 +367,7 @@ jobs:
   ci-ok:
     name: CI
     runs-on: ubuntu-latest
-    needs: [php-static, php-tests, web, security, docker, compose]
+    needs: [php-static, php-tests, web, contract, security, docker, compose]
     if: always()
     steps:
       - name: Fail if any job failed

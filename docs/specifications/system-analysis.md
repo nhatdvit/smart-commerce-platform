@@ -12,12 +12,12 @@ Danh sách công việc chi tiết nằm ở GitHub Issues; đây là bản đ�
 
 Phase 01 (Foundation) đã xong và được CI xác nhận. Cụ thể:
 
-| Hạng mục | Có | Theo spec | Tỉ lệ |
-|---|---|---|---|
-| Module nghiệp vụ | Identity, Store | 16 (§5) | 2/16 |
-| Bảng dữ liệu | 19 (nền tảng + identity + store) | ~47 (DATABASE_SPEC §2) | ~40% |
-| Endpoint nghiệp vụ | 0 | 15 (§8) | 0/15 |
-| Test | 39 (4 file) | — | — |
+| Hạng mục           | Có                               | Theo spec              | Tỉ lệ |
+| ------------------ | -------------------------------- | ---------------------- | ----- |
+| Module nghiệp vụ   | Identity, Store                  | 16 (§5)                | 2/16  |
+| Bảng dữ liệu       | 19 (nền tảng + identity + store) | ~47 (DATABASE_SPEC §2) | ~40%  |
+| Endpoint nghiệp vụ | 0                                | 15 (§8)                | 0/15  |
+| Test               | 39 (4 file)                      | —                      | —     |
 
 Nền tảng đã có và **tái sử dụng được cho mọi module sau**:
 
@@ -54,7 +54,7 @@ Ba thứ ở dòng dưới cùng là **điều kiện cần của Order**, khôn
 - **Idempotency** — §6 bắt buộc checkout phải idempotent. Nếu làm Order trước
   rồi mới thêm, mọi đường tạo đơn phải viết lại.
 - **Outbox dispatcher** — §6 yêu cầu ghi trạng thái nghiệp vụ và sự kiện trong
-  *cùng một transaction*. Thêm sau nghĩa là phải sửa lại toàn bộ transaction đã viết.
+  _cùng một transaction_. Thêm sau nghĩa là phải sửa lại toàn bộ transaction đã viết.
 - **Audit** — §6 yêu cầu xác nhận thanh toán phải ghi vết. Bổ sung sau sẽ để
   lại khoảng trống lịch sử không thể khôi phục.
 
@@ -103,14 +103,14 @@ thì rất khó truy.
 §15 liệt kê sáu quyết định chưa chốt. Hai trong số đó **chặn trực tiếp** việc
 viết code đúng:
 
-| Quyết định | Chặn | Vì sao không thể đoán |
-|---|---|---|
-| Tài khoản ngân hàng nhận tiền, cửa sổ hết hạn, chính sách ngoại lệ/hoàn tiền | Payment | Sai là mất tiền thật |
-| Hình thức giao hàng (pickup / delivery / dine-in) | Fulfillment, phí trong Pricing | Quyết định cấu trúc đơn hàng |
-| Chính sách định danh khách vãng lai (OTP hay không) | Cart, Order | Ảnh hưởng luồng checkout |
-| Tồn kho theo thành phẩm hay nguyên liệu | Inventory | Khác hẳn mô hình dữ liệu |
-| Thuế và phí | Pricing | Ảnh hưởng công thức tổng tiền |
-| Một store hay nhiều store khi ra mắt | Store context | Đã để cấu hình được |
+| Quyết định                                                                   | Chặn                           | Vì sao không thể đoán         |
+| ---------------------------------------------------------------------------- | ------------------------------ | ----------------------------- |
+| Tài khoản ngân hàng nhận tiền, cửa sổ hết hạn, chính sách ngoại lệ/hoàn tiền | Payment                        | Sai là mất tiền thật          |
+| Hình thức giao hàng (pickup / delivery / dine-in)                            | Fulfillment, phí trong Pricing | Quyết định cấu trúc đơn hàng  |
+| Chính sách định danh khách vãng lai (OTP hay không)                          | Cart, Order                    | Ảnh hưởng luồng checkout      |
+| Tồn kho theo thành phẩm hay nguyên liệu                                      | Inventory                      | Khác hẳn mô hình dữ liệu      |
+| Thuế và phí                                                                  | Pricing                        | Ảnh hưởng công thức tổng tiền |
+| Một store hay nhiều store khi ra mắt                                         | Store context                  | Đã để cấu hình được           |
 
 Chưa có câu trả lời thì giữ nguyên tắc của §15: **để cấu hình được, không tự
 bịa chính sách**. Đó là lý do `config/commerce.php` tồn tại.
