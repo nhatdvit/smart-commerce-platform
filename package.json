@@ -33,7 +33,9 @@
     "api:pint": "docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml exec api vendor/bin/pint",
     "api:pint:check": "docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml exec api vendor/bin/pint --test",
     "api:check": "pnpm api:pint:check && pnpm api:stan && pnpm api:test",
-    "api:openapi": "bash infra/scripts/export-openapi.sh"
+    "api:openapi": "bash infra/scripts/export-openapi.sh",
+    "claude:selftest": "node .claude/hooks/selftest.mjs",
+    "claude:traceability": "node infra/scripts/check-task-traceability.mjs"
   },
   "devDependencies": {
     "@scp/config": "workspace:*",

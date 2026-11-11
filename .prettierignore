@@ -21,3 +21,10 @@ docs/api/openapi.json
 # every "composer require".
 apps/api/composer.json
 apps/api/composer.lock
+
+# Task records and review reports, written by agents during a task. Treated
+# like the generated OpenAPI document: Prettier must not reformat them into a
+# diff nobody asked for, and a malformed table from an agent must fail the
+# traceability gate rather than the formatting check.
+.claude/tasks/
+.claude/reviews/
