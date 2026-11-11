@@ -6,6 +6,7 @@ use App\Modules\Identity\Presentation\Http\Middleware\EnsureStorePermission;
 use App\Modules\Store\Presentation\Http\Middleware\ResolveStoreContext;
 use App\Shared\Infrastructure\Exception\ApiExceptionRenderer;
 use App\Shared\Presentation\Http\Middleware\AssignRequestId;
+use App\Shared\Presentation\Http\Middleware\EnsureIdempotency;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -37,6 +38,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'store.resolve' => ResolveStoreContext::class,
             'store.can' => EnsureStorePermission::class,
+            // Takes the scope that namespaces the key, e.g. idempotent:order.create
+            'idempotent' => EnsureIdempotency::class,
         ]);
 
         // This API is stateless by default; cookie-authenticated routes opt in

@@ -1,0 +1,116 @@
+<!doctype html>
+<!--
+  Local viewer for the DESIGNED contract (openapi.yaml), served by the Nginx
+  gateway on the admin host at /docs/design/ in development only.
+
+  Why this exists next to Scramble's /docs/api: the two documents answer
+  different questions, and reading the designed one as raw YAML makes it harder
+  to review than it needs to be.
+
+      /docs/api      what the API currently IS      (Scramble, from the code)
+      /docs/design   what the API is DESIGNED to be (openapi.yaml, hand-written)
+
+  Development only. The gateway serves this because compose.dev.yaml mounts
+  docs/api into it; no such mount exists in compose.prod.yaml, so the location
+  simply 404s in a deployed environment. Nothing here is part of the API.
+
+  The renderer is loaded from a CDN, pinned, and is the same component
+  Scramble's own page uses - so the two documents look alike and a reviewer is
+  comparing content rather than two different presentations. That also means
+  this page needs network access; the YAML file itself is always readable
+  without it.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Smart Commerce Platform - designed API contract</title>
+
+    <script src="https://unpkg.com/@stoplight/elements@8.4.2/web-components.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements@8.4.2/styles.min.css" />
+
+    <style>
+      :root {
+        color-scheme: light;
+        --banner-bg: #fff8e1;
+        --banner-border: #e6a700;
+        --banner-text: #4a3500;
+        --banner-muted: #6b5200;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      /*
+        The banner is not decoration. Someone who lands here from a link has no
+        way to tell this document from the generated one, and mistaking a design
+        for the running API is exactly the confusion worth preventing.
+      */
+      .banner {
+        flex: none;
+        padding: 0.75rem 1rem;
+        background: var(--banner-bg);
+        border-bottom: 2px solid var(--banner-border);
+        color: var(--banner-text);
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+      .banner strong {
+        display: block;
+        font-size: 0.9375rem;
+      }
+      .banner p {
+        margin: 0.25rem 0 0;
+        color: var(--banner-muted);
+      }
+      .banner a {
+        color: inherit;
+      }
+      .banner code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.8125rem;
+      }
+      .viewer {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      @media (max-width: 600px) {
+        .banner {
+          font-size: 0.8125rem;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="banner">
+      <strong>This is the designed contract, not the running API.</strong>
+      <p>
+        Hand-written in <code>docs/api/openapi.yaml</code> and reviewed as a design.
+        Most of what is below is not implemented yet. For what the API actually
+        exposes today, see <a href="/docs/api">/docs/api</a>, which is generated from
+        the code. <code>pnpm openapi:conformance</code> checks the second against the
+        first.
+      </p>
+    </div>
+
+    <elements-api
+      class="viewer"
+      apiDescriptionUrl="openapi.yaml"
+      router="hash"
+      layout="sidebar"
+      hideExport="true"
+    ></elements-api>
+  </body>
+</html>

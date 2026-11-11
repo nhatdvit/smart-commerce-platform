@@ -21,3 +21,7 @@ docs/api/openapi.json
 # every "composer require".
 apps/api/composer.json
 apps/api/composer.lock
+
+# Authored specification: the designed API contract, hand-written and reviewed
+# as a design. Same reason as the two above - Prettier must not rewrite it.
+docs/api/openapi.yaml

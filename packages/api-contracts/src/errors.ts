@@ -18,6 +18,8 @@ export const ERROR_CODE = {
 
   // 409 - conflicts and concurrency
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
+  /** Same idempotency key, still running. Retry; do not change the key. */
+  REQUEST_IN_PROGRESS: 'REQUEST_IN_PROGRESS',
   INVALID_STATE_TRANSITION: 'INVALID_STATE_TRANSITION',
   OUT_OF_STOCK: 'OUT_OF_STOCK',
   PRICE_CHANGED: 'PRICE_CHANGED',
