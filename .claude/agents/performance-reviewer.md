@@ -72,8 +72,11 @@ that will matter at scale. LOW for a cheap improvement.
 Quantify. "N+1: one query per order line, so 40 queries for a 40-line order" is
 a finding. "This could be slow" is not.
 
-Write the report to `.claude/reviews/<ID>/performance-review.md` from the
-template.
+Return the report as your final message, in the exact shape of
+`.claude/reviews/_templates/performance-review.md`, ready to be saved verbatim. **Do not
+write the file yourself.** You have no editing tools — that is what keeps you
+from fixing what you find — so the
+session that called you saves what you return (SCP-000 test report, N2).
 
 ## Reporting back
 

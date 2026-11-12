@@ -47,7 +47,11 @@ skipping security on a payment change is the expensive mistake.
 Call the chosen agents. All three are read-only, so none can fix what it finds
 and none can approve its own work — the implementer does not review itself.
 
-Each writes its report under `.claude/reviews/$ARGUMENTS/`:
+Each returns its findings to you, with file, line, severity and the concrete
+failure scenario for each. **You write the reports, not the agents** — they
+have no editing tools, for the same reason the QA agent does not, so an
+instruction to write their own file would produce nothing (SCP-000 test report,
+N2). Transcribe each one under `.claude/reviews/$ARGUMENTS/`:
 
 ```
 code-review.md

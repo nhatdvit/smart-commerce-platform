@@ -36,9 +36,18 @@ whole step exists to prevent.
 Call the `qa-engineer` agent with the task id and its acceptance criteria. It
 has no editing tools, so it cannot make a test pass by changing it.
 
-Instruct it to write `.claude/reviews/$ARGUMENTS/test-report.md` from
-`.claude/reviews/_templates/test-report.md`, and to map every acceptance
-criterion to PASS, FAIL or NOT VERIFIABLE with the test that decides it.
+Instruct it to run the suites and return, in its final report: every acceptance
+criterion mapped to PASS, FAIL or NOT VERIFIABLE, the command that decides each
+one, and the command's real output.
+
+**You write the file, not the agent.** Transcribe what it returned into
+`.claude/reviews/$ARGUMENTS/test-report.md` using
+`.claude/reviews/_templates/test-report.md`, and keep its numbers verbatim.
+The agent deliberately has no editing tools — that is what stops it making a
+test pass by changing it — so telling it to write its own report asks for a
+file it cannot produce, and the report quietly goes missing (SCP-000 test
+report, N2). Transcribing is not a rubber stamp: step 4 is you reading what you
+are about to write down.
 
 ## 4. Check the report is evidence, not assertion
 

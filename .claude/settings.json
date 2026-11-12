@@ -14,7 +14,6 @@
       },
       {
         "matcher": "Bash",
-        "if": "Bash(git commit *)",
         "hooks": [
           {
             "type": "command",
@@ -27,18 +26,6 @@
     "PostToolUse": [
       {
         "matcher": "Bash",
-        "if": "Bash(git commit *)",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/record-task-activity.mjs\"",
-            "timeout": 15
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "if": "Bash(gh pr create *)",
         "hooks": [
           {
             "type": "command",

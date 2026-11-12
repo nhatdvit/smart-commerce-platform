@@ -39,6 +39,27 @@ const check = (label, actual, expected) => {
 const MUST_BLOCK = [
   ['git push --force origin main', 'feature/x', 'force-push'],
   ['git push -f', 'feature/x', 'force-push'],
+
+  // SCP-000 F2. Every rule below had exactly one fixture, in its canonical
+  // spelling, and allowed the forms people actually mistype. These are
+  // accident shapes, not evasion: the guard's purpose is to raise the cost of
+  // a slip, and a slip does not use the documented spelling.
+  ['git push -fu origin main', 'feature/x', 'force-push'],
+  ['git push --mirror origin', 'feature/x', 'force-push'],
+  ['git push origin +main', 'feature/x', 'force-refspec'],
+  ['git push origin :main', 'feature/x', 'delete-remote-branch'],
+  ['git push -d origin feature/old', 'feature/x', 'delete-remote-branch'],
+  ['git commit -n -m x', 'feature/x', 'skip-hooks'],
+  ['git commit -nm x', 'feature/x', 'skip-hooks'],
+  ['echo A>.env', 'feature/x', 'write-dotenv'],
+  ['cat x | tee -a .env', 'feature/x', 'write-dotenv'],
+  ['cp secrets.txt .env', 'feature/x', 'write-dotenv-indirect'],
+  ['sed -i s/a/b/ .env', 'feature/x', 'write-dotenv-indirect'],
+  ['docker-compose down -v', 'feature/x', 'compose-down-volumes'],
+  ['docker compose down -fv', 'feature/x', 'compose-down-volumes'],
+  ['php artisan migrate --env=production', 'feature/x', 'production-migration'],
+  ['gh api -X PUT repos/o/r/pulls/3/merge', 'feature/x', 'auto-merge-pr-api'],
+  ['git -c core.hooksPath=/dev/null commit -m x', 'feature/x', 'bypass-hooks-path'],
   ['git push --force-with-lease origin feature/x', 'feature/x', 'force-push'],
   ['git push origin +refs/heads/main:refs/heads/main', 'feature/x', 'force-refspec'],
   ['git filter-repo --path secrets --invert-paths', 'feature/x', 'history-rewrite'],
@@ -78,6 +99,16 @@ const MUST_ALLOW = [
   ['git commit -m "feat(payment): add VietQR payload [SCP-001]"', 'feature/x'],
   ['git push origin feature/x', 'feature/x'],
   ['git push -u origin chore/SCP-000-ai-dev-workflow', 'chore/SCP-000-ai-dev-workflow'],
+
+  // SCP-000 F2. The broadened patterns above must not start catching ordinary
+  // work. -am contains no n; .env.example and .env.backup are not .env; a
+  // dry run is not a push.
+  ['git commit -am "feat(order): place order [SCP-016]"', 'feature/x'],
+  ['git push --dry-run origin feature/x', 'feature/x'],
+  ['cp .env.example .env.backup', 'feature/x'],
+  ['echo APP_KEY= > .env.example', 'feature/x'],
+  ['docker compose down', 'feature/x'],
+  ['php artisan migrate', 'feature/x'],
   // Merging main INTO a feature branch is the safe direction.
   ['git merge main', 'feature/x'],
   ['git merge --ff-only origin/main', 'feature/x'],

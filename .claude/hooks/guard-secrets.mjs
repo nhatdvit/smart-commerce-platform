@@ -2,9 +2,15 @@
 /**
  * PreToolUse guard: refuses a commit that would put a credential in git history.
  *
- * Registered against `Bash(git commit *)` in .claude/settings.json, so it costs
- * nothing on ordinary edits. A scan on every file write would be neither cheap
- * nor more effective.
+ * Registered on every Bash call in .claude/settings.json and filtered here, on
+ * the command itself. A scan on every file write would be neither cheap nor
+ * more effective, so the filter stays — but it lives in this file.
+ *
+ * The `if: "Bash(git commit *)"` pre-filter it used to carry was removed in
+ * SCP-000 F1. `git add -A && git commit ...` does not start with `git commit`,
+ * so a prefix pattern could skip the scan entirely on the most common way to
+ * commit — and a guard that silently does not run is worse than no guard,
+ * because it is trusted. One Node start per shell call is a fair price.
  *
  * A secret in git history is not fixed by a follow-up commit: it stays in every
  * clone and every fork. That is why this blocks rather than warns.

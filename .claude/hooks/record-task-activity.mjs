@@ -2,8 +2,15 @@
 /**
  * PostToolUse recorder: appends commits and pull requests to the task log.
  *
- * Registered in .claude/settings.json against `Bash(git commit *)` and
- * `Bash(gh pr create *)` only, so Node does not start on every shell call.
+ * Registered in .claude/settings.json on every Bash call, and filters on the
+ * command itself (see the regexes below).
+ *
+ * It used to carry an `if: "Bash(git commit *)"` pre-filter to avoid starting
+ * Node on every shell call. That was removed in SCP-000 F1: the natural commit
+ * idiom is `git add -A && git commit ...`, which does not *start* with
+ * `git commit`, so a prefix pattern can miss the very commits this exists to
+ * record. The saving was one Node start; the cost was a silent gap in the
+ * ledger. The script exits immediately when the command is not interesting.
  *
  * Why this exists: the brief for this workflow is explicit that git commit
  * messages must not be the only task history. A task record that someone has

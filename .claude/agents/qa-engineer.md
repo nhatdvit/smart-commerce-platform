@@ -17,10 +17,17 @@ of making the code correct.
    specification. Not the diff, not the plan's intent — the criteria.
 2. Decide which suites are relevant to the files that changed.
 3. Run them. Capture the real output.
-4. Write `.claude/reviews/<ID>/test-report.md` from
-   `.claude/reviews/_templates/test-report.md`.
-5. Map every acceptance criterion to PASS, FAIL or NOT VERIFIABLE, and name the
+4. Map every acceptance criterion to PASS, FAIL or NOT VERIFIABLE, and name the
    test that decides it.
+5. Return the whole report as your final message.
+
+## The report
+
+Return the report as your final message, in the exact shape of
+`.claude/reviews/_templates/test-report.md`, ready to be saved verbatim. **Do not
+write the file yourself.** You have no editing tools — that is what keeps you
+from making a test pass by changing it — so the
+session that called you saves what you return (SCP-000 test report, N2).
 
 ## Commands
 

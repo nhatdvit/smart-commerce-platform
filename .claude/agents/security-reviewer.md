@@ -75,9 +75,14 @@ MEDIUM for defence-in-depth that is missing. LOW for hardening.
 State the attack, not the smell: who the attacker is, what they send, what they
 get. A finding without that is a suspicion — label it as one.
 
-Write the report to `.claude/reviews/<ID>/security-review.md` from the
-template. The repository also ships a `/security-review` skill; run it and fold
-its confirmed findings in.
+Return the report as your final message, in the exact shape of
+`.claude/reviews/_templates/security-review.md`, ready to be saved verbatim. **Do not
+write the file yourself.** You have no editing tools — that is what keeps you
+from fixing what you find — so the
+session that called you saves what you return (SCP-000 test report, N2).
+
+The repository also ships a `/security-review` skill; run it and fold its
+confirmed findings in.
 
 ## Reporting back
 

@@ -66,8 +66,11 @@ Every finding carries `file:line`, what is wrong, a concrete failure scenario �
 inputs and state that produce the wrong result — and what to change. A finding
 with no scenario is a guess, and should be marked as one or dropped.
 
-Write the report to `.claude/reviews/<ID>/code-review.md` from
-`.claude/reviews/_templates/code-review.md`.
+Return the report as your final message, in the exact shape of
+`.claude/reviews/_templates/code-review.md`, ready to be saved verbatim. **Do not
+write the file yourself.** You have no editing tools — that is what keeps you
+from fixing what you find — so the
+session that called you saves what you return (SCP-000 test report, N2).
 
 ## Also run the automated pass
 

@@ -58,13 +58,14 @@ export const RULES = [
   {
     id: 'force-push',
     // --force-with-lease is still a rewrite of a branch someone else may hold.
-    pattern: /\bgit\s+push\b[^\n]*(--force\b|--force-with-lease\b|\s-f\b)/,
+    pattern:
+      /\bgit\s+push\b[^\n]*(--force\b|--force-with-lease\b|--mirror\b|\s-[A-Za-z]*f[A-Za-z]*\b)/,
     reason:
       'Force-pushing rewrites history other people may already have. CLAUDE.md §13 requires explicit authorization; run it yourself if you mean it.',
   },
   {
     id: 'force-refspec',
-    pattern: /\bgit\s+push\b[^\n]*\s\+[A-Za-z0-9_./-]+:/,
+    pattern: /\bgit\s+push\b[^\n]*\s\+[A-Za-z0-9_./-]+(:|\s|$)/,
     reason: 'A refspec starting with "+" is a force push in disguise.',
   },
   {
@@ -86,7 +87,8 @@ export const RULES = [
   },
   {
     id: 'delete-remote-branch',
-    pattern: /\bgit\s+push\b[^\n]*(--delete\b|\s:refs?\/)/,
+    pattern:
+      /\bgit\s+push\b[^\n]*(--delete\b|\s-[A-Za-z]*d[A-Za-z]*\b|\s:[A-Za-z0-9_./-]+(\s|$))/,
     reason: 'Deleting a remote branch is not reversible from here.',
   },
   {
@@ -117,13 +119,16 @@ export const RULES = [
     // is a migration aimed at a production environment.
     pattern: /\bartisan\s+migrate\b/,
     test: (command) =>
-      /\bAPP_ENV\s*=\s*production\b/.test(command) || /compose\.prod/.test(command),
+      /\bAPP_ENV\s*=\s*production\b/.test(command) ||
+      /--env[=\s]+production\b/.test(command) ||
+      /compose\.prod/.test(command),
     reason:
       'Running migrations against production is an explicit, authorized deploy step, not something an agent does in passing (CLAUDE.md §9).',
   },
   {
     id: 'compose-down-volumes',
-    pattern: /\bdocker\s+compose\b[^\n]*\bdown\b[^\n]*(-v\b|--volumes\b)/,
+    pattern:
+      /\bdocker[\s-]compose\b[^\n]*\bdown\b[^\n]*(--volumes\b|\s-[A-Za-z]*v[A-Za-z]*\b)/,
     reason:
       'down -v deletes the database volume. If you want a clean local database, say so and the volume gets removed deliberately.',
   },
@@ -134,7 +139,7 @@ export const RULES = [
   },
   {
     id: 'write-dotenv',
-    pattern: /(^|[\s;|&])(>{1,2}|tee\s+)\s*(\.\/)?\.env(\s|$|;)/,
+    pattern: /(>{1,2}|tee\s+(-a\s+)?)\s*(\.\/)?\.env(\s|$|;)/,
     reason:
       'The .env file holds real credentials and is never written by an automated step. Edit .env.example instead, and change .env yourself.',
   },
@@ -146,8 +151,27 @@ export const RULES = [
   },
   {
     id: 'skip-hooks',
-    pattern: /\bgit\s+commit\b[^\n]*--no-verify\b/,
+    pattern: /\bgit\s+commit\b[^\n]*(--no-verify\b|\s-[A-Za-z]*n[A-Za-z]*\b)/,
     reason: 'Skipping hooks defeats the checks this workflow exists to run.',
+  },
+  {
+    id: 'write-dotenv-indirect',
+    // A redirect is not the only way to overwrite .env. cp, mv and sed -i all
+    // land in the same place, and the file holds real credentials.
+    pattern: /\b(cp|mv|install)\b[^\n]*\s(\.\/)?\.env(\s|$|;)|\bsed\b[^\n]*\s-i\b[^\n]*\s(\.\/)?\.env(\s|$|;)/,
+    reason:
+      'The .env file holds real credentials and is never written by an automated step, whatever writes it.',
+  },
+  {
+    id: 'bypass-hooks-path',
+    pattern: /\bgit\b[^\n]*\s-c\s+core\.hooksPath\s*=/,
+    reason: 'Pointing core.hooksPath elsewhere disables the checks this workflow runs.',
+  },
+  {
+    id: 'auto-merge-pr-api',
+    // gh pr merge is blocked; the REST call underneath does the same thing.
+    pattern: /\bgh\s+api\b[^\n]*\/pulls\/\d+\/merge\b/,
+    reason: 'Merging a pull request through the API bypasses the same gate gh pr merge is blocked by.',
   },
 ];
 
