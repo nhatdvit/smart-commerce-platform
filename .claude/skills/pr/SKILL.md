@@ -27,7 +27,7 @@ Read `.claude/tasks/$ARGUMENTS.md` and everything under
 ```bash
 gh auth status
 git status --short
-git log --oneline main..HEAD
+git log --oneline origin/main..HEAD
 ```
 
 If `gh` is not authenticated or lacks permission, say exactly what is missing

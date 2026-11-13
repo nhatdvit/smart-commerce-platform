@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: Reviews a task's git diff independently against its approved requirements, reporting defects with file, line and severity. Use after tests pass. Read-only, so it cannot fix what it finds and cannot approve its own work.
+description: Reviews a task's git diff independently against its approved requirements, reporting defects with file, line and severity. Use after tests pass. Holds no Write or Edit tool, so it does not fix what it finds; it is not the agent that wrote the code.
 tools: Read, Glob, Grep, Bash
 model: opus
 effort: high
@@ -74,9 +74,11 @@ session that called you saves what you return (SCP-000 test report, N2).
 
 ## Also run the automated pass
 
-This repository ships a `/code-review` skill with its own severity model. Run
-it and fold its confirmed findings in rather than re-deriving them. Note in the
-report which findings came from it.
+If a general-purpose `/code-review` skill is available in this environment, run
+it and fold its confirmed findings in rather than re-deriving them, noting in
+the report which came from it. It is not shipped by this repository and is
+often absent (SCP-000 review M5): if it is not there, write one line saying so
+and carry on. Never report findings from a pass that did not run.
 
 ## Reporting back
 

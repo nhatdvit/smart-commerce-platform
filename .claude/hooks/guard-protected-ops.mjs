@@ -36,6 +36,48 @@ import { pathToFileURL } from 'node:url';
 
 const PROTECTED_BRANCHES = new Set(['main', 'master', 'production', 'release']);
 
+/**
+ * A path that is a real `.env`, in any directory, quoted or not - but never
+ * `.env.example`, which is tracked on purpose, nor `.env.backup`, which is
+ * where a careful person puts a copy.
+ *
+ * SCP-000 review M1/S7: the old rules anchored on the character *after* the
+ * redirect or the argument separator, so `>> apps/api/.env` and
+ * `cp x apps/api/.env` both passed. `apps/api/.env` is exactly where a
+ * Laravel-conventional agent writes, and overwriting it destroys a developer's
+ * APP_KEY, which makes every value encrypted with it unreadable.
+ */
+const DOTENV_FILE = /^(?:[\w.-]+\/)*\.env(?:\.(?:local|production|prod|staging))?$/;
+
+const unquote = (token) =>
+  String(token)
+    .replace(/^["']/, '')
+    .replace(/["']?;?$/, '');
+
+/** The last argument of a command - the destination for cp, mv, install, sed -i. */
+const lastArgument = (segment) => {
+  const tokens = segment.trim().split(/\s+/);
+  return unquote(tokens[tokens.length - 1] ?? '');
+};
+
+/**
+ * Splits a shell line into the commands it actually runs.
+ *
+ * SCP-000 review H1: every rule used `[^\n]*` between the verb and the flag it
+ * looks for, and `[^\n]*` crosses `&&`. So `git commit -m x && git log -n 1`
+ * was refused as `skip-hooks` because of `git log`'s `-n`, and
+ * `git push origin x && gh pr create -d -f` was refused as a force push
+ * because of `gh pr create`'s own flags. Both are shapes this repository's own
+ * documentation prescribes. Blocking ordinary work is not a safe failure: it
+ * teaches people that the guard is noise, and then it protects nothing.
+ *
+ * Splitting is deliberately naive about quoting. A separator inside a quoted
+ * string splits too, which can only ever make each piece smaller and the match
+ * narrower - it cannot let a dangerous command through that a whole-line match
+ * would have caught, because that command is still wholly inside one piece.
+ */
+const SEGMENTS = /\s*(?:&&|\|\||;|\|)\s*/;
+
 /** The branch HEAD is on, or '' when that cannot be determined cheaply. */
 export const currentBranch = () => {
   try {
@@ -102,25 +144,71 @@ export const RULES = [
       'Merging into a protected branch is a human decision. Open a pull request and let a reviewer merge it.',
   },
   {
+    id: 'push-to-protected',
+    // SCP-000 review S3. The ruleset blocked every indirect route to main -
+    // gh pr merge, the merge API, checkout-and-merge - and left the one-liner
+    // that goes straight there: `git push origin HEAD:main`. A push to main
+    // raises no pull request, so task-traceability.yml never runs and no
+    // reviewer ever sees the diff. That is the outcome the other three rules
+    // exist to prevent, reached by the shortest road.
+    pattern: /\bgit\s+push\b/,
+    test: (segment, branch) => {
+      // `git push origin src:main`, or `git push origin +main`
+      if (/:(?:main|master|production|release)\b/.test(segment)) return true;
+      // `git push origin main`
+      if (
+        /\bgit\s+push\b(?:\s+-\S+(?:\s+\S+)?)*\s+\S+\s+\+?(?:main|master|production|release)\b/.test(
+          segment,
+        )
+      ) {
+        return true;
+      }
+      // No branch argument at all: git pushes whatever HEAD is on.
+      const named = /\bgit\s+push\b(?:\s+-\S+(?:\s+\S+)?)*\s+\S+\s+(\S+)/.test(segment);
+      return !named && PROTECTED_BRANCHES.has(branch);
+    },
+    reason:
+      'Pushing straight to a protected branch skips the pull request, so no CI gate and no reviewer ever sees the change. Push your task branch and open a pull request.',
+  },
+  {
+    id: 'commit-on-protected',
+    // SCP-000 review M10. Adjacent to push-to-protected and deliberately a
+    // separate rule: this one catches the commit that should never have been
+    // made, before there is anything to push. An agent lands on main after a
+    // fresh clone, or a branch cut that failed, and commits there.
+    pattern: /\bgit\s+commit\b/,
+    test: (segment, branch) => PROTECTED_BRANCHES.has(branch),
+    reason:
+      'HEAD is on a protected branch, so this commit would land on the trunk. Cut a task branch first - /implement step 2 - and commit there.',
+  },
+  {
     id: 'auto-merge-pr',
     pattern: /\bgh\s+pr\s+merge\b/,
     reason: 'Pull requests are never merged automatically. A reviewer merges, after CI is green.',
   },
   {
     id: 'destructive-migration',
-    pattern: /\bartisan\s+(migrate:fresh|migrate:refresh|db:wipe)\b/,
+    // migrate:reset was missing (SCP-000 review M7). It rolls every migration
+    // back - the table-dropping half of migrate:refresh - and it is the verb an
+    // agent reaches for when asked to "reset the local database".
+    pattern: /\bartisan\s+(migrate:fresh|migrate:refresh|migrate:reset|db:wipe)\b/,
     reason:
-      'CLAUDE.md §7 forbids migrate:fresh, migrate:refresh and db:wipe. They drop every table. Use a reviewed forward migration.',
+      'CLAUDE.md §7 forbids migrate:fresh, migrate:refresh, migrate:reset and db:wipe. They drop every table. Use a reviewed forward migration.',
   },
   {
     id: 'production-migration',
     // `pnpm api:migrate` against the dev stack stays allowed; what is blocked
     // is a migration aimed at a production environment.
     pattern: /\bartisan\s+migrate\b/,
-    test: (command) =>
-      /\bAPP_ENV\s*=\s*production\b/.test(command) ||
-      /--env[=\s]+production\b/.test(command) ||
-      /compose\.prod/.test(command),
+    // The environment markers are read from the WHOLE line, not the segment:
+    // `export APP_ENV=production && php artisan migrate` sets the environment
+    // in one command and migrates in the next, and splitting must not lose
+    // that. `--database=production` names a production connection directly.
+    test: (segment, branch, whole) =>
+      /\bAPP_ENV\s*=\s*production\b/.test(whole) ||
+      /--env[=\s]+production\b/.test(segment) ||
+      /--database[=\s]+production\b/.test(segment) ||
+      /compose\.prod/.test(whole),
     reason:
       'Running migrations against production is an explicit, authorized deploy step, not something an agent does in passing (CLAUDE.md §9).',
   },
@@ -137,7 +225,13 @@ export const RULES = [
   },
   {
     id: 'write-dotenv',
-    pattern: /(>{1,2}|tee\s+(-a\s+)?)\s*(\.\/)?\.env(\s|$|;)/,
+    // Match the redirect target as a PATH, so apps/api/.env and "./.env" are
+    // caught as well as a bare .env (SCP-000 review M1).
+    pattern: /(?:>{1,2}|\btee\s+(?:-a\s+)?)\s*(["']?)([^\s;|&"']+)\1/,
+    test: (segment) => {
+      const target = /(?:>{1,2}|\btee\s+(?:-a\s+)?)\s*(["']?)([^\s;|&"']+)\1/.exec(segment);
+      return target !== null && DOTENV_FILE.test(unquote(target[2]).replace(/^\.\//, ''));
+    },
     reason:
       'The .env file holds real credentials and is never written by an automated step. Edit .env.example instead, and change .env yourself.',
   },
@@ -156,8 +250,17 @@ export const RULES = [
     id: 'write-dotenv-indirect',
     // A redirect is not the only way to overwrite .env. cp, mv and sed -i all
     // land in the same place, and the file holds real credentials.
-    pattern:
-      /\b(cp|mv|install)\b[^\n]*\s(\.\/)?\.env(\s|$|;)|\bsed\b[^\n]*\s-i\b[^\n]*\s(\.\/)?\.env(\s|$|;)/,
+    //
+    // SCP-000 review M1: judge the DESTINATION, not any mention of .env. The
+    // old rule matched `.env` anywhere in the command, so `cp .env .env.backup`
+    // - taking a backup, a read - was refused, while `cp x apps/api/.env` was
+    // allowed because of the directory prefix. Both were the wrong way round.
+    pattern: /^\s*(?:cp|mv|install|sed)\b/,
+    test: (segment) => {
+      const verb = segment.trim().split(/\s+/)[0];
+      const writes = verb !== 'sed' || /\s-i\b/.test(segment);
+      return writes && DOTENV_FILE.test(lastArgument(segment).replace(/^\.\//, ''));
+    },
     reason:
       'The .env file holds real credentials and is never written by an automated step, whatever writes it.',
   },
@@ -183,11 +286,27 @@ export const RULES = [
  */
 export const evaluate = (command, branch = '') => {
   if (typeof command !== 'string' || command === '') return null;
-  for (const rule of RULES) {
-    if (!rule.pattern.test(command)) continue;
-    if (rule.test && !rule.test(command, branch)) continue;
-    return rule;
+
+  // Branch state is carried across segments rather than matched by text, so
+  // `git checkout main && git merge feature/x` is still refused: the first
+  // segment moves HEAD to a protected branch and the second is then judged
+  // standing on it. That is also what makes the split safe for the merge rule,
+  // which used to recognise the pair by reading the whole line.
+  let standingOn = branch;
+
+  for (const segment of command.split(SEGMENTS)) {
+    if (segment.trim() === '') continue;
+
+    for (const rule of RULES) {
+      if (!rule.pattern.test(segment)) continue;
+      if (rule.test && !rule.test(segment, standingOn, command)) continue;
+      return rule;
+    }
+
+    const moved = /\bgit\s+(?:checkout|switch)\s+(?:-\S+\s+)*([A-Za-z0-9_./-]+)/.exec(segment);
+    if (moved) standingOn = moved[1];
   }
+
   return null;
 };
 

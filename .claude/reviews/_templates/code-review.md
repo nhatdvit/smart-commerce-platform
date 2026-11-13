@@ -5,7 +5,7 @@
 | **Task** | SCP-NNN |
 | **Reviewed** | YYYY-MM-DD |
 | **Reviewer** | `code-reviewer` agent |
-| **Diff** | `git diff main...HEAD`, N files, +N/-N |
+| **Diff** | `git diff origin/main...HEAD`, N files, +N/-N |
 | **Verdict** | READY / CHANGES REQUESTED / BLOCKED |
 
 ## Summary
@@ -43,7 +43,7 @@ anything in the plan the diff does not do.
 | --- | --- |
 | **Where** | `path/to/file.php:123` |
 | **Category** | correctness / invariant / authorization / migration / error-handling / maintainability |
-| **Source** | manual review / `/code-review` skill |
+| **Source** | manual review, or the `/code-review` skill when it is installed |
 
 **What is wrong.**
 

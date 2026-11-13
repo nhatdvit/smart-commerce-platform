@@ -32,7 +32,7 @@ Check the facts that are cheap to check:
 
 ```bash
 git branch --list "*$ARGUMENTS*"
-git log --oneline main..HEAD
+git log --oneline origin/main..HEAD
 gh pr list --search "$ARGUMENTS" --state all --json number,url,state
 gh pr checks <number>      # if a PR is open
 ```

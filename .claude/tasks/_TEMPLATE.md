@@ -89,12 +89,18 @@ The number in `Unresolved` is what the traceability CI gate reads: a pull
 request is refused while CRITICAL or HIGH is anything but 0. Keep this table's
 shape — it is parsed.
 
+The cells ship as `—`, not `0`, and that is deliberate (SCP-000 review H2).
+Pre-filled zeros made "clean review" the default state of every new task, so a
+record that nobody had reviewed satisfied the one gate standing at the point of
+no return. `—` fails the gate until a person writes a number, which is the
+right way round: the gate should be waiting on the review, not assuming it.
+
 | Severity | Unresolved | Note |
 | --- | --- | --- |
-| CRITICAL | 0 | |
-| HIGH | 0 | |
-| MEDIUM | 0 | |
-| LOW | 0 | |
+| CRITICAL | — | not reviewed yet |
+| HIGH | — | not reviewed yet |
+| MEDIUM | — | not reviewed yet |
+| LOW | — | not reviewed yet |
 
 Findings rejected as not-a-defect, with the reasoning:
 

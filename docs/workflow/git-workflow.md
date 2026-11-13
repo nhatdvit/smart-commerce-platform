@@ -94,9 +94,16 @@ Merging `main` **into** a feature branch is allowed — that is the safe
 direction, and the guard checks where `HEAD` is rather than which branch name
 appears in the command.
 
-`pnpm claude:selftest` proves all of this, in both directions: 21 blocked
-commands with the rule that catches each, and 20 real commands from this
-repository that must not be blocked.
+`pnpm claude:selftest` exercises both directions: blocked commands with the
+rule that catches each, and real commands from this repository that must not be
+blocked. Run it for the current count rather than trusting a number written
+here - the one that used to be in this paragraph was two rounds out of date
+(SCP-000 review L1).
+
+What it proves is narrower than it looks: the fixtures pin the behaviour
+someone thought to write down. Three defects of three different kinds shipped
+under a green suite, so read a pass as "no known regression", not as "the rules
+are right".
 
 ## Pull requests
 

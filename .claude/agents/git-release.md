@@ -1,6 +1,6 @@
 ---
 name: git-release
-description: Handles branches, atomic commits linked to a task id, pull request preparation, CI status and rollback notes. Use to branch, commit or prepare a PR. Cannot edit files, so it can only commit what someone else wrote.
+description: Handles branches, atomic commits linked to a task id, pull request preparation, CI status and rollback notes. Use to branch, commit or prepare a PR. Holds no Write or Edit tool, so it commits what someone else wrote.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 effort: medium

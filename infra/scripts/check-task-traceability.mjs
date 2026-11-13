@@ -115,8 +115,21 @@ if (!existsSync(taskPath)) {
   }
 
   // 3. Unresolved blocking findings
+  //
+  // SCP-000 review M4: this used to match against the whole file and take the
+  // first hit, so a record that quoted a review report's own summary table
+  // above ## Review Findings - which /review step 5 encourages, since the
+  // counts are transcribed from the report - was judged on the quoted copy.
+  // Scope it to the section, the way Blockers below already is.
+  const findingsSection = /##\s*Review Findings\s*\n([\s\S]*?)(?:\n##\s|$)/.exec(task)?.[1] ?? '';
+  if (findingsSection.trim() === '') {
+    fail(
+      'review findings',
+      `${taskPath} has no ## Review Findings section, so the severity counts cannot be read.`,
+    );
+  }
   for (const severity of ['CRITICAL', 'HIGH']) {
-    const row = new RegExp(`\\|\\s*${severity}\\s*\\|\\s*([^|]*)\\|`).exec(task);
+    const row = new RegExp(`\\|\\s*${severity}\\s*\\|\\s*([^|]*)\\|`).exec(findingsSection);
     if (!row) {
       fail(
         'review findings',
@@ -145,6 +158,10 @@ if (!existsSync(taskPath)) {
 // ---------------------------------------------------------------------------
 // 5. Review and test reports exist
 // ---------------------------------------------------------------------------
+// SCP-000 review H2: this used to be existsSync alone, so `touch` satisfied it.
+// A gate whose evidence check an empty file passes is not evidence, it is
+// paperwork. Require the file to have substance and to state a verdict - the
+// one line a human would look for first.
 for (const [file, why] of [
   ['test-report.md', 'nobody recorded running the tests'],
   ['code-review.md', 'nobody recorded reviewing the diff'],
@@ -152,6 +169,49 @@ for (const [file, why] of [
   const path = join('.claude', 'reviews', taskId, file);
   if (!existsSync(path)) {
     fail('evidence', `${path} does not exist, so ${why}.`);
+    continue;
+  }
+
+  let report = '';
+  try {
+    report = readFileSync(path, 'utf8');
+  } catch {
+    fail('evidence', `${path} exists but could not be read.`);
+    continue;
+  }
+
+  if (report.trim().length < 400) {
+    fail(
+      'evidence',
+      `${path} is ${report.trim().length} characters. An empty or stub report is not ` +
+        'evidence that anything was reviewed.',
+    );
+  } else if (!/\*\*Verdict\*\*|^##?\s*Verdict|Verdict:/im.test(report)) {
+    fail(
+      'evidence',
+      `${path} states no Verdict. Use the shape in .claude/reviews/_templates/, so a ` +
+        'reader sees the conclusion without reconstructing it.',
+    );
+  }
+}
+
+// SCP-000 review H2, second half: nothing checked the acceptance criteria, so a
+// record could reach READY_FOR_PR with every box unticked. An unticked box is
+// allowed - not everything can be verified - but it has to be named in Test
+// Results, so the gap is a decision someone made rather than one nobody saw.
+if (task !== '') {
+  const criteria = /##\s*Acceptance Criteria\s*\n([\s\S]*?)(?:\n##\s|$)/.exec(task)?.[1] ?? '';
+  const results = /##\s*Test Results\s*\n([\s\S]*?)(?:\n##\s|$)/.exec(task)?.[1] ?? '';
+  for (const line of criteria.split('\n')) {
+    const unticked = /^-\s*\[\s*\]\s*\*\*(AC\d+)\*\*/.exec(line.trim());
+    if (!unticked) continue;
+    if (!results.includes(unticked[1])) {
+      fail(
+        'acceptance criteria',
+        `${unticked[1]} is unticked and Test Results never mentions it. Either verify it ` +
+          'or say there why it could not be.',
+      );
+    }
   }
 }
 

@@ -30,6 +30,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync, statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 /** Paths that must never be committed, whatever is inside them. */
@@ -70,11 +71,36 @@ export const CREDENTIAL_SHAPES = [
  *   'client_secret' => 'value' PHP
  *   "client_secret": "value"   JSON
  */
+/**
+ * key = "value" where the key NAMES a secret, including the snake_case prefixes
+ * this project actually uses.
+ *
+ * SCP-000 review S2: the old pattern required a word boundary immediately
+ * before `password`, and `_` is a word character - so there is no boundary in
+ * `MAIL_PASSWORD`. It matched exactly one of this repository's own credential
+ * variables, `DB_PASSWORD`, which was present as a hand-added special case.
+ * `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MAIL_PASSWORD`, `MINIO_ROOT_PASSWORD`,
+ * `GRAFANA_ADMIN_PASSWORD`, `AWS_SECRET_ACCESS_KEY` and `APP_KEY` - the names in
+ * .env.example - all passed.
+ *
+ * The prefix is `(?:[A-Za-z0-9]+[_-])*` rather than anything looser so that
+ * `key` can be in the list without `MONKEY` matching: a prefixed name has to
+ * carry a separator.
+ */
 export const ASSIGNMENT =
-  /\b(password|passwd|secret|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|private[_-]?key|client[_-]?secret|db[_-]?password)\b['"]?\s*(?:=>|:=|[:=])\s*['"]?([^'"\s,;)]{8,})['"]?/i;
+  /(^|[^A-Za-z0-9_-])(?:[A-Za-z0-9]+[_-])*(password|passwd|secret|token|key|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|private[_-]?key|client[_-]?secret)['"]?\s*(?:=>|:=|[:=])\s*['"]?([^'"\s,;)]{5,})['"]?/i;
 
-/** Markers that say "this is an example". */
-export const PLACEHOLDERS = [
+/**
+ * Markers that say "this is an example", matched at the START of the value or
+ * as the whole value - never as a substring.
+ *
+ * SCP-000 review S2: `looksLikePlaceholder` used to pass when the value merely
+ * *contained* a marker, and the list included `secret`, `password` and `test`.
+ * So `Secret!Prod#2026aQ`, `Password#Prod2026!` and `Hx9kLm2Qp7vtestRtZw4` were
+ * all waved through - a credential excused for containing the word for what it
+ * is. `secret`, `password` and `test` are now exact-match only.
+ */
+export const PREFIX_MARKERS = [
   'change',
   'example',
   'placeholder',
@@ -85,27 +111,81 @@ export const PLACEHOLDERS = [
   'redacted',
   'dummy',
   'sample',
-  'test',
   'fake',
   'null',
   'none',
-  'secret',
-  'password',
   '<',
   '${',
   'env(',
   'config(',
 ];
 
+/** Values that are placeholders in full, including this repository's own. */
+export const EXACT_MARKERS = [
+  'password',
+  'secret',
+  'test',
+  'changeme',
+  'scp_test',
+  'change_me_in_local',
+];
+
+/** Kept as the union, so anything importing the old name still sees the list. */
+export const PLACEHOLDERS = [...PREFIX_MARKERS, ...EXACT_MARKERS];
+
+const startsWithMarker = (value) =>
+  PREFIX_MARKERS.some((marker) => {
+    if (!value.startsWith(marker)) return false;
+    // A marker that ends in a letter or digit must end the value or be
+    // followed by a separator, so `change_me_in_local` is a placeholder and
+    // `changed-prod-key-9x` is not. A marker that already ends in punctuation
+    // - `your-`, `${`, `<`, `env(` - carries its own boundary, and demanding
+    // another one would reject the very values it exists to allow.
+    if (!/[a-z0-9]$/.test(marker)) return true;
+    const next = value.charAt(marker.length);
+    return next === '' || !/[a-z0-9]/.test(next);
+  });
+
 export const looksLikePlaceholder = (value) => {
   const lower = String(value).toLowerCase();
-  return PLACEHOLDERS.some((marker) => lower.includes(marker));
+  if (EXACT_MARKERS.includes(lower)) return true;
+  if (startsWithMarker(lower)) return true;
+
+  // A Laravel APP_KEY is base64 of the real bytes, so the marker is inside the
+  // encoding rather than the text. This keeps phpunit.xml's documented test key
+  // allowed while a real random APP_KEY is still caught.
+  const encoded = /^base64:([A-Za-z0-9+/=]+)$/i.exec(String(value));
+  if (encoded) {
+    try {
+      const decoded = Buffer.from(encoded[1], 'base64').toString('utf8').toLowerCase();
+      if (EXACT_MARKERS.some((m) => decoded.includes(m))) return true;
+      if (PREFIX_MARKERS.some((m) => decoded.startsWith(m))) return true;
+    } catch {
+      // Not decodable: fall through and treat it as a real value.
+    }
+  }
+
+  return false;
 };
 
 /**
  * @param {{ names: string[], diff: string }} input
  * @returns {string[]} one line per finding, empty when the change is clean
  */
+/**
+ * The two files whose job is to contain credential-shaped text.
+ *
+ * SCP-000 review S11: the guard refused to let anyone commit its own test
+ * file, and the refusal message told the developer to widen the pattern - a
+ * remedy that degrades the control. Both of these are read closely in review,
+ * and a real credential hidden in either would be a deliberate act, not the
+ * accident this guard is priced for. Content rules are skipped; the path rules
+ * still apply, and nothing else is exempt.
+ */
+const FIXTURE_FILES = new Set(['.claude/hooks/selftest.mjs', '.claude/hooks/guard-secrets.mjs']);
+
+const isFixtureFile = (path) => FIXTURE_FILES.has(String(path).replace(/\\/g, '/').trim());
+
 export const scanDiff = ({ names = [], diff = '' }) => {
   const findings = [];
 
@@ -128,6 +208,7 @@ export const scanDiff = ({ names = [], diff = '' }) => {
       continue;
     }
     if (!line.startsWith('+') || line.startsWith('+++')) continue;
+    if (isFixtureFile(currentFile)) continue;
 
     const added = line.slice(1);
 
@@ -137,10 +218,12 @@ export const scanDiff = ({ names = [], diff = '' }) => {
       }
     }
 
+    // Groups: 1 is the character before the key (so the name can be prefixed),
+    // 2 is the credential word, 3 is the value.
     const assignment = ASSIGNMENT.exec(added);
-    if (assignment && !looksLikePlaceholder(assignment[2])) {
+    if (assignment && !looksLikePlaceholder(assignment[3])) {
       findings.push(
-        `${currentFile}  -  ${assignment[1]} is assigned a value that does not look like a placeholder`,
+        `${currentFile}  -  ${assignment[2]} is assigned a value that does not look like a placeholder`,
       );
     }
   }
@@ -161,6 +244,47 @@ const git = (args) => {
   }
 };
 
+const scanIndex = () =>
+  scanDiff({
+    names: git(['diff', '--cached', '--name-only']).split('\n'),
+    diff: git(['diff', '--cached', '--unified=0']),
+  });
+
+/**
+ * What a commit that stages first is about to include: everything already
+ * different from HEAD, plus every untracked file git would pick up.
+ *
+ * Untracked files have no diff, so their contents are turned into one. Without
+ * that, a brand-new file holding a credential - the commonest way one appears -
+ * would be named but never read by the content rules.
+ */
+const scanWorkingTree = () => {
+  const tracked = git(['diff', 'HEAD', '--name-only']);
+  const untracked = git(['ls-files', '--others', '--exclude-standard']);
+  const files = untracked.split('\n').filter((line) => line.trim() !== '');
+
+  let diff = git(['diff', 'HEAD', '--unified=0']);
+  for (const file of files) {
+    let body;
+    try {
+      // A credential is a line, not a payload. Anything enormous is a build
+      // artefact or a fixture, and reading it whole would cost more than it
+      // can possibly catch.
+      if (statSync(file).size > 2 * 1024 * 1024) continue;
+      body = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    diff += `\n--- a/${file}\n+++ b/${file}\n@@ -0,0 +1 @@\n`;
+    diff += body
+      .split('\n')
+      .map((line) => `+${line}`)
+      .join('\n');
+  }
+
+  return scanDiff({ names: `${tracked}\n${untracked}`.split('\n'), diff });
+};
+
 const readStdin = () =>
   new Promise((resolve) => {
     let raw = '';
@@ -179,17 +303,21 @@ const main = async () => {
   }
 
   const command = event?.tool_input?.command ?? '';
-  if (!/\bgit\s+commit\b/.test(command)) process.exit(0);
+  // SCP-000 review S5: `git -C . commit` and `git -c user.name=x commit` are
+  // ordinary idioms, and the old filter required `commit` to follow `git`
+  // immediately, so both skipped the scan entirely.
+  if (!/\bgit\b[^\n]*\bcommit\b/.test(command)) process.exit(0);
 
-  // `git commit -a` stages at commit time, so the index is not yet the whole
-  // truth. Comparing against HEAD covers both shapes.
-  const stagesEverything = /\s--all\b|\s-[A-Za-z]*a[A-Za-z]*(\s|$)/.test(command);
-  const range = stagesEverything ? ['HEAD'] : ['--cached'];
+  // SCP-000 review S1, the defect that mattered most. PreToolUse fires BEFORE
+  // the shell runs, so for `git add -A && git commit ...` nothing is staged
+  // yet and `git diff --cached` is empty - the scan ran, saw nothing, and the
+  // commit went through with the credential in it. Whenever the command will
+  // stage something, look at the working tree instead of the index.
+  const stages =
+    /\bgit\b[^\n]*\s(?:add|stage)\b/.test(command) ||
+    /\s--all\b|\s-[A-Za-z]*a[A-Za-z]*(\s|$)/.test(command);
 
-  const findings = scanDiff({
-    names: git(['diff', ...range, '--name-only']).split('\n'),
-    diff: git(['diff', ...range, '--unified=0']),
-  });
+  const findings = stages ? scanWorkingTree() : scanIndex();
 
   if (findings.length === 0) process.exit(0);
 

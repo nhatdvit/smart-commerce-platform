@@ -87,6 +87,34 @@ const MUST_BLOCK = [
     'production-stack',
   ],
   ['git commit --no-verify -m "wip"', 'feature/x', 'skip-hooks'],
+
+  // SCP-000 review round 2. Each of these is a defect the reviewers found by
+  // driving evaluate() with a shape no fixture here covered.
+  //
+  // S3: every indirect route to main was blocked and the direct one was open.
+  ['git push origin HEAD:main', 'feature/x', 'push-to-protected'],
+  ['git push origin main', 'feature/x', 'push-to-protected'],
+  ['git push origin feature/x:main', 'feature/x', 'push-to-protected'],
+  ['git push --set-upstream origin master', 'feature/x', 'push-to-protected'],
+  // No refspec at all pushes whatever HEAD is on.
+  ['git push', 'main', 'push-to-protected'],
+  // M10: the commit that should never have been made, before there is
+  // anything to push.
+  ['git commit -m "feat(order): x [SCP-1]"', 'main', 'commit-on-protected'],
+  // M7: the verb an agent reaches for when told to "reset the local database".
+  ['php artisan migrate:reset', 'feature/x', 'destructive-migration'],
+  // M1: the .env rules matched a position, so any directory prefix passed.
+  ['echo "APP_KEY=abc" >> apps/api/.env', 'feature/x', 'write-dotenv'],
+  ['echo x > "apps/api/.env"', 'feature/x', 'write-dotenv'],
+  ['cp .env.example apps/api/.env', 'feature/x', 'write-dotenv-indirect'],
+  ['sed -i s/a/b/ apps/api/.env', 'feature/x', 'write-dotenv-indirect'],
+  // S7: a production connection named directly, and an environment exported in
+  // an earlier segment - which the whole-line read has to keep seeing.
+  ['php artisan migrate --force --database=production', 'feature/x', 'production-migration'],
+  ['export APP_ENV=production && php artisan migrate --force', 'feature/x', 'production-migration'],
+  // The merge pair has to survive the segment split: the first segment moves
+  // HEAD, the second is judged standing on it.
+  ['git checkout main && git merge feature/x', 'feature/x', 'merge-into-protected'],
 ];
 
 // ---------------------------------------------------------------------------
@@ -120,11 +148,32 @@ const MUST_ALLOW = [
   ['pnpm api:check', 'feature/x'],
   ['pnpm openapi:conformance', 'feature/x'],
   ['docker compose --env-file .env -f infra/compose.yaml up -d', 'feature/x'],
-  ['docker compose down', 'feature/x'],
+  // `docker compose down` was asserted twice here, so the headline count
+  // double-counted one rule (SCP-000 review M8). It is kept once, above.
   ['docker compose -f infra/compose.yaml -f infra/compose.prod.yaml config -q', 'feature/x'],
   ['cp .env.example .env.ci', 'feature/x'],
   ['php artisan migrate --force', 'feature/x'],
   ['php artisan migrate:rollback --force', 'feature/x'],
+
+  // SCP-000 review H1. Every fixture above this block is a single command, so
+  // the suite could not see that `[^\n]*` crosses `&&` and lets a later
+  // command's ordinary flag trigger a rule. These five are the shapes this
+  // repository's own documentation prescribes, and all five were refused.
+  ['git add -A && git commit -m "x" && git log -n 1 --oneline', 'feature/x'],
+  ['git commit -m "x" && git log --oneline -n 3', 'feature/x'],
+  ['git push -u origin HEAD && gh pr create -d -f -B main', 'feature/x'],
+  ['git push -u origin feature/x && gh pr create --fill -d', 'feature/x'],
+  ['git push origin feature/x && rm -rf node_modules', 'feature/x'],
+
+  // M1, the other direction: the old rule refused a backup, which reads .env,
+  // and allowed a write one directory down. Both are now judged by target.
+  ['cp .env .env.backup', 'feature/x'],
+  ['sed s/a/b/ .env', 'feature/x'],
+  ['cat .env', 'feature/x'],
+  // S3 must not start refusing ordinary pushes.
+  ['git push origin HEAD:feature/x', 'feature/x'],
+  // M10 must not refuse committing on a task branch.
+  ['git commit -m "fix(cart): clamp quantity [SCP-011]"', 'feature/x'],
 ];
 
 console.log('guard-protected-ops.mjs');
@@ -176,6 +225,44 @@ const secretCases = [
       diff: asDiff('config/x.php', "'client_secret' => 'A8f3Kd92Lp01Zx'"),
     },
   ],
+
+  // SCP-000 review S2. Every fixture above uses DB_PASSWORD, client_secret or
+  // a token shape - the three things the rule already matched - so the suite
+  // could not see that `\b` never fires inside MAIL_PASSWORD. These are the
+  // real variable names in this project's .env.example.
+  ['MAIL_PASSWORD', { names: ['x'], diff: asDiff('x', 'MAIL_PASSWORD=Hx9kLm2Qp7vRtZw4') }],
+  ['POSTGRES_PASSWORD', { names: ['x'], diff: asDiff('x', 'POSTGRES_PASSWORD=Hx9kLm2Qp7vRtZw4') }],
+  ['REDIS_PASSWORD', { names: ['x'], diff: asDiff('x', 'REDIS_PASSWORD=Hx9kLm2Qp7vRtZw4') }],
+  [
+    'AWS_SECRET_ACCESS_KEY',
+    { names: ['x'], diff: asDiff('x', 'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI1K7MDENGbPxRfiCY2') },
+  ],
+  [
+    'a real APP_KEY',
+    { names: ['x'], diff: asDiff('x', 'APP_KEY=base64:9kQ2mZxPvRtLw4aBcDeFgHiJkLmNoPqRsTuVwXy=') },
+  ],
+
+  // S2, the other half: a value was excused for CONTAINING a marker, so a
+  // credential was waved through for containing the word for what it is.
+  [
+    'value containing "secret"',
+    { names: ['x'], diff: asDiff('x', 'DB_PASSWORD=Secret!Prod#2026aQ') },
+  ],
+  [
+    'value containing "password"',
+    { names: ['x'], diff: asDiff('x', 'DB_PASSWORD=Password#Prod2026!') },
+  ],
+  [
+    'value containing "test"',
+    { names: ['x'], diff: asDiff('x', 'DB_PASSWORD=Hx9kLm2Qp7vtestRtZw4') },
+  ],
+  [
+    'value starting "changed"',
+    { names: ['x'], diff: asDiff('x', 'DB_PASSWORD=changed-prod-key-9x') },
+  ],
+
+  // L3: the eight-character floor let a short credential through.
+  ['a short credential', { names: ['x'], diff: asDiff('x', 'DB_PASSWORD: Zx9!qLm') }],
 ];
 
 for (const [label, input] of secretCases) {
@@ -244,6 +331,26 @@ const cleanCases = [
     {
       names: ['apps/api/app/Shared/Domain/ValueObject/Money.php'],
       diff: asDiff('apps/api/app/Shared/Domain/ValueObject/Money.php', 'return new self($amount);'),
+    },
+  ],
+
+  // SCP-000 review S2: `key` joined the credential words, so this pins the
+  // reason it is safe to have there - a prefixed name needs a separator, and
+  // MONKEY has none.
+  [
+    'a word merely ending in "key"',
+    {
+      names: ['packages/ui/src/x.ts'],
+      diff: asDiff('packages/ui/src/x.ts', 'const monkey = computeTurkey(value);'),
+    },
+  ],
+  // The exact-value placeholders this repository really uses, now that a
+  // marker has to be the whole value or start it.
+  [
+    'CI database password by exact value',
+    {
+      names: ['.github/workflows/ci.yml'],
+      diff: asDiff('.github/workflows/ci.yml', 'DB_PASSWORD: scp_test'),
     },
   ],
 ];

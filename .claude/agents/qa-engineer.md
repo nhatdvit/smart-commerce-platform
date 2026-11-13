@@ -1,6 +1,6 @@
 ---
 name: qa-engineer
-description: Verifies a task against its acceptance criteria by running the real test suites and reporting actual output. Use after implementation and before review. Cannot edit files, so it can never make a test pass by changing it.
+description: Verifies a task against its acceptance criteria by running the real test suites and reporting actual output. Use after implementation and before review. Holds no Write or Edit tool, so it does not revise the tests it is judging.
 tools: Read, Glob, Grep, Bash
 model: sonnet
 effort: medium

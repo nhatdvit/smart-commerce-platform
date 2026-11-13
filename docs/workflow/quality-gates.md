@@ -13,7 +13,7 @@ only looks like it does.
 | Production migration or stack operation       | `guard-protected-ops`                                        | ✅ hard block                                               |
 | `docker compose down -v`, volume removal      | `guard-protected-ops`                                        | ✅ hard block                                               |
 | Writing `.env` from a script                  | `guard-protected-ops`                                        | ✅ hard block                                               |
-| Credential in a commit                        | `guard-secrets` scans the staged diff                        | ✅ hard block                                               |
+| Credential in a commit                        | `guard-secrets` scans what the commit will include           | ⚠️ partial — see "What the secret scan does not catch"      |
 | `gh pr merge` from an agent                   | `guard-protected-ops`                                        | ✅ hard block                                               |
 | Style, static analysis, tests                 | `ci.yml` jobs `php-static`, `php-tests`, `web`               | ✅ CI, required                                             |
 | API contract matches the code                 | `ci.yml` job `contract`                                      | ✅ CI                                                       |
@@ -22,6 +22,37 @@ only looks like it does.
 | **Merge approval**                            | GitHub branch protection                                     | ❌ **not enabled — see below**                              |
 | Production deploy                             | hook blocks the compose command                              | ⚠️ partial: the real deploy happens outside this repository |
 | Review agent correctness                      | nothing                                                      | ❌ an agent's opinion is not proof                          |
+| Review independence                           | the reviewing agent has no `Write`/`Edit`                    | ⚠️ partial — it holds `Bash`, which writes. See below       |
+
+## What the secret scan does not catch
+
+`guard-secrets` was recorded here as a hard block until the SCP-000 review
+showed it was not one. The round that followed fixed what could be fixed, and
+this section exists so the row above stays honest about the rest.
+
+Fixed: the scan now reads the working tree, not the index, whenever the command
+will stage files — `git add -A && git commit` used to be scanned before `git
+add` had run, against an index that was still empty. `git -C` and `git -c`
+before `commit` no longer skip it. Credential variable names are matched with
+their prefixes, so `MAIL_PASSWORD` and `AWS_SECRET_ACCESS_KEY` are seen, not
+only the one hand-added `DB_PASSWORD`. A value is excused as a placeholder only
+when a marker is the whole value or starts it, so `Secret!Prod#2026aQ` is no
+longer waved through for containing the word "secret".
+
+Still true, and the reason this row is ⚠️ rather than ✅:
+
+- It only sees commands issued through the `Bash` tool. A commit typed in a
+  terminal, run from a script, or made by any other tool is invisible to it.
+  The durable fix is a real `pre-commit` git hook, which runs when the index is
+  final whatever started the commit. That is not installed yet.
+- Every error path fails open. A diff larger than the subprocess buffer, a
+  failed `git` call, or an unset `CLAUDE_PROJECT_DIR` all end in "no findings"
+  rather than "could not tell".
+- Pattern matching finds shapes it knows. A credential in a form nobody
+  anticipated gets through, and no list of shapes closes that.
+
+Treat it as a second layer that catches ordinary mistakes, not as the thing
+standing between a credential and a public repository.
 
 ### The gap that matters
 
@@ -101,8 +132,8 @@ Checked by review, not by a tool, because no tool decides them:
 pnpm claude:selftest
 ```
 
-60 assertions over both guards: that the destructive commands are blocked with
-the right rule, that 20 real commands from this repository are not, that
+Assertions over both guards: that the destructive commands are blocked with
+the right rule, that real commands from this repository are not, that
 credentials are caught, and that this repository's own placeholders — the test
 `APP_KEY`, the CI password, `.env.example`, compose interpolation — do not trip
 the secret scanner.

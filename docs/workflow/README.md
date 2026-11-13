@@ -46,9 +46,28 @@ honest no's in it.
 | `performance-reviewer` | opus, high  | **no**                 | `/review`            |
 | `git-release`          | sonnet      | **no**                 | `/implement`, `/pr`  |
 
-The read-only column is the load-bearing one. The agent that wrote the code
-cannot review it, and the agent judging the tests cannot edit them — not by
-convention, but because the tools are not in its definition.
+The read-only column means **no `Write` and no `Edit`**. That is what the
+definitions withhold, and it is real: the agent that wrote the code is not the
+agent that reviews it.
+
+What it does **not** mean is that those agents cannot change a file. All four
+hold `Bash`, and a shell writes — `sed -i`, `tee`, a redirect. So the column is
+a structural obstacle, not a boundary (SCP-000 review S4/M6). The honest reading
+is that an agent which sets out to edit a file can, and nothing here stops it;
+what the tool list prevents is the easy, unthinking edit, which is the common
+case rather than the dangerous one.
+
+The same qualification applies to the scopes written beside `task-manager` and
+`software-architect` — "`.claude/tasks/` only", "plans and `docs/` only". Those
+are instructions in a prompt, not permissions. Both agents hold unrestricted
+`Write` and `Edit`.
+
+Making the column true would take the tool grant or the sandbox, not prose:
+drop `Bash` from the three pure reviewers and hand them the diff as a file, and
+run `qa-engineer` — which genuinely needs to execute tests — against a
+read-only checkout with a writable temp directory. Neither is done. Until one
+is, a review is independent because the agent cooperates, and that is worth
+knowing when you decide how much weight a review report carries.
 
 ## Cost
 

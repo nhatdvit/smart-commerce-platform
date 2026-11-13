@@ -332,8 +332,10 @@ which adds a record and independent review:
 - Every tracked task has a record in `.claude/tasks/SCP-NNN.md` — what was
   asked for, approved, tested, found in review, and knowingly left out. Commit
   messages are not the task history.
-- Review is done by agents that cannot edit files, so step 7 is not performed
-  by whoever wrote the code.
+- Review is done by agents that hold no `Write` or `Edit` tool, so step 7 is
+  not performed by whoever wrote the code. They do hold `Bash`, which can write
+  a file, so this is a separation of roles rather than an enforced boundary —
+  `docs/workflow/README.md` says what would be needed to make it one.
 - Two transitions are human-only: `PLANNED → APPROVED` and
   `READY_FOR_PR → DONE`.
 - `.claude/hooks/` refuses the operations the paragraph above calls out —

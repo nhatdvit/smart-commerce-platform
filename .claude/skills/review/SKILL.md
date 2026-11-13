@@ -23,8 +23,11 @@ Read `.claude/tasks/$ARGUMENTS.md`.
 ## 2. Get the diff
 
 ```bash
-git diff main...HEAD --stat
-git diff main...HEAD
+# origin/main, not main: a local main may be stale or absent, and then the
+# reviewer reads main's own work as if it were this task's (SCP-000 review L4).
+git fetch origin
+git diff origin/main...HEAD --stat
+git diff origin/main...HEAD
 ```
 
 An empty diff means nothing was implemented. Say so and stop.
@@ -59,8 +62,11 @@ security-review.md        when called
 performance-review.md     when called
 ```
 
-Also run the repository's own `/code-review` skill and fold its confirmed
-findings in rather than re-deriving them.
+If a general-purpose `/code-review` skill is installed in this environment,
+run it and fold its confirmed findings in rather than re-deriving them. It is
+**not** part of this repository and is often absent (SCP-000 review M5). When
+it is not there, say so in your report in one line and move on - an automated
+pass nobody can see the output of is worse than a stated gap.
 
 ## 5. Consolidate
 
