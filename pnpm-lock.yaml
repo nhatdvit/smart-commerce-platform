@@ -26,6 +26,9 @@ importers:
       typescript:
         specifier: 5.7.2
         version: 5.7.2
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
 
   apps/admin-web:
     dependencies:

@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Shared\Application\Contract\RecordsAuditTrail;
+use App\Shared\Application\Contract\RecordsDomainEvents;
+use App\Shared\Infrastructure\Audit\DatabaseAuditTrail;
 use App\Shared\Infrastructure\Config\EnvironmentValidator;
+use App\Shared\Infrastructure\Idempotency\IdempotencyGuard;
+use App\Shared\Infrastructure\Outbox\DatabaseOutbox;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -21,6 +27,28 @@ final class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(EnvironmentValidator::class);
+
+        // Audit: scoped, not singleton. It reads the current request for the
+        // correlation id, and a queue worker handles many requests worth of
+        // jobs in one process.
+        $this->app->scoped(RecordsAuditTrail::class, DatabaseAuditTrail::class);
+
+        // Outbox: stateless, so one instance is fine. The connection is
+        // handed in rather than reached for, because DatabaseOutbox reads the
+        // transaction level off it and that rule has to be testable.
+        $this->app->singleton(
+            RecordsDomainEvents::class,
+            fn (): DatabaseOutbox => new DatabaseOutbox(
+                $this->app->make(DatabaseManager::class)->connection(),
+            ),
+        );
+
+        $this->app->singleton(
+            IdempotencyGuard::class,
+            static fn (): IdempotencyGuard => new IdempotencyGuard(
+                (int) config('commerce.idempotency.retention_hours', 24),
+            ),
+        );
     }
 
     public function boot(): void
@@ -41,6 +69,8 @@ final class AppServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 \App\Shared\Presentation\Console\ValidateConfigurationCommand::class,
+                \App\Shared\Presentation\Console\DispatchOutboxCommand::class,
+                \App\Shared\Presentation\Console\PruneIdempotencyRecordsCommand::class,
             ]);
         }
 

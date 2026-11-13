@@ -28,13 +28,13 @@ if ! "${COMPOSE[@]}" ps --status running --services 2>/dev/null | grep -qx api; 
 fi
 
 echo "==> Generating the document"
-"${COMPOSE[@]}" exec -T api php artisan config:clear --no-interaction >/dev/null
-"${COMPOSE[@]}" exec -T api php artisan scramble:export --path="${IN_CONTAINER}" >/dev/null
+"${COMPOSE[@]}" exec -T -u www-data api php artisan config:clear --no-interaction >/dev/null
+"${COMPOSE[@]}" exec -T -u www-data api php artisan scramble:export --path="${IN_CONTAINER}" >/dev/null
 
 # Pretty-print with stable flags so a diff shows contract changes rather than
 # formatting noise, and so Vietnamese text and URLs stay readable.
 echo "==> Formatting"
-"${COMPOSE[@]}" exec -T api php -r '
+"${COMPOSE[@]}" exec -T -u www-data api php -r '
     $path = $argv[1];
     $document = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     file_put_contents($path, json_encode(

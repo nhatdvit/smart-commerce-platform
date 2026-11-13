@@ -30,6 +30,8 @@ enum ErrorCode: string
 
     // 409 - conflicts and concurrency
     case IdempotencyKeyReused = 'IDEMPOTENCY_KEY_REUSED';
+    /** Same key, still running. The client should retry, not change the key. */
+    case RequestInProgress = 'REQUEST_IN_PROGRESS';
     case InvalidStateTransition = 'INVALID_STATE_TRANSITION';
     case OutOfStock = 'OUT_OF_STOCK';
     case PriceChanged = 'PRICE_CHANGED';
@@ -55,6 +57,7 @@ enum ErrorCode: string
             self::ResourceNotFound => 404,
             self::MethodNotAllowed => 405,
             self::IdempotencyKeyReused,
+            self::RequestInProgress,
             self::InvalidStateTransition,
             self::OutOfStock,
             self::PriceChanged,
