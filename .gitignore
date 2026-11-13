@@ -57,3 +57,8 @@ infra/backups/
 
 # NOTE: docs/api/openapi.json IS tracked on purpose. It is generated, but it is
 # the client-facing contract, so it belongs in review and CI diffs it.
+
+# Claude Code: the workflow definitions are committed and shared (agents,
+# skills, hooks, task ledger, review reports). Personal overrides are not.
+.claude/settings.local.json
+.claude/*.local.json

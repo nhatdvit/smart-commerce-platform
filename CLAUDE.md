@@ -317,6 +317,34 @@ When receiving an implementation task:
 
 Never claim a command/test/deploy succeeded unless it actually ran and passed. Do not silently change architecture, add new major infrastructure, or perform destructive DB operations. Request explicit approval for production deploys, destructive migrations, credential changes, and external payments.
 
+
+### Tracked tasks and agent roles
+
+The eight steps above are the method. For work worth tracking, they are carried
+out through the workflow in [`docs/workflow/README.md`](docs/workflow/README.md),
+which adds a record and independent review:
+
+```
+/task  →  /plan  →  [Tech Lead approves]  →  /implement  →  /test
+       →  /review  →  /fix ⟲  →  /pr  →  [Tech Lead merges]
+```
+
+- Every tracked task has a record in `.claude/tasks/SCP-NNN.md` — what was
+  asked for, approved, tested, found in review, and knowingly left out. Commit
+  messages are not the task history.
+- Review is done by agents that hold no `Write` or `Edit` tool, so step 7 is
+  not performed by whoever wrote the code. They do hold `Bash`, which can write
+  a file, so this is a separation of roles rather than an enforced boundary —
+  `docs/workflow/README.md` says what would be needed to make it one.
+- Two transitions are human-only: `PLANNED → APPROVED` and
+  `READY_FOR_PR → DONE`.
+- `.claude/hooks/` refuses the operations the paragraph above calls out —
+  destructive migrations, force pushes, production stack commands, writes to
+  `.env`, committing a credential — rather than relying on remembering.
+
+Not every change needs this. A typo fix is a commit. The ledger is for work
+whose rationale someone will want in six months.
+
 ## 14. Immediate milestone: Phase 01 — Foundation
 
 Build only:

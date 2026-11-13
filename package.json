@@ -34,7 +34,9 @@
     "api:pint:check": "docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml exec -u www-data api vendor/bin/pint --test",
     "api:check": "pnpm api:pint:check && pnpm api:stan && pnpm api:test",
     "api:openapi": "bash infra/scripts/export-openapi.sh",
-    "openapi:conformance": "node infra/scripts/check-openapi-conformance.mjs"
+    "openapi:conformance": "node infra/scripts/check-openapi-conformance.mjs",
+    "claude:selftest": "node .claude/hooks/selftest.mjs",
+    "claude:traceability": "node infra/scripts/check-task-traceability.mjs"
   },
   "devDependencies": {
     "@scp/config": "workspace:*",
