@@ -87,8 +87,7 @@ export const RULES = [
   },
   {
     id: 'delete-remote-branch',
-    pattern:
-      /\bgit\s+push\b[^\n]*(--delete\b|\s-[A-Za-z]*d[A-Za-z]*\b|\s:[A-Za-z0-9_./-]+(\s|$))/,
+    pattern: /\bgit\s+push\b[^\n]*(--delete\b|\s-[A-Za-z]*d[A-Za-z]*\b|\s:[A-Za-z0-9_./-]+(\s|$))/,
     reason: 'Deleting a remote branch is not reversible from here.',
   },
   {
@@ -127,8 +126,7 @@ export const RULES = [
   },
   {
     id: 'compose-down-volumes',
-    pattern:
-      /\bdocker[\s-]compose\b[^\n]*\bdown\b[^\n]*(--volumes\b|\s-[A-Za-z]*v[A-Za-z]*\b)/,
+    pattern: /\bdocker[\s-]compose\b[^\n]*\bdown\b[^\n]*(--volumes\b|\s-[A-Za-z]*v[A-Za-z]*\b)/,
     reason:
       'down -v deletes the database volume. If you want a clean local database, say so and the volume gets removed deliberately.',
   },
@@ -158,7 +156,8 @@ export const RULES = [
     id: 'write-dotenv-indirect',
     // A redirect is not the only way to overwrite .env. cp, mv and sed -i all
     // land in the same place, and the file holds real credentials.
-    pattern: /\b(cp|mv|install)\b[^\n]*\s(\.\/)?\.env(\s|$|;)|\bsed\b[^\n]*\s-i\b[^\n]*\s(\.\/)?\.env(\s|$|;)/,
+    pattern:
+      /\b(cp|mv|install)\b[^\n]*\s(\.\/)?\.env(\s|$|;)|\bsed\b[^\n]*\s-i\b[^\n]*\s(\.\/)?\.env(\s|$|;)/,
     reason:
       'The .env file holds real credentials and is never written by an automated step, whatever writes it.',
   },
@@ -171,7 +170,8 @@ export const RULES = [
     id: 'auto-merge-pr-api',
     // gh pr merge is blocked; the REST call underneath does the same thing.
     pattern: /\bgh\s+api\b[^\n]*\/pulls\/\d+\/merge\b/,
-    reason: 'Merging a pull request through the API bypasses the same gate gh pr merge is blocked by.',
+    reason:
+      'Merging a pull request through the API bypasses the same gate gh pr merge is blocked by.',
   },
 ];
 

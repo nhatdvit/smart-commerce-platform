@@ -204,10 +204,22 @@ if (prTitle !== '' && !prTitle.includes(taskId)) {
   fail('pr title', `"${prTitle}" does not mention ${taskId}.`);
 }
 
+// %p is the parent list, so a merge commit is the one with two parents, and it
+// is skipped. A merge subject cannot be a Conventional Commit and carries no
+// task of its own; meanwhile merging the base branch in to refresh a stale
+// branch is ordinary work the workflow documentation tells people to do. A
+// gate that failed on merges would make that advice impossible to follow.
+// Found by merging origin/main into the SCP-000 branch itself.
 const subjects = baseExists
-  ? git(['log', '--format=%s', `origin/${baseRef}..HEAD`], '')
+  ? git(['log', '--format=%p|%s', `origin/${baseRef}..HEAD`], '')
       .split('\n')
       .filter((line) => line.trim() !== '')
+      .map((line) => {
+        const cut = line.indexOf('|');
+        return { parents: line.slice(0, cut).trim(), subject: line.slice(cut + 1) };
+      })
+      .filter((commit) => commit.parents.split(' ').filter(Boolean).length < 2)
+      .map((commit) => commit.subject)
   : [];
 
 if (subjects.length === 0) {
@@ -223,7 +235,11 @@ for (const subject of subjects) {
     fail('commit message', `"${subject}" does not end with [${taskId}].`);
   }
   if (!CONVENTIONAL.test(subject)) {
-    fail('commit message', `"${subject}" is not a Conventional Commit subject.`);
+    fail(
+      'commit message',
+      `"${subject}" is not a Conventional Commit subject. The scope is lowercase — ` +
+        `the task id belongs in the [${taskId}] suffix, not in the scope.`,
+    );
   }
 }
 
