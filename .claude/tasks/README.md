@@ -50,7 +50,7 @@ claim that something shipped, and an agent should be able to make neither.
 
 | ID | Title | Status | Priority | Branch | PR |
 | --- | --- | --- | --- | --- | --- |
-| [SCP-000](SCP-000.md) | AI development workflow | IN_PROGRESS | P2 | `chore/SCP-000-ai-dev-workflow` | — |
+| [SCP-000](SCP-000.md) | AI development workflow | CHANGES_REQUESTED | P2 | `chore/SCP-000-ai-dev-workflow` | [#36](https://github.com/nhatdvit/smart-commerce-platform/pull/36) |
 | [SCP-001](SCP-001.md) | VietQR payload for bank transfer | BACKLOG | P1 | — | — |
 | [SCP-002](SCP-002.md) | Idempotency for operations that must not run twice | APPROVED | P1 | — | — |
 
