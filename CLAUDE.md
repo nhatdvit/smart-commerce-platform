@@ -332,10 +332,15 @@ which adds a record and independent review:
 - Every tracked task has a record in `.claude/tasks/SCP-NNN.md` — what was
   asked for, approved, tested, found in review, and knowingly left out. Commit
   messages are not the task history.
-- Review is done by agents that hold no `Write` or `Edit` tool, so step 7 is
-  not performed by whoever wrote the code. They do hold `Bash`, which can write
-  a file, so this is a separation of roles rather than an enforced boundary —
-  `docs/workflow/README.md` says what would be needed to make it one.
+- Review is done by agents that hold only `Read`, `Glob` and `Grep`, so
+  step 7 is not performed by whoever wrote the code. With no `Write`, `Edit`
+  or `Bash` they have no way to change a file at all, which makes this a
+  boundary rather than an instruction. The cost is that they cannot run the
+  code either: the calling session runs the probes they ask for and sends back
+  the output, and `docs/workflow/README.md` says what that costs.
+- `qa-engineer` is the exception and stays one knowingly: it must execute the
+  suites, so it keeps `Bash`, and its independence rests on the agent rather
+  than on the tool list.
 - Two transitions are human-only: `PLANNED → APPROVED` and
   `READY_FOR_PR → DONE`.
 - `.claude/hooks/` refuses the operations the paragraph above calls out —

@@ -62,3 +62,7 @@ infra/backups/
 # skills, hooks, task ledger, review reports). Personal overrides are not.
 .claude/settings.local.json
 .claude/*.local.json
+
+# The diff /review materialises for the reviewer agents, which hold no Bash
+# and so cannot run git themselves (SCP-000 review S4). Regenerated per run.
+.claude/reviews/*/diff.patch

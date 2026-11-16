@@ -22,7 +22,8 @@ only looks like it does.
 | **Merge approval**                            | GitHub branch protection                                     | ❌ **not enabled — see below**                              |
 | Production deploy                             | hook blocks the compose command                              | ⚠️ partial: the real deploy happens outside this repository |
 | Review agent correctness                      | nothing                                                      | ❌ an agent's opinion is not proof                          |
-| Review independence                           | the reviewing agent has no `Write`/`Edit`                    | ⚠️ partial — it holds `Bash`, which writes. See below       |
+| Review independence (the three reviewers)     | `Read`/`Glob`/`Grep` only — no `Write`, `Edit` or `Bash`     | ✅ structural: no write channel exists                      |
+| Test independence (`qa-engineer`)             | no `Write`/`Edit`, but it keeps `Bash` to run the suites     | ⚠️ partial — a shell writes; behavioural, not enforced      |
 
 ## What the secret scan does not catch
 

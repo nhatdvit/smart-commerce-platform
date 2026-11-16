@@ -34,40 +34,55 @@ honest no's in it.
 
 ## The agents
 
-| Agent                  | Model       | Can edit files?        | Called by            |
-| ---------------------- | ----------- | ---------------------- | -------------------- |
-| `task-manager`         | sonnet      | `.claude/tasks/` only  | `/task`              |
-| `software-architect`   | opus, high  | plans and `docs/` only | `/plan`              |
-| `laravel-developer`    | inherit     | yes                    | `/implement`, `/fix` |
-| `nextjs-developer`     | inherit     | yes                    | `/implement`, `/fix` |
-| `qa-engineer`          | sonnet      | **no**                 | `/test`              |
-| `code-reviewer`        | opus, high  | **no**                 | `/review`            |
-| `security-reviewer`    | opus, xhigh | **no**                 | `/review`            |
-| `performance-reviewer` | opus, high  | **no**                 | `/review`            |
-| `git-release`          | sonnet      | **no**                 | `/implement`, `/pr`  |
+| Agent                  | Model       | Tools                     | Can edit files?                   | Called by            |
+| ---------------------- | ----------- | ------------------------- | --------------------------------- | -------------------- |
+| `task-manager`         | sonnet      | + `Write`, `Edit`, `Bash` | yes — `.claude/tasks/` by prompt  | `/task`              |
+| `software-architect`   | opus, high  | + `Write`, `Edit`, `Bash` | yes — plans and `docs/` by prompt | `/plan`              |
+| `laravel-developer`    | inherit     | default set               | yes                               | `/implement`, `/fix` |
+| `nextjs-developer`     | inherit     | default set               | yes                               | `/implement`, `/fix` |
+| `qa-engineer`          | sonnet      | + `Bash`                  | no `Write`/`Edit` — but `Bash`    | `/test`              |
+| `code-reviewer`        | opus, high  | `Read`, `Glob`, `Grep`    | **no — structurally**             | `/review`            |
+| `security-reviewer`    | opus, xhigh | `Read`, `Glob`, `Grep`    | **no — structurally**             | `/review`            |
+| `performance-reviewer` | opus, high  | `Read`, `Glob`, `Grep`    | **no — structurally**             | `/review`            |
+| `git-release`          | sonnet      | + `Bash`                  | no `Write`/`Edit` — but `Bash`    | `/implement`, `/pr`  |
 
-The read-only column means **no `Write` and no `Edit`**. That is what the
-definitions withhold, and it is real: the agent that wrote the code is not the
-agent that reviews it.
+Every row starts from `Read`, `Glob`, `Grep`; the Tools column says what is
+added. "by prompt" means the scope is an instruction, not a permission.
 
-What it does **not** mean is that those agents cannot change a file. All four
-hold `Bash`, and a shell writes — `sed -i`, `tee`, a redirect. So the column is
-a structural obstacle, not a boundary (SCP-000 review S4/M6). The honest reading
-is that an agent which sets out to edit a file can, and nothing here stops it;
-what the tool list prevents is the easy, unthinking edit, which is the common
-case rather than the dangerous one.
+The read-only column is the load-bearing one, and after SCP-000 review S4 it
+means two different things depending on the row.
 
-The same qualification applies to the scopes written beside `task-manager` and
-`software-architect` — "`.claude/tasks/` only", "plans and `docs/` only". Those
-are instructions in a prompt, not permissions. Both agents hold unrestricted
-`Write` and `Edit`.
+**The three reviewers** — `code-reviewer`, `security-reviewer`,
+`performance-reviewer` — hold `Read`, `Glob` and `Grep`. No `Write`, no `Edit`,
+no `Bash`. There is no channel through which they can change a file, so the
+separation is structural: a reviewer cannot fix what it finds, and cannot write
+the report that judges it. That report is transcribed by the calling session
+from what the agent returns.
 
-Making the column true would take the tool grant or the sandbox, not prose:
-drop `Bash` from the three pure reviewers and hand them the diff as a file, and
-run `qa-engineer` — which genuinely needs to execute tests — against a
-read-only checkout with a writable temp directory. Neither is done. Until one
-is, a review is independent because the agent cooperates, and that is worth
-knowing when you decide how much weight a review report carries.
+This was not free, and the cost is the honest part. Those agents used to run
+`git diff` to read the change, `pnpm audit` and `composer audit` to check
+dependencies, `EXPLAIN ANALYZE` to check a query plan, and the code itself to
+confirm a finding rather than assert it. None of that is available to them now.
+`/review` writes the diff to `.claude/reviews/<ID>/diff.patch` for them to
+read, and when one asks for a command, the calling session runs it and sends
+the output back.
+
+So the trade is: **weaker independence of evidence, stronger independence of
+action.** The session running those probes is usually the session that wrote or
+fixed the code, which is an interested party; but an agent with no write
+channel cannot author a clean verdict for work it did itself, and that is the
+failure that actually empties a review of meaning. Whoever reads a review
+report should know which commands were run by the reviewer and which by the
+session — the skill requires that to be stated.
+
+**`qa-engineer` is the deliberate exception.** It has to execute the suites, so
+it keeps `Bash`, and a shell writes. Its independence rests on the agent rather
+than on the tool list. Making it structural would mean running it against a
+read-only checkout with a writable temp directory; that is not done.
+
+**`task-manager` and `software-architect`** hold unrestricted `Write` and
+`Edit`. The scopes written beside them — "`.claude/tasks/` only", "plans and
+`docs/` only" — are instructions in a prompt, not permissions.
 
 ## Cost
 

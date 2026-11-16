@@ -20,17 +20,39 @@ Read `.claude/tasks/$ARGUMENTS.md`.
 | Anything earlier       | Stop. There is no diff to review                                                                                                                                                  |
 | `BLOCKED`, `CANCELLED` | Stop                                                                                                                                                                              |
 
-## 2. Get the diff
+## 2. Get the diff, and put it where the reviewers can read it
+
+The three reviewers hold **no `Bash`** (SCP-000 review S4), so they cannot run
+`git` themselves. You materialise the diff for them:
 
 ```bash
 # origin/main, not main: a local main may be stale or absent, and then the
 # reviewer reads main's own work as if it were this task's (SCP-000 review L4).
 git fetch origin
 git diff origin/main...HEAD --stat
-git diff origin/main...HEAD
+mkdir -p .claude/reviews/$ARGUMENTS
+git diff origin/main...HEAD > .claude/reviews/$ARGUMENTS/diff.patch
 ```
 
+`diff.patch` is gitignored. Give each agent that path and the `--stat` summary
+in its brief; they read it with `Read`.
+
 An empty diff means nothing was implemented. Say so and stop.
+
+### When a reviewer needs a command run
+
+Dropping `Bash` also took away the probes: `pnpm audit` and `composer audit`
+for the security reviewer, `EXPLAIN ANALYZE` for the performance one, and
+running the code under review for anyone. Tell each agent it may ask, in its
+report, for specific commands to be run — then run them, send the real output
+back with `SendMessage`, and let it revise.
+
+Be straight with yourself about what that costs. You are usually the session
+that wrote or fixed the code, so a probe you run is evidence from an interested
+party. The trade was deliberate: an agent with no write channel cannot author
+its own clean verdict, which is the failure that actually ends a review's
+worth. Weaker independence of _evidence_ was judged the better price than
+weaker independence of _action_. Say in the report who ran what.
 
 ## 3. Decide which reviewers the change needs
 
@@ -47,14 +69,15 @@ skipping security on a payment change is the expensive mistake.
 
 ## 4. Delegate, in parallel
 
-Call the chosen agents. All three are read-only, so none can fix what it finds
-and none can approve its own work — the implementer does not review itself.
+Call the chosen agents. All three hold only `Read`, `Glob` and `Grep` — no
+`Write`, no `Edit`, no `Bash` — so none of them can fix what it finds, write
+its own verdict, or touch the record that says a finding existed. That is a
+boundary rather than an instruction, which is what the earlier `Bash` grant
+made it impossible to claim.
 
 Each returns its findings to you, with file, line, severity and the concrete
-failure scenario for each. **You write the reports, not the agents** — they
-have no editing tools, for the same reason the QA agent does not, so an
-instruction to write their own file would produce nothing (SCP-000 test report,
-N2). Transcribe each one under `.claude/reviews/$ARGUMENTS/`:
+failure scenario for each. **You write the reports, not the agents.**
+Transcribe each one under `.claude/reviews/$ARGUMENTS/`:
 
 ```
 code-review.md
