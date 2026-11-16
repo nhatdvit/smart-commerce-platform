@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { publicEnv } from '@/lib/env';
 import '@/styles/globals.css';
+import '@/styles/storefront.css';
 
 export const metadata: Metadata = {
   title: {
@@ -16,13 +17,14 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#f97316',
+  // The delivered design's theme colour, not the Tailwind token.
+  themeColor: '#fff8e8',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="vi" suppressHydrationWarning>
-      <body className="min-h-dvh">{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
