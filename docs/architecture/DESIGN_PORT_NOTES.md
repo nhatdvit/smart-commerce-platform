@@ -116,12 +116,50 @@ modal in the same style as the other dialogs. This is the one place where
 behaviour was added rather than ported; it looked like an oversight in the
 prototype, not an intentional no-op.
 
-### 7. Storefront search and the cart drawer are React-controlled
+### 7. The storefront uses Be Vietnam Pro, not the design's font stack
+
+The delivered rule was `font: 14px/1.5 Inter, Arial, 'Segoe UI', sans-serif`, but
+the package never loaded Inter, so the site rendered in Arial — whose Vietnamese
+diacritics sit badly on `ă ơ ư` and on stacked tone marks. Requested by the
+product owner. Be Vietnam Pro is drawn for Vietnamese and is already what the
+admin app uses, so the two apps now match. Only the family is overridden; the
+delivered size and line-height still apply.
+
+**Visual effect:** intended — Vietnamese text is noticeably better set.
+
+### 8. The favourite button holds an SVG icon, not a ♡ text glyph
+
+The design used `♡` / `♥` (U+2661 / U+2665). Neither character is in the body
+font, so each platform resolves it through its own symbol or emoji fallback; on
+Windows the glyph came back oversized and off-centre in the 27px button. An
+inline SVG draws the same shape identically everywhere and inherits the button's
+colour, so the design's red and the `liked` background still apply.
+
+**Visual effect:** intended — the heart is now crisp and centred.
+
+### 9. Storefront search and the cart drawer are React-controlled
 
 The prototype re-rendered the search field from a string and restored the caret
 by hand; the drawer re-rendered its own markup on every cart change. Both are
 ordinary controlled React components now. Identical behaviour, fewer moving
 parts.
+
+## Known defect in the delivered assets: product photos
+
+`apps/customer-web/public/assets/food-*.jpg` are **crops of a mockup screenshot**,
+not photographs. Each one has the storefront's own UI baked into its pixels: a
+white circular favourite button with a red heart in the top-right corner, and a
+rounded white card border around the edge.
+
+The visible result is two hearts per product card — the real, clickable button
+drawn by `ProductSections.tsx`, and a second painted into the image underneath
+it. No code change can remove the second one; it is part of the JPEG. The design
+package's own README says as much: _"Ảnh sản phẩm được cắt từ bản mockup thiết
+kế, chỉ dùng làm ảnh demo. Nên thay bằng ảnh món ăn thật khi triển khai."_
+
+These need replacing with real product photography before launch. When that
+happens the baked-in border should go too, so `.product-photo` owns the corner
+radius rather than the image.
 
 ## Not ported (absent from the delivered designs)
 

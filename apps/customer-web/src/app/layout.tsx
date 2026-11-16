@@ -24,6 +24,22 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="vi" suppressHydrationWarning>
+      <head>
+        {/*
+         * Be Vietnam Pro: a typeface drawn for Vietnamese, so ă/ơ/ư and the
+         * stacked tone marks are designed rather than synthesised. The design
+         * package asked for Inter but never loaded it, leaving the site on
+         * Arial. Loaded by <link> rather than next/font so the Docker image
+         * build does not depend on reaching Google; the stylesheet still falls
+         * back to Arial when the font cannot be fetched.
+         */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap"
+        />
+      </head>
       <body>{children}</body>
     </html>
   );
