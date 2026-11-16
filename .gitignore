@@ -65,4 +65,4 @@ infra/backups/
 
 # The diff /review materialises for the reviewer agents, which hold no Bash
 # and so cannot run git themselves (SCP-000 review S4). Regenerated per run.
-.claude/reviews/*/diff.patch
+.claude/reviews/*/*.patch

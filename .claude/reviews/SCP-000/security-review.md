@@ -1,289 +1,246 @@
-# Security review — SCP-000
+# Security review — SCP-000 (second pass)
 
 | | |
 | --- | --- |
 | **Task** | SCP-000 |
-| **Reviewed** | 2026-11-13 |
-| **Reviewer** | `security-reviewer` agent |
-| **Why reviewed** | infra config: CI workflow, enforcement hooks, agent tool grants |
+| **Reviewed** | 2026-11-16 |
+| **Reviewer** | `security-reviewer` agent (second pass, fix rounds 2 and 3) |
+| **Why reviewed** | infra config: enforcement hooks, CI merge gate, agent tool grants |
 | **Verdict** | CHANGES REQUIRED |
 
-> Transcribed by the calling session from the agent's returned report, per
-> `.claude/skills/review/SKILL.md`. The agent has no editing tool, by design.
-> S1, S2, S3 and S5 were re-verified independently by the session before this
-> file was written; see "Independent verification" at the end.
+> **How this pass was conducted, and by whom.** This pass had `Read`, `Glob` and
+> `Grep` and **no `Bash`** — the reviewer's own S4, acted on. Findings were
+> derived by reading the shipped source against the repository's current files.
+> Six probes were then run **by the calling session, not by the reviewer**
+> (probes 1, 2, 3, 4, 6, 7); probe 5 was skipped — Windows, no `mkfifo`. Each
+> finding records whether it is measured or read. The output the reviewer saw
+> was sent by the session that also wrote the code under review — an interested
+> party, which is the price of the S4 fix and is stated in `review/SKILL.md`.
+>
+> Credential-shaped examples are written with the value elided rather than
+> literal, because a literal one makes this file uncommittable through the guard
+> it reviews. That substitution is itself evidence for S15, and probe 1
+> confirmed it: the previous review report scored three findings and the
+> previous code review one.
 
 ## Summary
 
 | Severity | Count | Blocking |
 | --- | --- | --- |
 | CRITICAL | 0 | yes |
-| HIGH | 4 | yes |
-| MEDIUM | 7 | no |
+| HIGH | 3 | yes |
+| MEDIUM | 5 | no |
 | LOW | 3 | no |
 
-All six requested areas were covered; nothing was left partway. Paths below are relative to the repository root. Findings were confirmed by executing the shipped code — importing `scanDiff` and `evaluate` directly, and driving `guard-secrets.mjs` end to end as a hook in a throwaway git repository — not by reading patterns alone.
+Numbering continues from the first report (S1–S14). S6, S8, S9, S10, M2, M3, the LOW list, AC8 and AC10 are recorded open and are not re-reported.
 
-The diff adds no application code, no endpoint, no migration and no dependency, so nothing here is reachable by a customer and no money or customer data moves. Every finding is about the enforcement this change installs and the claims made for it. Two matter most because the claims are stronger than the code: `docs/workflow/quality-gates.md` records "Credential in a commit → ✅ hard block", and five agent definitions say they "cannot edit files". Neither is true as shipped, and a control people believe in is worse than one they don't.
+The round did real work, and the measurements confirm it: `pnpm claude:selftest` → **117 passed, 0 failed** (run by the calling session, 2026-11-16; the code reviewer's L1 notes one duplicated clean fixture, so 116 distinct). S1's index/working-tree defect, S2's word-boundary defect, S5, M1, M7, M10 and the `/code-review` fiction are genuinely fixed, and the documentation that previously claimed a hard block and non-editing agents now mostly tells the truth. Three things did not land, all three now confirmed by probe rather than argued: **the S2 fix over-fires on 24 of this repository's own files (S15)**, **the S1 fix still has an unscanned commit idiom (S16)**, and **the S3 fix still leaves four open roads to `main` (S17)**. Nothing in the diff touches application code, payments, money or customer data.
 
 ## Findings
 
-### S1 — `guard-secrets` sees an empty index for `git add -A && git commit`, the one idiom its own header says it was fixed for
+### S15 — the widened credential rule refuses 24 of this repository's own files, including the shared idempotency-key and guest-order-token constants
 
 | | |
 | --- | --- |
-| **Where** | `.claude/hooks/guard-secrets.mjs:182-192` |
+| **Where** | `.claude/hooks/guard-secrets.mjs:91` (`ASSIGNMENT`), `:124-147` |
+| **Class** | control degradation → secret exposure |
+| **Severity** | HIGH — held deliberately; the reasoning is at the end of this finding |
+| **Verification** | **measured.** Probe 1: `scanDiff` over every tracked file with each line treated as added → **33 findings in 24 files, none of them a credential** |
+
+**Who the attacker is.** Nobody. This is the failure the file's own header names: "a developer who learns to work around the guard … and the guard has lost all of its value." It is a regression introduced by the S2 fix in round 2: `key` and `token` joined the credential words with an arbitrary prefix chain, the value floor dropped from 8 to 5, and `secret`/`password`/`test` stopped excusing a value as a placeholder.
+
+**What they send.** An ordinary commit. Probe 1's output, with the lines read directly:
+
+| File and line | Line | Count |
+| --- | --- | --- |
+| `packages/api-contracts/src/headers.ts:4,6` | the exported `HEADER_IDEMPOTENCY_KEY` and `HEADER_GUEST_ORDER_TOKEN` constants | 2 |
+| `apps/api/app/Shared/Infrastructure/Audit/SensitiveDataRedactor.php:76` | a `foreach` over a payload binding `$key` and `$value` | 1 |
+| both `next.config.mjs:19-21` | a security-header entry binding `key` to `X-Content-Type-Options` | 1 each |
+| `apps/api/config/sanctum.php:86` | the `validate_csrf_token` middleware entry | 1 |
+| `apps/api/public/.htaccess:14` | the `RewriteRule` forwarding the XSRF token header | 1 |
+| `apps/api/config/scramble.php:52` | a config array binding `key` to `scramble.openapi` | 1 |
+| `apps/api/tests/Feature/IdempotencyTest.php:96` | a test array binding `key` | 2 |
+| `apps/api/tests/Unit/SensitiveDataRedactorTest.php:17,61` | two redactor fixtures binding `$key` and `token` | 2 |
+| `apps/api/tests/…/AuditTrailTest.php` | reported by probe 1; not present in the checkout the reviewer read, so no line claimed | 1 |
+| `EnsureIdempotency.php:39`, `StorePermissionChecker.php:50`, `EnvironmentValidator.php:60` | three ordinary `$key = …` assignments | 1 each |
+| `README.md:86`, `docs/development.md:118`, both `.env.example`, `infra/scripts/bootstrap-dev.sh:21,24` | the documented `php artisan key:generate --show` setup command | 6 |
+| `.github/workflows/ci.yml:50,138` | the `actions/cache` step's `key` | 2 |
+| `pnpm-lock.yaml:2338` | the `path-key` dependency entry | 1 |
+| `infra/scripts/check-openapi-conformance.mjs:92` | a local `const key = …` | 1 |
+| `.npmrc` | no credential in it at all — four pnpm settings and a filesystem note. S11's unfixed second half: `FORBIDDEN_PATHS` still flags **any** `.npmrc` on the path rule | 1 |
+| both review reports **added by this diff** | the quoted evidence in each | 3 + 1 |
+
+Mechanism for the worst one: for a `foreach` binding `$key` to `$value`, group 1 matches `$`, the prefix group matches zero times, `key` matches, the separator is accepted, and a six-character value no marker excuses is captured. Every added PHP key/value loop, every React `key` prop, every security-header entry, every edit to a line containing the documented setup command, and the shared API-contract header constants are refused.
+
+**What they get.** `exit 2` on routine work, with a message that says "the pattern needs widening in `.claude/hooks/guard-secrets.mjs` — fix it there". `--no-verify` does not help (this is a Claude hook, not a git hook) and `git -C` no longer helps (S5 closed), so the two available escapes are: edit `guard-secrets.mjs` to weaken it — which S8 records nothing prevents, and which the block message actively recommends — or commit from a terminal, outside the `Bash` tool, where the guard does not exist at all. Either way the credential scan stops running, which is S1 and S2 by a different road.
+
+**What to change.** Three small changes, in order of value. (1) Drop bare `key` and bare `token` from `ASSIGNMENT`; keep `api_key`, `apikey`, `private_key`, `access_token`, `auth_token`, `*_secret`, `*password` and `app_key` — require a credential-naming prefix for the two generic words. (2) Restore a 12-character floor **and** an entropy or character-class condition for the generic rule, so a verb, a version number, a header name, a header constant and a bare `$value` cannot qualify; keep the 5-character floor only for the unmistakable `CREDENTIAL_SHAPES`. (3) Narrow the `.npmrc` path rule to added lines containing an auth token or password setting, as the first report asked. Then add probe 1's 24 files to `selftest.mjs` as allow fixtures — the one new clean fixture tests the prefix-separator property and not the bare-identifier case, which is why a green 117-assertion suite missed all of this.
+
+**Why HIGH and not MEDIUM**, since the record carries the number and the gate reads it. A false positive exposes nothing by itself, which is the argument for MEDIUM and the reason the reviewer offered it. Four things outweigh it. (i) The expected consequence is not noise but the removal of the control: 33 blocks across 24 files, including the files the next two tasks must change, with `exit 2` and a message recommending the remedy that degrades it. (ii) That consequence is exactly S1 and S2, both rated HIGH last round and both paid for with a fix round; a defect that re-opens two HIGHs is HIGH. (iii) It is measured, not predicted, and it fires on the next commit touching `apps/`. (iv) It is a regression this diff introduces, so the record's "S2 closed" is wrong in a way a reader would rely on. The code reviewer rates the same defect HIGH independently, by a different method. The reviewer will defend HIGH, and would move to MEDIUM only if the content rules were made advisory while the path rules stayed blocking.
+
+### S16 — `git commit <path>` still scans an empty index, so a credential in a modified tracked file reaches history unseen
+
+| | |
+| --- | --- |
+| **Where** | `.claude/hooks/guard-secrets.mjs:316-320` (`stages`), `:247-251` (`scanIndex`) |
 | **Class** | secret exposure |
 | **Severity** | HIGH |
+| **Verification** | **measured.** Probe 2, throwaway repo: `git commit conf.yaml -m "chore: conf"` → **exit 0, unscanned, commit proceeds**; `git add -A && git commit -m "chore: conf"` on the same file → exit 2, blocked |
 
-**Who the attacker is.** No remote attacker. This is the last line of defence failing in the normal flow — an agent or developer committing a file that contains a real credential.
+**Who the attacker is.** The same actor as S1: an agent or developer committing a file into which a real value was pasted while debugging.
 
-**What they send.** A single Bash call: `git add -A && git commit -m "chore: wip"` with the credential in a file that is not yet staged. `PreToolUse` fires *before* the shell runs, so `git add` has not happened. The command matches `/\bgit\s+commit\b/`, so the hook runs; `stagesEverything` is false (`-A` contains no lowercase `a`, and the regex has no `i` flag), so the hook scans `git diff --cached`, which at that instant does not contain the file.
+**What they send.** One Bash call: `git commit apps/api/config/services.php -m "chore(api): configure mail [SCP-1]"`, with a mail password added to that tracked file and nothing staged. `git commit <pathspec>` commits the **working-tree** content of those paths, bypassing the index. The `stages` test looks for `add`/`stage`/`--all`/`-a` and finds none, so it takes the `scanIndex()` branch and reads an empty `git diff --cached`. Same for `git commit --only <path>` and `git commit -i <path>`.
 
-**What they get.** Verified in a throwaway repo: with `gh_token=ghp_0123…AB` in an unstaged file, the hook exits **0** and the commit proceeds. The same token staged in a previous call gives exit **2** and the block message. Whether the guard works depends on whether staging and committing were split across two Bash calls. A credential committed this way stays in every clone and fork permanently.
+**What they get.** Exit 0, the commit proceeds, the credential is in history and in every clone and fork. The same outcome as S1 through a sibling idiom; the round fixed the `git add -A &&` spelling and left this one. The `quality-gates.md` "does not catch" list does not name it, so a reader is told the staging case is handled and this case does not exist.
 
-**What to change.** Two parts. (1) When the command contains a staging step (`git add`, `git stage`, `-A`, `-a`, `--all`), scan the working tree, not the index: `git diff HEAD` plus the contents of `git ls-files --others --exclude-standard`. (2) The durable fix is a real `pre-commit` git hook that runs at the moment the index is final — that also covers `git commit` typed in a human terminal, run from a script, or issued by any tool other than `Bash`, none of which this hook can ever see. Keep the Claude hook as the second layer, not the only one.
+**What to change.** Treat a `git commit` with a non-option argument after the subcommand as a staging command and take the `scanWorkingTree()` branch; or default to `scanWorkingTree()` and use `scanIndex()` only for a bare `git commit` with no pathspec — the working-tree scan is a superset except when staged content deliberately differs from the working tree, which is rare and errs safe. The durable fix remains the real `pre-commit` hook.
 
-### S2 — the content scan matches almost none of the credential names this repository actually uses, and the placeholder waiver is a substring test
-
-| | |
-| --- | --- |
-| **Where** | `.claude/hooks/guard-secrets.mjs:73-103` (`ASSIGNMENT`, `PLACEHOLDERS`) |
-| **Class** | secret exposure |
-| **Severity** | HIGH |
-
-**Who the attacker is.** Again the control failing, not an intruder: an agent pasting real values from `.env` into a file that is not gitignored while debugging — `infra/compose.prod.yaml`, a doc under `docs/`, a CI workflow, a `config/*.php` fallback.
-
-**What they send.** Any assignment whose key is snake_case-prefixed. `ASSIGNMENT` requires `\b` immediately before `password|secret|api_key|token|…`, and `_` is a word character, so there is no boundary in `FOO_PASSWORD`. Verified with `scanDiff` — every one of these is **ALLOWED**:
-
-```
-MAIL_PASSWORD=Hx9kLm2Qp7vRtZw4          REDIS_PASSWORD=Hx9kLm2Qp7vRtZw4
-POSTGRES_PASSWORD=Hx9kLm2Qp7vRtZw4      MINIO_ROOT_PASSWORD=Hx9kLm2Qp7vRtZw4
-GRAFANA_ADMIN_PASSWORD=Hx9kLm2Qp7vRtZw4 MIGRATION_DB_PASSWORD=Hx9kLm2Qp7vRtZw4
-APP_SECRET=… JWT_SECRET=… VIETQR_API_KEY=… BANK_CLIENT_SECRET=…
-MAIL_PASSWORD: Hx9kLm2Qp7vRtZw4         (YAML form, same reason)
-```
-
-`POSTGRES_PASSWORD`, `MIGRATION_DB_PASSWORD`, `REDIS_PASSWORD`, `GRAFANA_ADMIN_PASSWORD`, `AWS_SECRET_ACCESS_KEY` and `APP_KEY` are the real variable names in this project's `.env.example`. The scan catches exactly one of the project's own password variables — `DB_PASSWORD`, present as a hand-added special case.
-
-The `PLACEHOLDERS` half compounds it. `looksLikePlaceholder` passes when the value merely *contains* a marker, and the markers include `secret`, `password`, `test`, `none`, `null`, `change`. Verified allowed: `DB_PASSWORD=Secret!Prod#2026aQ`, `DB_PASSWORD=Password#Prod2026!`, `DB_PASSWORD=Hx9kLm2Qp7vtestRtZw4`, `DB_PASSWORD=Hx9kLm2QnoneRtZw4`, `DB_PASSWORD=exchange-2026-Ks93ja`, `'client_secret' => 'gKt82mSecretQ91x'`. A credential is waved through for containing the word for what it is. And no `CREDENTIAL_SHAPES` rule covers what this stack leaks in practice: `APP_KEY=base64:…`, `postgres://user:pass@host`, a 40-char `AWS_SECRET_ACCESS_KEY`, a Sentry DSN, or a generic high-entropy blob.
-
-**What they get.** The production database password, the object-store keys or the app signing key published in git history, with the guard reporting nothing. `.gitignore` catches files literally named `.env*`; it does not catch a credential pasted into a tracked YAML, PHP or Markdown file, which is the realistic path.
-
-**What to change.** Match the key as a suffix (`[A-Za-z0-9_-]*(password|passwd|secret|token|api[_-]?key|key)`), and bound the false-positive risk on the value side instead: require the placeholder marker to match the whole value or anchor at its start, drop `test`/`secret`/`password`/`none`/`null` from the list, and whitelist this repository's actual placeholders by exact value (the `phpunit.xml` APP_KEY, `scp_test`, `change_me_in_local`, `${…}`, `env(…)`). Add shapes for `base64:` keys, URL userinfo and 40-char AWS secrets. Extend `FORBIDDEN_PATHS` to any `.env.*` other than `.env.example` (`.env.backup`, `.env.testing`, `.env.docker`, `.env.ci` all pass today). Add every bypass above to `selftest.mjs` as a must-block case.
-
-### S3 — nothing stops a direct push to `main`; the guard blocks the two merge routes and leaves the simplest one open
+### S17 — four routes still reach `main` with no pull request, including the fully-qualified refspec
 
 | | |
 | --- | --- |
-| **Where** | `.claude/hooks/guard-protected-ops.mjs:57-176` (`RULES`) |
+| **Where** | `.claude/hooks/guard-protected-ops.mjs:147-172` (`push-to-protected`), `:273-278` (`auto-merge-pr-api`) |
 | **Class** | broken change control |
 | **Severity** | HIGH |
+| **Verification** | **measured.** Probe 3, `evaluate()` driven directly: 8 of 10 ALLOWED. Corrected from the draft — the `+refs/heads/…` shape **is** caught, by `force-refspec` |
 
-**Who the attacker is.** An agent with `Bash` on a task branch — including one asked to "get this live", or one acting on instructions it read in a file.
+**Who the attacker is.** An agent with `Bash` on a task branch — `git-release` and `qa-engineer` both hold it, as does the calling session — including one asked to "get this live", or one acting on text it read in a file.
 
-**What they send.** `git push origin HEAD:main`. Verified with `evaluate()`: **ALLOWED**, as are `git push origin main`, `git push origin feature/x:main` and a bare `git push` while HEAD is on `main`. The ruleset blocks `gh pr merge`, `gh api …/pulls/N/merge` and `git checkout main && git merge …` — every indirect route to main except the one-liner that goes straight there.
+**What they send.** Probe 3's measured result:
 
-**What they get.** Unreviewed code on `main` with no pull request, so `task-traceability.yml` (a `pull_request` trigger) never runs and no reviewer sees the diff — the outcome `merge-into-protected` and `auto-merge-pr` exist to prevent. This is not the recorded AC10 item: branch protection would stop it server-side, but the omission is in the local ruleset this diff owns, and the enforcement table in `docs/workflow/quality-gates.md` reads as if the merge path were covered.
+```
+ALLOWED            git push origin refs/heads/main
+ALLOWED            git push origin HEAD:refs/heads/main
+force-refspec      git push origin +refs/heads/f:refs/heads/main   <- blocked, incidentally
+ALLOWED            gh api -X POST /repos/o/r/merges -f base=main -f head=f
+ALLOWED            gh api -X PATCH /repos/o/r/git/refs/heads/main -f sha=abc
+push-to-protected  git push origin main                            <- control, blocked
+```
 
-**What to change.** Add a rule for `git push` whose refspec target is `main`/`master`/`production`/`release`, or any `git push` with no explicit refspec while `currentBranch()` is protected. Note that `currentBranch()` returns `''` on failure and `'HEAD'` when detached, and `merge-into-protected` then falls through — verified `git merge feature/x` is ALLOWED with `branch=''` or `branch='HEAD'`. Treat an unknown branch as protected rather than as safe.
+The first two defeat `push-to-protected` because all three of its sub-tests require the literal word `main` either immediately after a colon or as a whitespace-delimited token two positions after `push`; `refs/heads/` sits in between, and `named` is then true, so the HEAD-is-protected fallback does not fire either. The `+` form is blocked **by the wrong rule, for the wrong reason** — `force-refspec` matches the leading `+`, not the destination — which is the finding restated: nothing in the ruleset judges where a push lands once the ref is spelled in full. The two `gh api` calls are not force pushes and are not `/pulls/N/merge`, the only API shape `auto-merge-pr-api` knows; both move the trunk server-side. A GraphQL merge mutation is also uncovered — not probed, so read-only reasoning.
 
-### S4 — "review agents cannot edit files" is false: `Bash` writes, and the CI gate only checks that the evidence file exists
+**What they get.** Unreviewed code on `main` with no pull request, so `task-traceability.yml` never runs and no reviewer sees the diff. There is no server-side backstop: `main` has no branch protection (AC10, open).
 
-| | |
-| --- | --- |
-| **Where** | `.claude/agents/{code-reviewer,security-reviewer,performance-reviewer,qa-engineer,git-release}.md` frontmatter; `.claude/settings.json`; `infra/scripts/check-task-traceability.mjs:94-156` |
-| **Class** | separation of duties / integrity of the evidence trail |
-| **Severity** | HIGH |
+**What to change.** Judge the *resolved destination ref*, not the spelling: normalise `refs/heads/X` → `X`, then compare the right-hand side of any refspec and the last positional argument against `PROTECTED_BRANCHES`. Add the repository-merge and ref-update API shapes to `auto-merge-pr-api`, and a rule for a GraphQL merge mutation. Add all five commands to `selftest.mjs` — and assert the rule id, so a catch by `force-refspec` cannot be mistaken for `push-to-protected` working.
 
-**Who the attacker is.** An agent optimising for a green result, or an agent acting on injected text in material it is told to read — a task record, a diff, a vendored file, a PR body. Reviewers read exactly the attacker-reachable surface.
-
-**What they send.** Any Bash call that writes: `printf '…' > file`, `sed -i`, `tee`, `node -e "require('fs').writeFileSync(…)"`, `git apply`, `git checkout -- file`. All five agents are granted `tools: Read, Glob, Grep, Bash`; `.claude/settings.json` has no `permissions` block; `guard-protected-ops` has no rule for writing anything except `.env`, and misses the path-qualified form of even that (S7).
-
-**What they get.** The `qa-engineer` can edit the assertion it is judging, which its own description says is impossible. A reviewer can write `.claude/reviews/<ID>/code-review.md` and `security-review.md` saying SAFE TO SHIP, and set `.claude/tasks/<ID>.md` to `Status: READY_FOR_PR` with `CRITICAL | 0` and `HIGH | 0`. That is precisely and only what `check-task-traceability.mjs` verifies: the files exist, the status parses, the counts read `0`. Both the separation of duties and the merge gate collapse to self-attestation by the same process that did the work.
-
-**What the claim is worth, and what would make it true.** As written it is worth nothing mechanically — it is a statement of intent that holds while the agent cooperates. It can only be made true by the tool grant or the sandbox, not by prose. (1) Drop `Bash` from `code-reviewer`, `security-reviewer` and `performance-reviewer`; materialise the diff to a file in the calling session and let them `Read` it. (2) `qa-engineer` genuinely must run tests — run it against a worktree mounted read-only with a writable temp dir, which is the only form that actually holds; a `permissions.deny` list of write-shaped commands is not equivalent, because a shell has unbounded spellings. (3) Make the evidence non-self-attested: have CI run the suite and derive pass/fail itself rather than checking that a report file exists, and require the review artefacts to be added by a different actor (CODEOWNERS on `.claude/reviews/**`, or a signed commit). (4) If the `PreToolUse` payload identifies the calling subagent, a hook could enforce this — the agent did not verify that it does, so do not rely on it. Until one of these lands, delete "Read-only", "cannot edit files" and "cannot approve its own work" from the five descriptions: they are the part a human would trust.
-
-### S5 — `git -C` or `git -c` before `commit` skips the secret scan entirely
+### S18 — the segment split is not the pure narrowing the comment claims
 
 | | |
 | --- | --- |
-| **Where** | `.claude/hooks/guard-secrets.mjs:182` |
+| **Where** | `guard-protected-ops.mjs:63-79` (the `SEGMENTS` comment), `:287-311` |
+| **Class** | enforcement bypass |
+| **Severity** | MEDIUM |
+| **Verification** | **measured.** Probe 3: a commit whose message contains a pipe, one whose message contains a semicolon, and `git -c user.name=…` before `commit` on `main` — all three ALLOWED |
+
+The comment claims splitting "can only ever make each piece smaller and the match narrower — it cannot let a dangerous command through … because that command is still wholly inside one piece." That fails when the separator is inside the dangerous command's own quoted argument: the split puts `git commit` in one piece and `--no-verify` in another, and `skip-hooks` needs both. Passing `-c user.name=…` with an embedded separator splits `git` from `commit`, which takes out `commit-on-protected` as well.
+
+The narrowing itself is correct and worth keeping for the cases it was built for; what is wrong is the reasoning for why it is *safe*, and that reasoning is written into the file as a justification for not handling quotes.
+
+**What to change.** Do not split inside single or double quotes — a dozen lines of quote-state scanning, and the rest of the design stays. Failing that, replace the comment's safety claim with the counter-example so the next person does not rely on it, and keep a whole-line second pass for the verb-plus-flag rules.
+
+### S19 — the S11 fixture exemption is wider than "two exact paths"
+
+| | |
+| --- | --- |
+| **Where** | `guard-secrets.mjs:185-187` (`FIXTURE_FILES`, `isFixtureFile`), `:204-211` |
+| **Class** | enforcement bypass |
+| **Severity** | MEDIUM |
+| **Verification** | **measured.** Probe 4: a header with a trailing space → `[]`; a quoted `+++` header after `selftest.mjs` → `[]`; control → 1 finding |
+
+**Who the attacker is.** Someone deliberately hiding a credential — already priced for in the two named files. The finding is that the exemption reaches files that were never named, which the record claims is impossible.
+
+Two shapes, both confirmed. (1) A file named `selftest.mjs ` with one trailing space: `isFixtureFile` applies `.trim()` before the set lookup, so the exemption matches a different file on disk. (2) Any path git chooses to quote — a path with non-ASCII characters is rendered quoted, which fails the `+++ b/` prefix test, so `currentFile` is **not updated** and the following added lines are judged under the previous file's identity. Diff order is by path, so a new file sorting after `selftest.mjs` inherits its exemption. In `scanWorkingTree()` the same quoting makes `statSync` throw and `catch { continue }` drops the file **silently** — a credential in any Vietnamese-named file is never read at all. The git-quoting half is read, not measured: probe 4 fed the parser a quoted header directly rather than making git produce one.
+
+**What to change.** Compare the untrimmed path, normalise it, and reset `currentFile` to a sentinel on any `+++ ` line that does not parse, so an unparsed header *disables* the exemption rather than extending it. Use `git ls-files -z` and split on NUL. And narrow the set to `selftest.mjs` alone: `guard-secrets.mjs` is exempt only because the 5-character floor made its own doc comment trip the rule — elide the values in that comment and drop the file.
+
+### S20 — the new working-tree scan is unbounded, follows symlinks and reads non-text, and every failure mode is open
+
+| | |
+| --- | --- |
+| **Where** | `guard-secrets.mjs:261-286`, `.claude/settings.json:22` (`timeout: 30`) |
+| **Class** | enforcement bypass |
+| **Severity** | MEDIUM |
+| **Verification** | code path by reading. **Probe 5 was skipped — Windows, no `mkfifo`** — so the harness's behaviour on a hook that hangs, times out or crashes is **unmeasured** |
+
+A commit that stages, with one of: (a) a few hundred untracked files just under the 2MB per-file cap — there is no aggregate cap, and the accumulating string throws `RangeError: Invalid string length` outside any `try`; (b) an untracked symlink or FIFO whose reported size is 0 but which never reaches EOF, so `readFileSync` hangs or exhausts memory; (c) any file over 2MB, skipped wholly and silently — a `.sql` seed dump carrying a connection URL is exactly that shape.
+
+The hook then crashes with a non-2 exit, or is cancelled at 30 seconds. On the documented hook contract neither blocks the tool call, so the commit proceeds with the scan never having reported — but that last step is the unmeasured one. `readFileSync` also follows symlinks with no `lstat` check, so the hook reads files outside the repository when a link points there.
+
+**What to change.** Cap the total read and stop with an explicit "could not scan everything" failure rather than silence; `lstat` and skip anything that is not a regular file; skip files whose first bytes contain a NUL. And settle the question the recorded S6 also asks: on any error, exit 2 rather than 0.
+
+### S21 — credential forms the scan still cannot see, including the ones the first report asked for
+
+| | |
+| --- | --- |
+| **Where** | `guard-secrets.mjs:37-45`, `:48-59`, `:91` |
 | **Class** | secret exposure |
 | **Severity** | MEDIUM |
+| **Verification** | by reading |
 
-**Who the attacker is.** An agent using an ordinary git idiom; also anyone deliberately bypassing.
+- **URL userinfo.** A `DATABASE_URL`, `REDIS_URL`, `MAIL_URL` or Sentry DSN carrying a password in the authority. No key word matches and no `CREDENTIAL_SHAPES` rule covers it. Laravel reads `DATABASE_URL` and `REDIS_URL` natively, and the first report's S2 remedy asked for this shape explicitly; it was not added while S2 was marked closed.
+- **A value containing a space.** The value class excludes whitespace, so a passphrase yields a short candidate and then fails the floor.
+- **A value on the next line** — YAML block scalars, a PHP array split across lines. The scan is line-by-line.
+- **An ignored file force-added.** `git add -f apps/api/.env && git commit` leaves the file in neither `git diff HEAD --name-only` nor `git ls-files --others --exclude-standard`, so `FORBIDDEN_PATHS` — the strongest rule in the file — never sees it. `guard-protected-ops` has no rule for `git add -f` either.
+- **Non-text containers.** An archive, a SQLite file or an office document read as UTF-8 yields replacement characters; a credential inside is invisible. Inherent, but not stated anywhere.
+- **`.env.testing`, `.env.ci`, `.env.docker`, `.env.backup`** — `FORBIDDEN_PATHS` covers only four suffixes. Mitigated by `.gitignore`, so this matters only together with `-f`.
 
-**What they send.** `git -C . commit -m "chore: wip"` or `git -c user.name=x commit -m wip`. The filter is `/\bgit\s+commit\b/`, which requires `commit` to follow `git` immediately.
+**What to change.** Add a URL-userinfo shape to `CREDENTIAL_SHAPES`; allow a quoted value to contain spaces; extend `FORBIDDEN_PATHS` to any `.env.*` other than `.env.example`; and for the `-f` case build the `names` list without `--exclude-standard` (path rules only), or add `git add -f` to `guard-protected-ops`. Anything not fixed belongs in the `quality-gates.md` "does not catch" list.
 
-**What they get.** Verified: with the `ghp_…` token **staged**, both forms exit **0** where plain `git commit` exits 2. `guard-protected-ops` already learned this lesson for one case (`bypass-hooks-path` covers `git -c core.hooksPath=`); the secrets guard did not.
-
-**What to change.** `/\bgit\b[^\n]*\bcommit\b/`, and add both spellings to `selftest.mjs`. The `pre-commit` hook in S1 removes the whole class, because it does not depend on recognising the command.
-
-### S6 — every error path in both guards fails open, including conditions a normal commit can reach
+### S22 — the S4 fix moved the write channel rather than removing it
 
 | | |
 | --- | --- |
-| **Where** | `.claude/hooks/guard-secrets.mjs:151-162,173-179`; `.claude/hooks/guard-protected-ops.mjs:204-211`; `.claude/settings.json:10,20` |
-| **Class** | enforcement bypass |
+| **Where** | `.claude/skills/review/SKILL.md:42-55`; `docs/workflow/quality-gates.md:25`; the three reviewer definitions |
+| **Class** | separation of duties / indirect prompt injection |
 | **Severity** | MEDIUM |
+| **Verification** | by reading. This review round is itself an instance of the mechanism: the reviewer named six commands and six were run |
 
-**Who the attacker is.** Nobody needs to attack; the conditions occur on their own.
+**Who the attacker is.** Whoever can get text in front of a reviewer. The reviewers are pointed at `diff.patch`, the task record and `docs/`; on a fork pull request the diff is attacker-authored, and a vendored file or a crafted task record works from inside.
 
-**What they send.** A commit whose staged diff exceeds `maxBuffer: 32 * 1024 * 1024` — a vendored asset, a lockfile regeneration, a large fixture. `git()` catches the `ENOBUFS` throw and returns `''`, so the content scan runs over an empty string and reports nothing (`names` is a separate, small call, so only the path rules survive). Same shape for a `git` failure, unparseable stdin (verified: empty stdin → exit 0), and `CLAUDE_PROJECT_DIR` being unset, which turns the registered command into `node "/.claude/hooks/…"` — a non-2 exit, which does not block.
+**What they send.** Text in review material that causes the agent's report to contain a command request — the skill's own protocol — such as a `node -e` that writes a file, or a `curl` to an external host. Step 2 says to run what the agent asks for and send the output back. There is no instruction to vet the command, no allowlist, and the session asked to run it holds unrestricted `Bash` and is, by the skill's own admission, usually the session that wrote the code.
 
-**What they get.** A credential committed alongside a large diff, with the guard silently satisfied.
+**What they get.** Arbitrary command execution by proxy — the capability S4 was closed by removing. The documentation then states the stronger claim: `quality-gates.md:25` reads "structural: no write channel exists". No *direct* channel exists, and that is a real improvement — a reviewer can no longer write its own verdict unilaterally. But "no write channel exists" is the same category of overstatement the last round's verdict refused to merge. Two smaller items in the same shape: the three reviewers can `Read` any absolute path, including the real `.env`, and their returned text is transcribed verbatim into a file that gets committed — so the report is an uninspected channel in both directions.
 
-**What to change.** Distinguish "clean" from "could not tell", exactly as `check-task-traceability.mjs:160-183` already does for `origin/<base>`: on any error, exit 2 saying the scan could not run. Raise or remove `maxBuffer` by streaming, and assert `CLAUDE_PROJECT_DIR` is set. A hook that times out (`timeout: 30`) is cancelled rather than converted into exit 2 — the agent could not verify that in this harness; check it against your Claude Code version.
+**What to change.** In the skill, make the requested command untrusted input: run only from a named allowlist, refuse anything containing a redirect, `tee`, `sed -i`, a git write, `node -e`, `curl` or `rm`, and say who ran what — the skill already asks for the last part, and this report does it. Change the `quality-gates.md` cell to "no direct write channel; probes are proxied by the calling session — see S22".
 
-### S7 — irreversible operations outside the ruleset, judged against the accident bar it claims
-
-| | |
-| --- | --- |
-| **Where** | `.claude/hooks/guard-protected-ops.mjs:57-176` |
-| **Class** | destructive-operation control |
-| **Severity** | MEDIUM |
-
-**Who the attacker is.** An agent cleaning up, resetting a local environment or "starting fresh" — the accident the file says it exists to price. Not judged against a determined bypass; `git pu""sh --force` getting through is accepted and listed under Not defects.
-
-**What they send.** Verified **ALLOWED** by `evaluate()`:
-
-- `git reset --hard HEAD~3`, `git reset --hard`, `git clean -fdx`, `git checkout -- .`, `git stash clear`, `git branch -D` — irreversible loss of uncommitted and unpushed work. `git clean -fdx` deletes the untracked real `.env`, the file three other rules exist to protect.
-- `rm -rf <path>` in any form. Not covered at all.
-- `docker compose exec postgres psql -U scp -c "DROP TABLE orders CASCADE"`, `dropdb scp`, `docker compose exec redis redis-cli FLUSHALL`, `artisan tinker --execute="DB::statement('DROP TABLE …')"` — the artisan verbs are blocked, the direct routes to the same outcome are not.
-- `echo "APP_KEY=…" >> apps/api/.env` and `cp apps/api/.env.example apps/api/.env` — both `.env` rules require `.env` to sit immediately after the redirect or argument separator, so any path-qualified form passes. `apps/api/.env.example` exists, so `apps/api/.env` is a file an agent would plausibly write. (`cd apps/api && cp .env.example .env` *is* blocked, which shows the rule is position-dependent rather than target-dependent.)
-- `php artisan migrate --force --database=production` — the production test looks only at `APP_ENV=`, `--env=` and `compose.prod`.
-- Anything behind an indirection: `pnpm run <script>`, `bash infra/scripts/<x>.sh`, `make`. The guard sees the wrapper, not what it runs.
-
-**What they get.** Local data loss, a dropped development database, or a clobbered credential file — none of it recoverable, all of it squarely in the accident class the ruleset advertises.
-
-**What to change.** Add rules for `rm -rf`, `git clean -f`, `git reset --hard` without a remote, `git checkout -- .`, the `psql`/`dropdb`/`redis-cli` destructive verbs and `--database=production`. Make the `.env` rules match the *target path* (`(^|[\s'"=/])\.env(\s|$|;|'|")` anywhere in the command, any directory) instead of the position after the operator. Nothing can be done about wrapper scripts from a command-string matcher — say so in the header, since it is the largest hole in the accident bar and the one a reader will not guess.
-
-### S8 — nothing mechanically restricts the agents that can edit the enforcement itself
+### S23 — the gate's new evidence checks are satisfied by copying the shipped template
 
 | | |
 | --- | --- |
-| **Where** | `.claude/agents/laravel-developer.md`, `.claude/agents/nextjs-developer.md` (no `tools:` key); `.claude/agents/{task-manager,software-architect}.md` (`Write, Edit`); `.claude/settings.json` (no `permissions`) |
-| **Class** | enforcement bypass |
-| **Severity** | MEDIUM |
-
-**Who the attacker is.** Any agent with `Edit`, including the two developer agents, which declare no `tools:` key at all and therefore inherit the full default tool set — the inverse of the care taken over the reviewers' (ineffective) lists.
-
-**What they send.** An edit to `.claude/hooks/guard-secrets.mjs`, `.claude/settings.json`, `.github/workflows/task-traceability.yml` or `infra/scripts/check-task-traceability.mjs`. The hook scripts are ordinary repository files read from disk on every invocation, so weakening one takes effect on the next Bash call; `guard-protected-ops` has no rule covering writes to them, and the `Edit` tool never reaches the Bash guard anyway. `task-manager`'s "only `.claude/tasks/**`" and `software-architect`'s "never `apps/`, `packages/`, `infra/`" are prose, not permissions.
-
-**What they get.** The guards silently off, with only human diff review to notice.
-
-**What to change.** Give the developer agents explicit `tools:` lists. Add a committed `permissions.deny` for `Edit(.claude/hooks/**)`, `Edit(.claude/settings.json)`, `Edit(.github/workflows/**)` and `Edit(infra/scripts/check-task-traceability.mjs)`, and a `CODEOWNERS` entry so GitHub requires a named human to approve changes to those paths.
-
-### S9 — the traceability gate is modifiable by the pull request it gates
-
-| | |
-| --- | --- |
-| **Where** | `.github/workflows/task-traceability.yml:17-51`; `infra/scripts/check-task-traceability.mjs` |
+| **Where** | `check-task-traceability.mjs:183-196`, `:202-216`; `.claude/reviews/_templates/*.md` |
 | **Class** | CI gate bypass |
-| **Severity** | MEDIUM |
+| **Severity** | LOW |
+| **Verification** | **measured.** Probe 6: the unmodified template is **2377 characters** and the Verdict test returns **true** |
 
-**Who the attacker is.** Anyone who can push the branch, or an agent working on it.
+Copying the template into a task's review directory clears the 400-character floor and satisfies the Verdict test with no review performed. The acceptance-criteria half is satisfied by the AC id appearing *anywhere* in `Test Results`, including inside a sentence saying it was not checked. So the checks raise the word count of a forged verdict, not its cost. They do have real value against a different failure — the half-finished record where someone forgot to write the report — and `_TEMPLATE.md` shipping `—` instead of `0` is a genuine improvement, because that one cannot be satisfied by inaction.
 
-**What they send.** A commit in the same branch that changes `process.exit(1)` to `process.exit(0)` in `check-task-traceability.mjs`, or deletes `.github/workflows/task-traceability.yml`, or weakens `SECURITY_TRIGGERS`. `pull_request` runs the workflow and the script from the head ref.
+**What to change.** Give the templates a sentinel the gate rejects, exactly as the severity table now does: ship a `NOT REVIEWED` verdict and fail on it. Require `Test Results` to carry the AC id on a line that also carries a verdict word. The structural fix remains S9's.
 
-**What they get.** A green "Task traceability" check that proves nothing. The required evidence is likewise authored in the same PR (S4). This is adjacent to the recorded AC10 gap but not the same item: it would survive branch protection unless the check is marked *required* and ownership of these paths is pinned.
-
-**What to change.** `CODEOWNERS` for `.github/**`, `infra/scripts/**` and `.claude/**`; mark the check required with "require branches to be up to date"; consider running the gate from a `workflow_run` or reusable workflow pinned to `main@<sha>` so the code that judges the PR is not supplied by the PR.
-
-### S10 — the security-review trigger list misses store isolation, authorization and migrations
+### S24 — an unknown or detached HEAD is still treated as unprotected
 
 | | |
 | --- | --- |
-| **Where** | `infra/scripts/check-task-traceability.mjs:169-177` |
-| **Class** | gate coverage |
-| **Severity** | MEDIUM |
+| **Where** | `guard-protected-ops.mjs:82-92`, `:136-183`, `:306-307` |
+| **Class** | enforcement bypass |
+| **Severity** | LOW |
+| **Verification** | **measured.** Probe 3: `git merge feature/x` with `branch=''` → ALLOWED |
 
-**Who the attacker is.** Not an attacker — a change that reaches a PR with no security review required, and therefore none done.
+`currentBranch()` returns `''` when `git` fails and `HEAD` when detached, and neither is in `PROTECTED_BRANCHES`, so `commit-on-protected`, the no-refspec arm of `push-to-protected` and `merge-into-protected` all stand down. The first report recommended treating an unknown branch as protected; the round added two new rules that inherit the gap instead. Related: the `moved` regex requires `git checkout`/`git switch` adjacency, so a `-C`-prefixed checkout does not move `standingOn`.
 
-**What they send.** A PR that touches store-context resolution middleware, a `Policy`/`Gate`, an admin list endpoint under `Modules/Store` or `Modules/Order`, a guest-order token, an idempotency key store, `routes/api.php`, a migration, or a GitHub Actions workflow. None of those paths match `Modules/Payment/`, `Modules/Identity/`, `store_bank_account`, `/payment/i`, `/auth/i`, `.env.example` or `infra/(nginx|compose)`.
-
-**What they get.** The gate passes without `security-review.md`, for the two risk classes `CLAUDE.md` §8 ranks beside payments: store isolation and broken object authorization.
-
-**What to change.** Add `Modules/(Store|Order|Cart|Fulfillment)/`, `Policies?/`, `Middleware/`, `routes/`, `database/migrations/`, and the words `policy`, `gate`, `token`, `guest`, `idempotenc`, `store_id`, plus `.github/workflows/`. Keep the trigger list and `.claude/skills/review/SKILL.md`'s table in step; they disagree today.
-
-### S11 — `guard-secrets` refuses to commit its own test file, and `.npmrc`, which is tracked
+### S25 — the commit filter now runs a full working-tree scan on commands that merely mention the word
 
 | | |
 | --- | --- |
-| **Where** | `.claude/hooks/guard-secrets.mjs:36-58`; `.claude/hooks/selftest.mjs:150-179`; tracked `.npmrc` |
+| **Where** | `guard-secrets.mjs:309,316-320` |
 | **Class** | control degradation |
-| **Severity** | MEDIUM |
-
-**Who the attacker is.** None. This is the failure mode the file's own header names: "a developer who learns to work around the guard … and the guard has lost all of its value."
-
-**What they send.** Any commit touching `.claude/hooks/selftest.mjs`. Running `scanDiff` over this diff with the project's own scanner returns five findings, all in that one file:
-
-```
-.claude/hooks/selftest.mjs  -  looks like a private key block
-.claude/hooks/selftest.mjs  -  looks like a GitHub token
-.claude/hooks/selftest.mjs  -  looks like a AWS access key id
-.claude/hooks/selftest.mjs  -  DB_PASSWORD is assigned a value that does not look like a placeholder
-.claude/hooks/selftest.mjs  -  client_secret is assigned a value that does not look like a placeholder
-```
-
-All five are fixtures (GitHub's and AWS's documented example values, plus invented passwords) — no live credential is in this diff. Separately, `FORBIDDEN_PATHS` flags any `.npmrc`, and `.npmrc` is tracked in this repository (`git ls-files` confirms) and holds no credential.
-
-**What they get.** The file that proves the guard works cannot be committed through the guard, and the block message instructs the developer to widen the pattern — the suggested remedy degrades the control. The same applies to every future `.npmrc` change.
-
-**What to change.** Exempt `.claude/hooks/selftest.mjs` by path (keeping the fixtures where they are deliberately inert), or move the fixtures into an exempt data file. Narrow the `.npmrc` rule to added lines containing `_auth`, `_authToken` or `_password` rather than the filename.
-
-### S12 — the untrusted pull-request title is echoed into the Actions log, where `::` is a command prefix
-
-| | |
-| --- | --- |
-| **Where** | `infra/scripts/check-task-traceability.mjs:67,203-205` |
-| **Class** | log injection — **suspicion, precondition unverified** |
 | **Severity** | LOW |
+| **Verification** | by reading |
 
-**Who the attacker is.** Anyone who can open or edit a pull request, including from a fork (`types: [edited]` re-runs the check).
-
-**What they send.** A title beginning with a newline followed by `::error::` / `::add-mask::` / `::stop-commands::`. Both places the title is printed prefix it with text (`pr title …`, `  [pr title] "…"`), so a workflow command can only be parsed if the title can carry a line break.
-
-**What they get.** At most forged or suppressed annotations. The exit code is decided by the script's own logic, the job has `permissions: contents: read`, and no secret is present, so there is nothing to exfiltrate or mask that matters. The agent did **not** verify that GitHub accepts a newline in a pull-request title; if it does not, this is unreachable. Labelled a suspicion for that reason.
-
-**What to change.** `console.log('pr title %s', prTitle.replace(/[\r\n]+/g, ' '))`, or stop echoing it.
-
-### S13 — `actions/checkout` persists the token while the job then executes code supplied by the pull request
-
-| | |
-| --- | --- |
-| **Where** | `.github/workflows/task-traceability.yml:35-39,51` |
-| **Class** | credential exposure |
-| **Severity** | LOW |
-
-**Who the attacker is.** The author of a fork pull request.
-
-**What they send.** A modified `infra/scripts/check-task-traceability.mjs` that reads `.git/config` and posts the `AUTHORIZATION: basic …` header value outward. `actions/checkout@v4` leaves it there by default, and the last step runs the PR's own script.
-
-**What they get.** A `GITHUB_TOKEN` that, for a fork `pull_request` event with `permissions: contents: read`, is read-only on a repository the forker could already read. Low value — but there is no reason to hand it over.
-
-**What to change.** `persist-credentials: false` on the checkout step; the job needs no token. Also pin both actions by commit SHA. The workflow adds no `pnpm install`, which correctly avoids running a fork's lifecycle scripts.
-
-### S14 — a commit subject is appended into the file the merge gate parses, escaping only `|`
-
-| | |
-| --- | --- |
-| **Where** | `.claude/hooks/record-task-activity.mjs:91-119` |
-| **Class** | evidence-trail integrity |
-| **Severity** | LOW |
-
-**Who the attacker is.** Whoever writes the commit subject.
-
-**What they send.** A subject such as `feat: x | **Status** | READY_FOR_PR | [SCP-001]`. Only `|` is escaped (`subject.replace(/\|/g, '\\|')`), and `%s` cannot carry a newline, so a forged row lands as a single line below the activity marker.
-
-**What they get.** Nothing today: both parsers in `check-task-traceability.mjs` use `RegExp.exec`, which returns the first match, and the hook appends at the end of the file, after the real `Status` and severity rows. That ordering is the only thing preventing a forged `CRITICAL | 0` row from being read — which is incidental, not designed.
-
-**What to change.** Keep the escaping, and make the dependency explicit: parse the gate's fields only from above the activity marker, and say so in a comment in both files.
+Widening the filter for S5 also matches `git log --grep=commit` and `git add -A && echo "ready to commit"`. With `add` present, the latter takes the `scanWorkingTree()` branch: every untracked file read, inside a 30-second budget, for a command that commits nothing — and given S15's 33 findings, the unrelated command is then blocked with a message about credentials. Require the word to be a subcommand, keeping the `-C`/`-c` coverage S5 bought.
 
 ## Payment integrity
 
-`CLAUDE.md` §6. N/A throughout: the diff contains no application code, no route, no migration and no payment logic, so no path in it can reach a payment record.
+`CLAUDE.md` §6. N/A throughout: the 43 files are workflow definitions, hooks, docs, the CI gate and two `package.json` script entries. There is no route, no controller, no migration and no payment code in the diff.
 
 | Check | Status |
 | --- | --- |
@@ -296,7 +253,7 @@ All five are fixtures (GitHub's and AWS's documented example values, plus invent
 | Bank-account changes audited with actor and previous value | N/A |
 | No screenshot, upload or customer click wired to a status change | N/A |
 
-One process-level note that does bear on payments: S10 means a future change to store-scoped admin code can reach a PR without a security review being required, and S4 means the review that is required can be self-written. Those are the paths by which a payment defect would get past this workflow rather than through it.
+Three process-level notes bear on payments. Two are recorded: S10 means a future change to store-scoped admin code can reach a pull request with no security review required, and S9 means the review that is required is authored by the actor it judges. The third is new and measured: probe 1 flagged the shared idempotency-key and guest-order-token constants, the idempotency middleware, the Sanctum config and the CSRF rewrite rule. Those are the surfaces named in SCP-001 and SCP-002. The pressure to disable the credential guard will therefore arrive with the first real payment change, which is why S15 is rated where it is.
 
 ## Store isolation
 
@@ -321,59 +278,71 @@ One process-level note that does bear on payments: S10 means a future change to 
 
 | Check | Status |
 | --- | --- |
-| No hardcoded credential in the diff | PASS — the five hits from the project's own scanner are all in `.claude/hooks/selftest.mjs` and are documented example values (`gho_16C7…`, `AKIAIOSFODNN7EXAMPLE`) plus invented passwords. See S11 |
-| `.env` not in the diff | PASS — 41 files, none is `.env` or `.env.*`; `.env.example` is untouched |
-| No credential, payment payload or PII written to a log | PARTIAL — `guard-protected-ops.mjs:217-222` echoes `Command: ${command}` on a block. For the `write-dotenv` rules the blocked command contains, by definition, the credential being written, so the value is reproduced in the session transcript and in anything that captures hook stderr. It is already in the transcript as the model's own output, so the marginal exposure is small; print the matched rule and the target path, not the whole command |
-| No internal detail in an error response | PASS — no HTTP surface. `check-task-traceability.mjs` prints only paths and its own messages |
+| No hardcoded credential in the diff | PASS — the credential-shaped values are GitHub's and AWS's documented examples, an invented `base64:` APP_KEY and invented passwords, all in `selftest.mjs` fixtures and in the quoted evidence of the previous review report. The whole diff was grepped for live token prefixes and every hit is one of those. Probe 1's 33 findings were inspected against the same list: none is a credential |
+| `.env` not in the diff | PASS — 43 files, none is `.env` or `.env.*` |
+| No credential, payment payload or PII written to a log | PARTIAL, unchanged — `guard-protected-ops.mjs:339` still echoes the whole blocked command, and for the `write-dotenv` rules that command contains by definition the value being written. Print the rule id and target path instead |
+| No internal detail in an error response | PASS — no HTTP surface in the diff |
+
+One observation this table should carry: both review reports added by this diff are flagged by the guard the diff ships — the security review three times, the code review once (probe 1), on inert invented values quoted as evidence. That is why the examples in this report have their values elided, and it is the cleanest demonstration of S15 available: the artifact recording the defect cannot be committed through the control it describes.
 
 ## Dependencies
 
-Not run, and not required: the diff changes no manifest and no lockfile. `package.json` gains two script entries (`claude:selftest`, `claude:traceability`) and no dependency; `pnpm-lock.yaml`, `apps/api/composer.json` and `composer.lock` are untouched. `pnpm audit` and `composer audit` were not executed, so do not read this section as a statement that the dependency tree is clean — only that this change does not alter it.
+**Not run.** `pnpm audit` and `composer audit` were not executed — the reviewer has no `Bash`, and did not ask for them because this change alters no manifest and no lockfile: `package.json` gains two script entries and no dependency, and the lockfiles are not in the diff. Nothing here should be read as a statement that the dependency tree is clean.
+
+The `/code-review` skill is not shipped by this repository and was not run; the three reviewer definitions and `review/SKILL.md` now say so themselves, which closes M5 correctly.
+
+## Probes: who ran what, and what is still unmeasured
+
+All six probes were run by the **calling session** on 2026-11-16, not by the reviewer, which specified them and saw the output quoted below and nothing else.
+
+| Probe | Result | Finding |
+| --- | --- | --- |
+| 1 — `scanDiff` over every tracked file, each line treated as added | **33 findings in 24 files, none a credential** | S15 confirmed, and worse than the predicted list: `.htaccess`, `config/sanctum.php`, `headers.ts` (×2) and an `AuditTrailTest.php` were not predicted |
+| 2 — `git commit <path>` vs `git add -A && git commit`, throwaway repo | **exit 0 unscanned** vs exit 2 blocked | S16 confirmed by observation |
+| 3 — `evaluate()` over 10 commands | **8 of 10 ALLOWED**; control blocked | S17 confirmed and corrected, S18 confirmed, S24 confirmed |
+| 4 — `scanDiff` with a trailing-space and a quoted `+++` header | `[]`, `[]`, control 1 finding | S19 confirmed |
+| 5 — FIFO/hang behaviour | **skipped — Windows, no `mkfifo`** | S20's fail-open half remains unmeasured |
+| 6 — template length and Verdict test | **2377 chars, true** | S23 confirmed |
+| 7 — `pnpm claude:selftest` | **117 passed, 0 failed** (116 distinct per the code reviewer's L1) | the suite is green, and that is a measured fact rather than a number copied from the task file |
+
+**Still unmeasured.** For S20, the question that decides its severity is what this Claude Code build does with a `PreToolUse` hook that exceeds its timeout or exits non-zero. Two Windows-executable substitutes: create several hundred untracked files just under 2MB and time the hook on a staging commit; and run the hook from a directory that is not a git repository at all. The first should take many seconds or throw; the second should print exit `0` — a commit allowed because the scan could not run, which is the recorded S6 confirmed on this platform. If the first returns promptly with exit 2, S20 drops to LOW.
 
 ## Not defects
 
-- **Area 3, the workflow trigger.** `pull_request`, not `pull_request_target`; `permissions: contents: read`; and the attacker-controlled title reaches the script through `env: PR_TITLE` rather than `${{ }}` inside `run:`, with a comment saying exactly why. No script injection from a fork. The `concurrency` group interpolates `github.event.pull_request.number`, an integer, in a YAML key rather than a shell. This is the part of the change that is right.
-- **Area 4, branch-controlled strings reaching a shell.** They do not. Both Node scripts use `execFileSync('git', [...])` with an argv array and no `shell: true`, so branch names, base refs, task ids and PR titles never reach a shell. Nor can an argument be mistaken for an option: `baseRef` is always embedded as `origin/${baseRef}`, which cannot begin with `-`. `PR_TITLE` is only compared with `includes()` and printed.
-- **Path traversal from a branch name.** `taskId` comes from `BRANCH_PATTERN`, anchored and limited to `[A-Z][A-Z0-9]+-\d+`, before `join('.claude','tasks', …)`. The `--task` flag can escape the directory, but it is supplied by the person running the command on their own machine and only affects `existsSync`/`readFileSync` of a `.md` path whose contents are never printed — not an attack.
-- **Area 5, hook registration.** Both hooks are registered on `Bash` as separate matcher entries and both run; the `${CLAUDE_PROJECT_DIR}` reference is quoted, expanded by Claude Code rather than a shell, and its value is the project directory, not input. Correct as written; the only issue is the unset case, folded into S6. The filter-in-the-script choice (rather than an `if:` prefix pattern) is right, and the header's reasoning for it is sound — S1 and S5 are about where the scan looks, not about this decision.
-- **Deliberate bypasses of `guard-protected-ops`.** `git pu""sh --force`, base64-encoded commands, a wrapper script. The header states the bar is accidents, not intent, and these are above it. S7 lists only the shapes that fall below that bar.
-- **`$ARGUMENTS` interpolated into `gh pr create` in `.claude/skills/pr/SKILL.md`.** The value is the task id the operator typed in their own session; there is no second party.
+- **The S1 working-tree rewrite itself.** Reading `git diff HEAD` plus untracked contents is the right shape, and synthesising a diff for untracked files is the right call. S16, S19, S20 and S21 are about edges of that design, not the design. Probe 2's second half shows it works for the idiom it was built for.
+- **`--exclude-standard` for content scanning.** Correct; the gap is only that the same list feeds the *path* rules, where `git add -f` then has no backstop (S21).
+- **The 2MB per-file cap** as a concept. Sound; the missing aggregate cap and the silent skip are the problem.
+- **`base64:` decoding in `looksLikePlaceholder`.** It keeps the documented test `APP_KEY` allowed while a random key is caught. The substring test on decoded bytes is inconsistent with the "whole value or start" rule the round established, but random key bytes match with probability about 2 × 10⁻⁸ and steering it requires choosing the key — below the bar.
+- **Carrying branch state across segments.** The right mechanism, better than matching the pair by text. S18 is about quoting, not about this.
+- **Reading `APP_ENV` and `compose.prod` from the whole line** while reading `--env=` from the segment. Correct split of concerns.
+- **Judging `.env` writes by target path.** The right way round, and the quoted form is handled.
+- **`_TEMPLATE.md` shipping `—`.** The best change in round 2: it cannot be satisfied by inaction, which is the property S23's character floor lacks.
+- **`git fetch origin` and `origin/main...HEAD`** throughout the skills. Right fix, consistently applied.
+- **Dropping `Bash` from the three reviewers.** The direct hole is closed and the record states the cost plainly instead of glossing it. S22 is about the replacement channel, not the decision — which was correct, for the reason the skill gives: losing independence of evidence hurts less than losing independence of action. This review is the test case, and it worked: the reviewer could not confirm anything itself, so it asked, and six probes came back — three of which changed what it wrote.
+- **`qa-engineer` and `git-release` keeping `Bash`.** Deliberate, documented in the same row as the claim, and unavoidable for what they do.
 
-## On the absence of a `permissions` block in `.claude/settings.json`
+## The documentation, judged against last round's verdict
 
-Half agreed, and the half that is wrong matters.
+Last round the diff could merge and the documentation could not. Both claims named then are now true:
 
-Agreed for `allow`: `.claude/settings.json` is committed and trusted by every clone, so a shipped allowlist would silently grant those permissions to every machine that checks the repository out, including a maintainer with a different threat model. Tool permissions are the operator's setting and a repository should not quietly widen them. Leaving `allow` out is the right call and the stated reason is sound.
+- `quality-gates.md:16` reads partial with a "What the secret scan does not catch" section, and all three gaps it lists are real. It is honest in register and incomplete in content: it does not name `git commit <path>` (S16), `git add -f` (S21), git-quoted filenames (S19), or the false-positive load that will push people off the guarded path (S15).
+- The agent descriptions no longer claim "cannot edit files". The three reviewers declare `tools: Read, Glob, Grep` and their bodies match; `qa-engineer` and `git-release` say "holds no `Write` or `Edit` tool", which is exactly true. `docs/workflow/README.md`'s new Tools column and its "by prompt means the scope is an instruction, not a permission" line are the most honest paragraphs in the set.
+- `git-workflow.md` replacing stale assertion counts with "run it for the current count" and "read a pass as no known regression, not as the rules are right" is correct — and S15, S16 and S17 are three more instances of exactly that, all found under a 117-assertion green suite.
 
-Not agreed for `deny`: a committed `deny` list can only ever *remove* capability. It cannot widen an operator's settings, so the argument that justifies omitting `allow` does not reach it. Three deny rules would turn prose into enforcement at no cost to the operator — covering `.claude/hooks/**`, `.claude/settings.json` and `.github/workflows/**` (S8, S9). A `Write`/`Edit` deny for `.env` would match what `guard-protected-ops` already tries to do for Bash, since the `Edit` tool never passes through that hook at all. What a `deny` list cannot do is make S4 true — a shell has too many ways to write a file for an allow/deny list over command text to be a boundary. That one needs the tool grant or a read-only mount.
+One cell is now differently wrong: `quality-gates.md:25` "structural: no write channel exists" (S22). It is the only claim in the table that promises more than the mechanism delivers, and it is the same failure mode as last round's two, caught one round earlier.
+
+One inconsistency worth a one-line fix: `security-reviewer.md`'s opening line still says it holds `Bash`, two paragraphs above the new section saying it does not. The frontmatter binds, so the behaviour is right — but an agent reading its own prompt is told both things.
 
 ## Verdict and whether this can go to a pull request
 
-**CHANGES REQUIRED. Yes, open the pull request — but not as a claim that the workflow is enforced.**
+**CHANGES REQUIRED. Open the pull request; do not merge it as a claim that the credential guard is usable.**
 
-Nothing in this diff is exploitable by a customer, moves money, crosses a store boundary or exposes customer data; it adds no application code, no endpoint, no migration and no dependency. Merging it does not create a live vulnerability, and the workflow it installs is a clear improvement on nothing.
+Nothing in this diff is reachable by a customer, moves money, crosses a store boundary or exposes customer data. Merging it creates no live vulnerability, and rounds 2 and 3 made the workflow materially better than what it replaced: the S1 staging defect, the S2 name-matching defect, S5, M1, M7, M10 and the false documentation are all genuinely closed — probe 2's second half and probe 7 are the evidence — and dropping `Bash` from the three reviewers converted the central claim of the whole workflow from a sentence into a tool grant.
 
-What must not merge unchanged is the documentation, because the two claims a human will rely on are false as shipped:
+What should not merge unchanged is `guard-secrets.mjs`. **S15** is a regression this round introduced, and it is measured, not argued: 33 blocks across 24 files, none a credential, including `.npmrc`, `.htaccess`, `config/sanctum.php`, both Next.js security-header configs, the shared idempotency-key and guest-order-token constants, the repository's own documented setup command, and both review reports in this diff. The block is `exit 2` and its message recommends weakening the pattern. The realistic response is that someone commits outside the `Bash` tool, after which the guard catches nothing and S1 and S2 are back. Three small edits fix it, and the allow fixtures to pin it are listed in the finding.
 
-1. `docs/workflow/quality-gates.md` — "Credential in a commit | `guard-secrets` scans the staged diff | ✅ **hard block**". S1 and S2 reduce this to a best-effort scan that misses the repository's own credential variable names and the commit idiom its own header was rewritten for. Either fix S1 and S2 in this PR, or downgrade the row to ⚠️ partial with the gaps named, in the same honest register the rest of that table already uses for AC10.
-2. The five agent descriptions — "Read-only", "cannot edit files", "cannot approve its own work". S4. `Bash` writes files. Either remove `Bash` from the three pure reviewers in this PR, or delete the claim.
+**S16** and **S17** must not be recorded as closed. Each is a residual of a finding this round marked fixed, each is one more spelling of the same idiom, and probes 2 and 3 observed both. S17's measured detail matters for the record: the `+refs/heads/…` shape is caught by `force-refspec`, which judges the leading `+` and not the destination — so the catch is incidental, and the rule that is supposed to protect the trunk still does not look at where a push lands.
 
-Fix S1, S2 and S3 before anyone treats the hooks as a control; they are small, local, and each has a test case waiting in `selftest.mjs`. S4 is the finding with the longest tail, because the whole workflow's value rests on review being independent, and today it is independent only by the goodwill of the reviewing agent.
+Operationally, per `/review` step 6: three HIGH findings mean `CHANGES_REQUESTED`, not `READY_FOR_PR`, and the gate will refuse the pull request while `Review Findings` carries a non-zero HIGH. That is the gate working.
 
-## Independent verification by the calling session
-
-The session re-ran the four most consequential claims against the shipped code
-before saving this report, rather than taking them on trust. All four hold.
-
-| Claim | How it was checked | Result |
-| --- | --- | --- |
-| S2 — project credential names pass | `scanDiff` imported directly | `MAIL_PASSWORD`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `AWS_SECRET_ACCESS_KEY` all **allowed**; only `DB_PASSWORD` blocked |
-| S2 — placeholder substring waiver | same | `DB_PASSWORD=Secret!Prod#2026aQ`, `=Password#Prod2026!`, `=Hx9kLm2Qp7vtestRtZw4` all **allowed** |
-| S3 — direct push to main | `evaluate()` imported directly | `git push origin HEAD:main`, `git push origin main`, `git push` on `main`, and `git merge feature/x` with `branch=''` all **allowed** |
-| S1, S5 — which commits are scanned, and how | both regexes read out of `guard-secrets.mjs` at runtime and applied | `git add -A && git commit` → scans `--cached`; `git -C . commit` and `git -c user.name=x commit` → hook **skipped** entirely |
-
-S1 bears directly on the fix round recorded in `.claude/tasks/SCP-000.md`. That
-round removed the `if: "Bash(git commit *)"` pre-filter so the hook would *run*
-on `git add -A && git commit`. It does now run — and then scans an index that,
-at `PreToolUse` time, does not yet contain the file. The fix was necessary and
-insufficient, and the record overstated what it closed.
+Finally, the limit at the top of this report, now with its result: every finding was derived by reading, and six were then put to a probe run by someone else. Three of those probes changed the text — probe 1 added four files that were not predicted, probe 3 corrected S17, and probe 5 could not run at all, so S20's fail-open claim stays unmeasured and is labelled as such. That is the shape the S4 fix leaves: the reviewer cannot confirm its own findings, and the record has to say who did.
