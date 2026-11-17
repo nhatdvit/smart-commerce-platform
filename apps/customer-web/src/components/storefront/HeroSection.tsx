@@ -1,5 +1,6 @@
 'use client';
 
+import { IconLeaf, IconScooter, IconShield } from './icons';
 import { scrollToSection } from './scroll';
 
 /**
@@ -25,17 +26,17 @@ export function HeroSection() {
         </button>
         <div className="hero-features">
           <span>
-            🛵 Giao nhanh
+            <IconScooter size={16} /> Giao nhanh
             <br />
             trong khu vực
           </span>
           <span>
-            🌿 Nguyên liệu
+            <IconLeaf size={16} /> Nguyên liệu
             <br />
             tươi ngon
           </span>
           <span>
-            🛡️ An toàn
+            <IconShield size={16} /> An toàn
             <br />
             vệ sinh
           </span>

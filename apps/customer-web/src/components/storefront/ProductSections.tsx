@@ -1,30 +1,40 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { productImage, type Product, type ProductCategory } from '@/data/products';
 import { money } from '@/lib/money';
 
+import { IconCup, IconFlame, IconStar } from './icons';
 import { scrollToSection } from './scroll';
 import type { CategoryFilter } from './use-storefront';
 
 interface SectionSpec {
+  readonly icon: ReactNode;
   readonly heading: string;
   readonly categories: readonly ProductCategory[];
   readonly seeAll: CategoryFilter;
 }
 
+/** Matches the 24px heading type the design sets on `.section-heading h2`. */
+const HEADING_ICON = 22;
+
 const SECTIONS: readonly SectionSpec[] = [
   {
-    heading: '🔥 Món ăn sáng nổi bật',
+    icon: <IconFlame size={HEADING_ICON} />,
+    heading: 'Món ăn sáng nổi bật',
     categories: ['breakfast', 'main'],
     seeAll: 'breakfast',
   },
   {
-    heading: '⭐ Chả đặc sản – Món ngon nhà làm',
+    icon: <IconStar size={HEADING_ICON} />,
+    heading: 'Chả đặc sản – Món ngon nhà làm',
     categories: ['special', 'snack'],
     seeAll: 'special',
   },
   {
-    heading: '🥤 Đồ uống & combo yêu thích',
+    icon: <IconCup size={HEADING_ICON} />,
+    heading: 'Đồ uống & combo yêu thích',
     categories: ['drink', 'combo'],
     seeAll: 'drink',
   },
@@ -129,7 +139,9 @@ export function ProductSections({
             className={items.length === 0 ? 'product-section hide' : 'product-section'}
           >
             <div className="section-heading">
-              <h2>{section.heading}</h2>
+              <h2>
+                {section.icon} {section.heading}
+              </h2>
               <button
                 type="button"
                 className="see-all"

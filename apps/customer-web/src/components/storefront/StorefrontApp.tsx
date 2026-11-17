@@ -9,6 +9,15 @@ import { ModalLayer } from './ModalLayer';
 import { ProductSections } from './ProductSections';
 import { SidePanels } from './SidePanels';
 import { SiteHeader } from './SiteHeader';
+import {
+  IconCart,
+  IconGift,
+  IconHome,
+  IconLeaf,
+  IconMenuList,
+  IconScooter,
+  IconStar,
+} from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
 import { useStorefront } from './use-storefront';
 
@@ -80,15 +89,15 @@ export function StorefrontApp() {
 
           <section className="why">
             <div>
-              🛵 <strong>Giao nhanh</strong>
+              <IconScooter size={26} /> <strong>Giao nhanh</strong>
               <small>Đúng giờ, đúng món</small>
             </div>
             <div>
-              🌿 <strong>Tươi ngon</strong>
+              <IconLeaf size={26} /> <strong>Tươi ngon</strong>
               <small>Chế biến mỗi ngày</small>
             </div>
             <div>
-              🎁 <strong>Tích điểm</strong>
+              <IconGift size={26} /> <strong>Tích điểm</strong>
               <small>Đổi món miễn phí</small>
             </div>
           </section>
@@ -121,16 +130,19 @@ export function StorefrontApp() {
 
       <div className="mobile-bar">
         <button type="button" onClick={scrollToTop}>
-          ⌂<span>Trang chủ</span>
+          <IconHome size={22} />
+          <span>Trang chủ</span>
         </button>
         <button type="button" onClick={() => scrollToSection('menu')}>
-          ☷<span>Thực đơn</span>
+          <IconMenuList size={22} />
+          <span>Thực đơn</span>
         </button>
         <button type="button" onClick={() => store.setModal({ kind: 'rewards' })}>
-          ☆<span>Tích điểm</span>
+          <IconStar size={22} />
+          <span>Tích điểm</span>
         </button>
         <button type="button" onClick={() => store.setDrawerOpen(true)}>
-          🛒
+          <IconCart size={22} />
           <span>
             Giỏ hàng <b>{store.totals.count}</b>
           </span>

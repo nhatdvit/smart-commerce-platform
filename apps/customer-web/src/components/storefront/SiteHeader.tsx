@@ -1,5 +1,6 @@
 'use client';
 
+import { IconBrand, IconCart, IconSearch, IconUser } from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
 
 const NAV_ITEMS: readonly { readonly label: string; readonly target: string }[] = [
@@ -39,7 +40,9 @@ export function SiteHeader({
           }
         }}
       >
-        <span className="brand-icon">♨️</span>
+        <span className="brand-icon">
+          <IconBrand size={32} />
+        </span>
         <span>
           <strong>Phú Quý</strong>
           <small>Food &amp; Drink</small>
@@ -60,7 +63,7 @@ export function SiteHeader({
       </nav>
 
       <label className="search">
-        <span>⌕</span>
+        <IconSearch size={20} />
         <input
           type="search"
           placeholder="Tìm món ăn, đồ uống..."
@@ -68,15 +71,18 @@ export function SiteHeader({
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
         />
-        <kbd>⌕</kbd>
+        <kbd>
+          <IconSearch size={18} />
+        </kbd>
       </label>
 
       <button className="header-cart" type="button" aria-label="Mở giỏ hàng" onClick={onOpenCart}>
-        🛒<span>{cartCount}</span>
+        <IconCart size={24} />
+        <span>{cartCount}</span>
       </button>
 
       <button className="login" type="button" onClick={onOpenLogin}>
-        ♟ <span>Đăng nhập</span>
+        <IconUser size={17} /> <span>Đăng nhập</span>
       </button>
     </header>
   );

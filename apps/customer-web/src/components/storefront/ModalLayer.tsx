@@ -5,6 +5,7 @@ import { useId, useState, type ReactNode } from 'react';
 import { findProduct, productImage, type Product } from '@/data/products';
 import { money } from '@/lib/money';
 
+import { IconCheckCircle, IconGift } from './icons';
 import type { CartTotals, ModalView } from './use-storefront';
 
 /** Points cost of each demo reward, keyed by product id - loyalty is not an API yet. */
@@ -16,17 +17,21 @@ const REWARDS: readonly { readonly productId: number; readonly points: number }[
 
 interface ModalShellProps {
   readonly title: string;
+  /** Optional leading icon, shown before the title. */
+  readonly icon?: ReactNode;
   readonly onClose: () => void;
   readonly children: ReactNode;
 }
 
-function ModalShell({ title, onClose, children }: ModalShellProps) {
+function ModalShell({ title, icon, onClose, children }: ModalShellProps) {
   const titleId = useId();
 
   return (
     <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="modal-head">
-        <h3 id={titleId}>{title}</h3>
+        <h3 id={titleId}>
+          {icon} {title}
+        </h3>
         <button type="button" className="close" onClick={onClose}>
           ✕
         </button>
@@ -275,7 +280,7 @@ export function ModalLayer({
 
   if (view.kind === 'rewards') {
     return (
-      <ModalShell title="🎁 Đổi điểm lấy món ngon" onClose={onClose}>
+      <ModalShell title="Đổi điểm lấy món ngon" icon={<IconGift size={20} />} onClose={onClose}>
         <RewardList points={points} onRedeem={onRedeem} />
       </ModalShell>
     );
@@ -296,7 +301,11 @@ export function ModalLayer({
   }
 
   return (
-    <ModalShell title="🎉 Đã ghi nhận đơn hàng demo" onClose={onClose}>
+    <ModalShell
+      title="Đã ghi nhận đơn hàng demo"
+      icon={<IconCheckCircle size={20} />}
+      onClose={onClose}
+    >
       <p>
         Cảm ơn <strong>{view.customerName}</strong>! Đơn của bạn đã được lưu mô phỏng trên trình
         duyệt.

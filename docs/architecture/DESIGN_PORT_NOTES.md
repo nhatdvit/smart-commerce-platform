@@ -127,15 +127,28 @@ delivered size and line-height still apply.
 
 **Visual effect:** intended — Vietnamese text is noticeably better set.
 
-### 8. The favourite button holds an SVG icon, not a ♡ text glyph
+### 8. Emoji and symbol characters replaced by an SVG icon set
 
-The design used `♡` / `♥` (U+2661 / U+2665). Neither character is in the body
-font, so each platform resolves it through its own symbol or emoji fallback; on
-Windows the glyph came back oversized and off-centre in the 27px button. An
-inline SVG draws the same shape identically everywhere and inherits the button's
-colour, so the design's red and the `liked` background still apply.
+The design used emoji and symbol characters as icons — `🥖 🍜 🥤 🔥 ⭐ 🛵 🌿 🛡️
+🎁 🎟️ 🛒 🛍️ ♨️ ⌕ ♟ ⌂ ☷ ☆`, and `♡` / `♥` for the favourite button. None of
+them is in the body font, so each platform substitutes its own: they arrive at
+different sizes, weights and colours, several render as full-colour emoji that
+read as clip art rather than interface, and on Windows the heart came back
+oversized and off-centre in its 27px button.
 
-**Visual effect:** intended — the heart is now crisp and centred.
+`components/storefront/icons.tsx` replaces them with one line set — a 24×24
+grid, stroked in `currentColor`, sized by the component rather than by
+`font-size`. Each icon takes the colour the design already gives its container,
+so the palette is unchanged. Requested by the product owner.
+
+**Visual effect:** intended — one coherent monochrome icon set instead of mixed
+emoji. Shapes and positions follow the design; only the rendering changed.
+
+One trap worth recording: the alignment rules for these icons are appended at
+the end of the stylesheet, **after** the media queries. Setting `display` on
+`.header-cart` or `.login` there silently beat the design's `display:none`
+below 760px and brought both back on mobile. They are aligned with
+`vertical-align` instead, and the stylesheet carries a comment saying why.
 
 ### 9. Storefront search and the cart drawer are React-controlled
 
@@ -144,22 +157,33 @@ by hand; the drawer re-rendered its own markup on every cart change. Both are
 ordinary controlled React components now. Identical behaviour, fewer moving
 parts.
 
-## Known defect in the delivered assets: product photos
+## The delivered photos were mockup crops, and have been re-cropped
 
-`apps/customer-web/public/assets/food-*.jpg` are **crops of a mockup screenshot**,
-not photographs. Each one has the storefront's own UI baked into its pixels: a
-white circular favourite button with a red heart in the top-right corner, and a
-rounded white card border around the edge.
+`apps/customer-web/public/assets/food-*.jpg` arrived as **crops of a mockup
+screenshot**, not photographs. Each had the storefront's own UI baked into its
+pixels: a white circular favourite button with a red heart in the top-right
+corner, and a rounded white card border around the edge. The visible result was
+two hearts on every product card — the real clickable button, and a second one
+painted into the image beneath it. The design package's own README said as much:
+_"Ảnh sản phẩm được cắt từ bản mockup thiết kế, chỉ dùng làm ảnh demo. Nên thay
+bằng ảnh món ăn thật khi triển khai."_
 
-The visible result is two hearts per product card — the real, clickable button
-drawn by `ProductSections.tsx`, and a second painted into the image underneath
-it. No code change can remove the second one; it is part of the JPEG. The design
-package's own README says as much: _"Ảnh sản phẩm được cắt từ bản mockup thiết
-kế, chỉ dùng làm ảnh demo. Nên thay bằng ảnh món ăn thật khi triển khai."_
+All 13 were re-cropped to remove it. The badge measured consistently at
+x 394–531, y 2–105 of a 534×321 source, so cropping the **right** strip clears it
+while keeping each dish framed vertically; cropping the top strip would have cut
+into the food and left an aspect ratio the card then crops again. The inset also
+clears the rounded white frame, whose corner radius is wider than the frame is
+thick.
 
-These need replacing with real product photography before launch. When that
-happens the baked-in border should go too, so `.product-photo` owns the corner
-radius rather than the image.
+- Food: `534×321` → `372×283`, crop `left 16, top 22`
+- Hero: `640×260` → `620×240`, a 10px inset (no badge, frame only)
+
+They are also much smaller — `food-1.jpg` went from 70 KB to 19 KB.
+
+This is still a repair of demo assets, not a substitute for real photography.
+The images are AI-generated and look it; replacing them is the remaining job,
+and when that happens the card should own its corner radius rather than the
+image. The script used is not checked in — it ran once, from the scratchpad.
 
 ## Not ported (absent from the delivered designs)
 

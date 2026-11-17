@@ -3,6 +3,8 @@
 import { productImage } from '@/data/products';
 import { money } from '@/lib/money';
 
+import { IconBag } from './icons';
+
 import type { CartKey, CartLine, CartTotals } from './use-storefront';
 
 interface CartLinesProps {
@@ -15,7 +17,9 @@ export function CartLines({ lines, onChangeQuantity }: CartLinesProps) {
   if (lines.length === 0) {
     return (
       <div className="cart-empty">
-        <span>🛍️</span>
+        <span>
+          <IconBag size={34} />
+        </span>
         Giỏ hàng đang trống.
         <br />
         Chọn món ngon để bắt đầu nhé!

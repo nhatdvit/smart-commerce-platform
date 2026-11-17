@@ -30,6 +30,13 @@
  *
  * 2. The favourite button now holds an SVG icon instead of a ♡ text glyph, so
  *    it needs centring that `line-height` used to provide.
+ *
+ * 3. The emoji and symbol characters the design used as icons (🥖 🍜 🥤 🔥 ⭐
+ *    🛵 ⌕ ♟ ☷) are now one SVG line set - see components/storefront/icons.tsx.
+ *    An SVG is a replaced element, not a glyph, so it needs the baseline nudge
+ *    and flex handling that text got for free. Sizes come from the component,
+ *    so the few rules that sized those glyphs through `font-size` no longer do
+ *    anything and are left untouched.
  */
 body {
   font-family: 'Be Vietnam Pro', Arial, 'Segoe UI', sans-serif;
@@ -38,4 +45,36 @@ body {
 .heart {
   display: grid;
   place-items: center;
+}
+
+.storefront-icon {
+  display: inline-block;
+  vertical-align: -0.2em;
+  flex-shrink: 0;
+}
+
+/* Tiles, trust badges and the mobile bar stack their icon above a label. */
+.category .storefront-icon,
+.trust-panel .storefront-icon,
+.mobile-bar .storefront-icon,
+.why .storefront-icon,
+.cart-empty .storefront-icon,
+.reward-big .storefront-icon {
+  display: block;
+  vertical-align: baseline;
+}
+
+.why div .storefront-icon,
+.cart-empty .storefront-icon {
+  margin: 0 auto;
+}
+
+/*
+ * Deliberately no `display` rule on .header-cart or .login: this block sits
+ * after the media queries, so setting one here would beat the design's
+ * `display:none` for them below 760px and bring both back on mobile. The
+ * icons line up on the baseline nudge above instead.
+ */
+.search .storefront-icon {
+  color: #7c8b9e;
 }

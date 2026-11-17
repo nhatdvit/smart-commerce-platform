@@ -1,6 +1,7 @@
 'use client';
 
 import { CartLines, CartTotalsRows } from './CartContents';
+import { IconCart, IconGift, IconLeaf, IconScooter, IconShield, IconTicket } from './icons';
 import type { CartKey, CartLine, CartTotals } from './use-storefront';
 
 interface SidePanelsProps {
@@ -35,7 +36,9 @@ export function SidePanels({
     <aside className="right-column" aria-label="Giỏ hàng và ưu đãi">
       <div className="panel cart-panel">
         <div className="panel-title">
-          <h3>🛒 Giỏ hàng của bạn ({totals.count})</h3>
+          <h3>
+            <IconCart size={17} /> Giỏ hàng của bạn ({totals.count})
+          </h3>
           <button type="button" className="text-danger" onClick={onClearCart}>
             Xóa tất cả
           </button>
@@ -46,7 +49,9 @@ export function SidePanels({
         </div>
 
         <div className="coupon-entry">
-          <label htmlFor="couponInput">🎟️ Mã ưu đãi</label>
+          <label htmlFor="couponInput">
+            <IconTicket size={15} /> Mã ưu đãi
+          </label>
           <div className="coupon-row">
             <input
               id="couponInput"
@@ -80,13 +85,17 @@ export function SidePanels({
 
       <div className="panel reward-panel" id="rewards">
         <div className="panel-title">
-          <h3>🎁 Điểm thưởng của bạn</h3>
+          <h3>
+            <IconGift size={17} /> Điểm thưởng của bạn
+          </h3>
         </div>
         <div className="reward-big">
           <strong>
             <span>{points}</span> điểm
           </strong>
-          <span>🎁</span>
+          <span>
+            <IconGift size={42} />
+          </span>
         </div>
         <button type="button" className="reward-link" onClick={onOpenRewards}>
           Đổi điểm lấy món ngon →
@@ -94,7 +103,9 @@ export function SidePanels({
       </div>
 
       <div className="panel promo-panel" id="promos">
-        <h3>🎟️ Ưu đãi hôm nay</h3>
+        <h3>
+          <IconTicket size={17} /> Ưu đãi hôm nay
+        </h3>
         <strong>GIẢM 10%</strong>
         <p>cho đơn từ 100.000đ</p>
         <button type="button" onClick={() => onApplyCoupon('SANG10')}>
@@ -104,7 +115,7 @@ export function SidePanels({
 
       <div className="panel trust-panel">
         <div>
-          🛵
+          <IconScooter size={22} />
           <span>
             Giao nhanh
             <br />
@@ -112,7 +123,7 @@ export function SidePanels({
           </span>
         </div>
         <div>
-          🌱
+          <IconLeaf size={22} />
           <span>
             Nguyên liệu
             <br />
@@ -120,7 +131,7 @@ export function SidePanels({
           </span>
         </div>
         <div>
-          🛡️
+          <IconShield size={22} />
           <span>
             An toàn
             <br />
