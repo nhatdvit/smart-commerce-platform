@@ -5,7 +5,7 @@ import { FoodIcon, IconCart, IconEye, IconStorefront } from '../icons';
 import { PageHeading } from '../primitives';
 
 const THEME_ROWS: readonly (readonly [string, string])[] = [
-  ['Logo & tên cửa hàng', 'Bữa Sáng Phú Quý'],
+  ['Logo & tên cửa hàng', 'Bếp nhà mình'],
   ['Màu thương hiệu', 'Vàng nắng · Xanh navy'],
   ['Banner trang chủ', 'Khuyến mãi bữa sáng'],
   ['Danh mục hiển thị', 'Bánh mì · Xôi · Bún/Phở · Đồ uống · Combo'],
@@ -80,7 +80,7 @@ export function StorefrontScreen() {
           <div className="preview">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15 }}>
               <strong>
-                <IconStorefront size={15} /> Bữa Sáng Phú Quý
+                <IconStorefront size={15} /> Bếp nhà mình
               </strong>
               <span>
                 <IconCart size={15} />

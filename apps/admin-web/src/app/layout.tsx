@@ -8,8 +8,8 @@ import '@/styles/admin-shell.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'Phú Quý Admin — Quản lý bán hàng',
-    template: '%s - Phú Quý Admin',
+    default: 'Bếp nhà mình Admin — Quản lý bán hàng',
+    template: '%s - Bếp nhà mình Admin',
   },
   description: 'Staff administration for the Smart Commerce Platform.',
   robots: { index: false, follow: false },

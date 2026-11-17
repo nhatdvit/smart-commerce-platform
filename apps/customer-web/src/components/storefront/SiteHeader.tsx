@@ -1,6 +1,6 @@
 'use client';
 
-import { IconBrand, IconCart, IconSearch, IconUser } from './icons';
+import { IconCart, IconSearch, IconUser } from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
 
 const NAV_ITEMS: readonly { readonly label: string; readonly target: string }[] = [
@@ -40,12 +40,23 @@ export function SiteHeader({
           }
         }}
       >
-        <span className="brand-icon">
-          <IconBrand size={32} />
-        </span>
+        {/*
+         * The supplied logo is one lockup: emblem above, wordmark below. At
+         * the 80px header height (62px on a phone) that whole lockup would be
+         * unreadable, so the emblem carries the mark and the wordmark is set
+         * as live text beside it - which also keeps it crisp at any zoom and
+         * readable to a screen reader.
+         */}
+        <img
+          className="brand-logo"
+          src="/brand/logo-mark.webp"
+          alt="Bếp nhà mình"
+          width={240}
+          height={180}
+        />
         <span>
-          <strong>Phú Quý</strong>
-          <small>Food &amp; Drink</small>
+          <strong>Bếp nhà mình</strong>
+          <small>Món ngon nhà làm</small>
         </span>
       </div>
 

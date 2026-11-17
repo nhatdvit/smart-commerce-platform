@@ -102,3 +102,22 @@ nav button > span {
 .coupon strong > .admin-icon {
   color: #c79a3a;
 }
+
+/*
+ * Brand logo in the sidebar, in place of the design's yellow "PQ" tile.
+ * `.brand strong` keeps the design's 17px; "BẾP NHÀ MÌNH" is longer than
+ * "PHÚ QUÝ", so the tracking is eased slightly to keep it on one line inside
+ * the 254px sidebar.
+ *
+ * No `display` rule here: this block is after the media queries.
+ */
+.brand-logo {
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brand strong {
+  letter-spacing: 0.2px;
+}

@@ -210,6 +210,47 @@ The images are AI-generated and look it; replacing them is the remaining job,
 and when that happens the card should own its corner radius rather than the
 image. The script used is not checked in — it ran once, from the scratchpad.
 
+## Brand: "Bếp nhà mình"
+
+The client supplied a logo after the port: one 1536×1024 lockup, the
+house-and-pot emblem above, the "Bếp nhà mình" wordmark and "MÓN NGON NHÀ LÀM"
+tagline below. The storefront header is 80px tall (62px on a phone) and the
+admin sidebar gives the mark a 41px slot, so the whole lockup cannot be shown
+legibly in either. It is split instead:
+
+- `public/brand/logo-mark.webp` — the emblem, for the header and sidebar
+- `public/brand/logo.webp` — the full lockup, for anywhere with room
+- `src/app/icon.png` — the emblem squared on transparency, which Next's App
+  Router serves as the favicon
+
+The wordmark is set as **live text** beside the emblem rather than baked into
+the image, so it stays crisp at any zoom, reflows on a phone and is readable to
+a screen reader. The emblem/wordmark cut is at y=618, measured: the yellow
+spoon sweep ends at ~615 and the wordmark's accent marks start at ~620.
+
+The brand name changed with it, from "Phú Quý" / "Bữa Sáng Phú Quý":
+
+| Where                                      | Now                                     |
+| ------------------------------------------ | --------------------------------------- |
+| Storefront header                          | Bếp nhà mình / Món ngon nhà làm         |
+| Storefront `<title>`                       | Bếp nhà mình — Món ngon nhà làm         |
+| Storefront footer                          | © 2026 Bếp nhà mình · Món ngon nhà làm |
+| Admin sidebar                              | BẾP NHÀ MÌNH / Commerce Admin           |
+| Admin `<title>`                            | Bếp nhà mình Admin — Quản lý bán hàng   |
+| Admin store card and storefront-config row | Bếp nhà mình                            |
+
+The admin's yellow "PQ" tile is gone — the emblem carries its own colour, and
+keeping the tile would have boxed a logo inside a second logo.
+
+### Outstanding: the hero photo still shows the old brand
+
+`apps/customer-web/public/assets/hero.jpg` is one of the AI-generated mockup
+images, and the coffee cup in it has a **"Phú Quý" logo painted into the
+pixels**. With the new logo in the header, the hero now contradicts it. No code
+change can fix that; the cup is the centre of the composition, so it cannot be
+cropped out either. It needs a replacement hero image — the same job as the
+product photography above.
+
 ## Not ported (absent from the delivered designs)
 
 - Customer authentication. The login button opens the design's own placeholder

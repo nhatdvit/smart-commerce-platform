@@ -1,7 +1,7 @@
 import { StorefrontApp } from '@/components/storefront/StorefrontApp';
 
 export const metadata = {
-  title: 'Phú Quý Food & Drink — Món ngon mỗi ngày',
+  title: 'Bếp nhà mình — Món ngon nhà làm',
 };
 
 /**

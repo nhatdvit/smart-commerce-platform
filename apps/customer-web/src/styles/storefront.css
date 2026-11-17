@@ -78,3 +78,28 @@ body {
 .search .storefront-icon {
   color: #7c8b9e;
 }
+
+/*
+ * Brand logo. The design's `.brand-icon` rule sized an emoji through
+ * `font-size`; an image needs its own box. Heights follow the design's three
+ * header heights (80 / 68 / 62px) so the lockup keeps its optical weight.
+ *
+ * No `display` rule here: this block is after the media queries.
+ */
+.brand-logo {
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+}
+
+@media (max-width: 1450px) {
+  .brand-logo {
+    height: 38px;
+  }
+}
+
+@media (max-width: 760px) {
+  .brand-logo {
+    height: 32px;
+  }
+}

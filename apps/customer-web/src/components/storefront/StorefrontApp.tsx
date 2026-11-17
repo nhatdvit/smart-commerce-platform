@@ -22,7 +22,7 @@ import { scrollToSection, scrollToTop } from './scroll';
 import { useStorefront } from './use-storefront';
 
 /**
- * The Phú Quý storefront, ported from the delivered HTML/CSS/JS prototype.
+ * The Bếp nhà mình storefront, ported from the delivered HTML/CSS/JS prototype.
  *
  * It is one scrolling page, exactly as designed: the category bar and the
  * "see all" links filter the sections in place rather than navigating, so the
@@ -124,8 +124,8 @@ export function StorefrontApp() {
       </main>
 
       <footer>
-        © 2026 Phú Quý Food &amp; Drink · Giao diện demo Smart Commerce Platform · Giá và hình ảnh
-        minh họa
+        © 2026 Bếp nhà mình · Món ngon nhà làm · Giao diện demo Smart Commerce Platform · Giá và
+        hình ảnh minh họa
       </footer>
 
       <div className="mobile-bar">

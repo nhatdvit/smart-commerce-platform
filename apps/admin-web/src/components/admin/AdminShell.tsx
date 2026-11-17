@@ -37,11 +37,20 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <div className="app">
         <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
           <div className="brand">
-            <div className="brand-mark">
-              P<span>Q</span>
-            </div>
+            {/*
+             * The emblem from the supplied lockup. The design's yellow "PQ"
+             * tile is gone: the emblem carries its own colour, and stacking it
+             * on the tile would box a logo inside a second logo.
+             */}
+            <img
+              className="brand-logo"
+              src="/brand/logo-mark.webp"
+              alt="Bếp nhà mình"
+              width={240}
+              height={180}
+            />
             <div>
-              <strong>PHÚ QUÝ</strong>
+              <strong>BẾP NHÀ MÌNH</strong>
               <small>Commerce Admin</small>
             </div>
             <button
@@ -59,7 +68,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <IconStorefront size={22} />
             </span>
             <div>
-              <strong>Bữa Sáng Phú Quý</strong>
+              <strong>Bếp nhà mình</strong>
               <small>● Đang hoạt động</small>
             </div>
             <span>
