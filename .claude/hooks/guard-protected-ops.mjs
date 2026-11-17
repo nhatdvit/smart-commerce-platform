@@ -153,19 +153,27 @@ export const RULES = [
     // exist to prevent, reached by the shortest road.
     pattern: /\bgit\s+push\b/,
     test: (segment, branch) => {
-      // `git push origin src:main`, or `git push origin +main`
-      if (/:(?:main|master|production|release)\b/.test(segment)) return true;
-      // `git push origin main`
-      if (
-        /\bgit\s+push\b(?:\s+-\S+(?:\s+\S+)?)*\s+\S+\s+\+?(?:main|master|production|release)\b/.test(
-          segment,
-        )
-      ) {
-        return true;
-      }
-      // No branch argument at all: git pushes whatever HEAD is on.
-      const named = /\bgit\s+push\b(?:\s+-\S+(?:\s+\S+)?)*\s+\S+\s+(\S+)/.test(segment);
-      return !named && PROTECTED_BRANCHES.has(branch);
+      // SCP-000 review S17/M4: this test spelled the branch as a bare name, so
+      // every fully-qualified form walked straight past it. `refs/heads/` is
+      // optional anywhere a branch can be named.
+      const TRUNK = String.raw`(?:refs\/heads\/)?(?:main|master|production|release)`;
+
+      // `git push origin src:main`, `git push origin HEAD:refs/heads/main`
+      if (new RegExp(`:\\+?${TRUNK}\\b`).test(segment)) return true;
+
+      // `git push origin main`, `git push origin refs/heads/main`, `+main`
+      const positional = new RegExp(
+        `\\bgit\\s+push\\b(?:\\s+-\\S+(?:\\s+\\S+)?)*\\s+\\S+\\s+\\+?${TRUNK}\\b`,
+      );
+      if (positional.test(segment)) return true;
+
+      // What is left is a push whose destination is wherever HEAD points:
+      // either no branch argument, or one that spells HEAD out. The second was
+      // S17's fifth case - `git push -u origin HEAD` while standing on main
+      // passed, because a branch argument was present.
+      const named = /\bgit\s+push\b(?:\s+-\S+(?:\s+\S+)?)*\s+\S+\s+(\S+)/.exec(segment);
+      const destinationIsHead = named === null || /^\+?(?:HEAD|@)(?::|$)/.test(named[1]);
+      return destinationIsHead && PROTECTED_BRANCHES.has(branch);
     },
     reason:
       'Pushing straight to a protected branch skips the pull request, so no CI gate and no reviewer ever sees the change. Push your task branch and open a pull request.',
@@ -275,6 +283,21 @@ export const RULES = [
     pattern: /\bgh\s+api\b[^\n]*\/pulls\/\d+\/merge\b/,
     reason:
       'Merging a pull request through the API bypasses the same gate gh pr merge is blocked by.',
+  },
+  {
+    id: 'trunk-write-api',
+    // SCP-000 review S17/M4. Blocking `gh pr merge` and the pull-request merge
+    // endpoint left two other API routes that write the trunk directly and
+    // raise no pull request at all:
+    //
+    //   gh api -X POST /repos/o/r/merges -f base=main -f head=feature
+    //   gh api -X PATCH /repos/o/r/git/refs/heads/main -f sha=...
+    //
+    // The second is the API spelling of a force push.
+    pattern:
+      /\bgh\s+api\b[^\n]*(\/merges\b|\/git\/refs\/heads\/(?:main|master|production|release)\b)/,
+    reason:
+      'This writes a protected branch through the API, with no pull request and no CI gate. Open a pull request instead.',
   },
 ];
 

@@ -40,7 +40,11 @@ export const FORBIDDEN_PATHS = [
   { pattern: /\.(pem|key|p12|pfx|jks|keystore)$/, reason: 'a private key or keystore' },
   { pattern: /(^|\/)id_(rsa|dsa|ecdsa|ed25519)$/, reason: 'an SSH private key' },
   { pattern: /(^|\/)auth\.json$/, reason: 'Composer credentials' },
-  { pattern: /(^|\/)\.npmrc$/, reason: 'npm credentials' },
+  // `.npmrc` is deliberately NOT here. This repository tracks one, and it holds
+  // pnpm resolution settings and no credentials - so a path rule on it blocked
+  // every commit that touched it, measured in the SCP-000 S15 sweep. What is
+  // actually dangerous is an auth token inside it, and that is a content rule
+  // in CREDENTIAL_SHAPES, which catches it in any file rather than only this one.
   { pattern: /\.dump$|\.sql\.gz$/, reason: 'a database dump, which contains customer data' },
 ];
 
@@ -52,6 +56,12 @@ export const CREDENTIAL_SHAPES = [
   { name: 'Google API key', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/ },
   { name: 'Slack token', pattern: /\bxox[baprs]-[A-Za-z0-9-]{10,}/ },
   { name: 'Stripe secret key', pattern: /\bsk_(live|test)_[A-Za-z0-9]{20,}/ },
+  {
+    // Replaces the `.npmrc` path rule: this is the thing that made an .npmrc
+    // dangerous, and it is caught wherever it appears.
+    name: 'npm auth token',
+    pattern: /\b_auth(?:Token)?\s*=\s*\S{8,}/,
+  },
   {
     name: 'JSON web token',
     pattern: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/,
@@ -128,6 +138,12 @@ export const EXACT_MARKERS = [
   'changeme',
   'scp_test',
   'change_me_in_local',
+  // Well-known joke credentials, used as fixtures precisely because everyone
+  // recognises them as fake. `hunter2` is in this repository's own redaction
+  // test, where the point of the file is to contain a fake password.
+  'hunter2',
+  'correcthorsebatterystaple',
+  's3cr3t',
 ];
 
 /** Kept as the union, so anything importing the old name still sees the list. */
@@ -145,6 +161,61 @@ const startsWithMarker = (value) =>
     const next = value.charAt(marker.length);
     return next === '' || !/[a-z0-9]/.test(next);
   });
+
+/**
+ * Does this value look like a literal credential, as opposed to an expression,
+ * a version or an ordinary word?
+ *
+ * SCP-000 review S15/H1 measured 33 false findings across 24 of this
+ * repository's own files. Every one of them failed on the *value*, not the key:
+ *
+ *   foreach ($x as $key => $value)   an expression
+ *   key={item.id}                    an expression
+ *   path-key: 3.1.1                  a version
+ *   artisan key:generate             a word
+ *
+ * The reviewer's suggested remedy was to make all content rules advisory. That
+ * would also stop blocking `MAIL_PASSWORD=<a real value>`, which fix round 2
+ * had just closed as S2 - trading one HIGH for another. Grading by value shape
+ * keeps both: an expression, a version or a bare word is never blocked, and a
+ * mixed-class literal still is.
+ *
+ * Anything this rejects is still reported as advisory, so nothing goes unseen.
+ */
+export const looksLikeCredentialValue = (value) => {
+  const candidate = String(value).trim();
+  if (candidate.length < 6) return false;
+
+  // An expression, interpolation or template - not a literal.
+  if (/^[$%@{<(\[]/.test(candidate)) return false;
+  // A version or any pure number.
+  if (/^[\d.]+$/.test(candidate)) return false;
+  // One ordinary word, in any case: `generate`, `value`, `true`, `SAMEORIGIN`.
+  if (/^[A-Za-z]+$/.test(candidate)) return false;
+  // A dotted or dashed identifier with no digits: `path.to.thing`, `no-referrer`.
+  if (/^[A-Za-z]+(?:[.\-_][A-Za-z]+)*$/.test(candidate)) return false;
+
+  // Markers of code, shell, templating or a regular expression, anywhere in the
+  // value rather than only at the front. Measured against this repository, this
+  // is what the remaining false positives all had in common:
+  //
+  //   key: composer-${{ runner.os }}          a GitHub Actions cache key
+  //   sed 's|^APP_KEY=.*|APP_KEY=...|'        a sed expression
+  //   'validate_csrf_token' => Class::class   a PHP class constant
+  //   grep -qE '^APP_KEY=base64:.+'           a regex
+  //   const key = segment.replace(/~1/g, ...) JavaScript
+  //
+  // None of these characters appears in a generated credential - with the
+  // deliberate exception of `/` and `+`, which base64 uses, so neither is here.
+  if (/\$\{|\{\{|\}\}|::|->|=>|[()|*\\]|\.\*|\.\+/.test(candidate)) return false;
+
+  // What is left has to mix classes the way generated secrets do: letters with
+  // digits, or letters with punctuation that is not just a separator.
+  const hasLetter = /[A-Za-z]/.test(candidate);
+  const hasDigit = /\d/.test(candidate);
+  const hasSymbol = /[^A-Za-z0-9]/.test(candidate);
+  return hasLetter && (hasDigit || hasSymbol);
+};
 
 export const looksLikePlaceholder = (value) => {
   const lower = String(value).toLowerCase();
@@ -184,17 +255,62 @@ export const looksLikePlaceholder = (value) => {
  */
 const FIXTURE_FILES = new Set(['.claude/hooks/selftest.mjs', '.claude/hooks/guard-secrets.mjs']);
 
-const isFixtureFile = (path) => FIXTURE_FILES.has(String(path).replace(/\\/g, '/').trim());
+/**
+ * Directories whose whole job is to write about credentials.
+ *
+ * SCP-000 review H2: the exemption covered the two hook files and not
+ * `.claude/reviews/`, so a review report could not quote the string it was
+ * reporting on - and the traceability gate requires those reports to exist.
+ * Both reports in the second review pass were blocked by this. The task ledger
+ * is here for the same reason: it quotes the findings.
+ *
+ * Only *content* scanning is skipped. The path rules still apply, so a real
+ * `.env` or `.pem` under either directory is still refused.
+ */
+const FIXTURE_PREFIXES = ['.claude/reviews/', '.claude/tasks/'];
 
+const isFixtureFile = (path) => {
+  const file = String(path).replace(/\\/g, '/').trim();
+  return FIXTURE_FILES.has(file) || FIXTURE_PREFIXES.some((prefix) => file.startsWith(prefix));
+};
+
+/**
+ * @returns {{ blocking: string[], advisory: string[] }}
+ *
+ * SCP-000 review S15/H1, and the reason the return shape is split in two.
+ *
+ * The widened key matching refused 24 of this repository's own files over 33
+ * findings, none of them a credential: `foreach ($x as $key => $value)`, a
+ * React `key` prop, `path-key: 3.1.1`, the documented `artisan key:generate`
+ * command, the shared idempotency-key constant. The block was `exit 2`, and its
+ * own message recommended weakening the pattern.
+ *
+ * Both reviewers rated that HIGH, and the reasoning is what settled the design:
+ * the expected outcome of a guard that blocks ordinary work is not noise, it is
+ * the removal of the guard - either the pattern gets weakened, or people commit
+ * outside the tool it hooks. Either way S1 and S2 come back.
+ *
+ * So the rules are now graded by how certain they are:
+ *
+ *   blocking  a forbidden path, or a shape that is a credential and nothing
+ *             else (private key block, `gh?_` token, AKIA, AIza, xox, sk_live,
+ *             JWT). These have no plausible innocent reading.
+ *   advisory  the generic `key = value` heuristic. Reported, never blocking,
+ *             because it cannot tell a secret from a loop variable.
+ *
+ * The security reviewer named this exact split as what would move the finding
+ * to MEDIUM.
+ */
 export const scanDiff = ({ names = [], diff = '' }) => {
-  const findings = [];
+  const blocking = [];
+  const advisory = [];
 
   for (const path of names) {
     const file = String(path).trim();
     if (file === '') continue;
     for (const rule of FORBIDDEN_PATHS) {
       if (rule.pattern.test(file)) {
-        findings.push(`${file}  -  ${rule.reason} must never be committed`);
+        blocking.push(`${file}  -  ${rule.reason} must never be committed`);
       }
     }
   }
@@ -214,7 +330,7 @@ export const scanDiff = ({ names = [], diff = '' }) => {
 
     for (const shape of CREDENTIAL_SHAPES) {
       if (shape.pattern.test(added)) {
-        findings.push(`${currentFile}  -  looks like a ${shape.name}`);
+        blocking.push(`${currentFile}  -  looks like a ${shape.name}`);
       }
     }
 
@@ -222,13 +338,13 @@ export const scanDiff = ({ names = [], diff = '' }) => {
     // 2 is the credential word, 3 is the value.
     const assignment = ASSIGNMENT.exec(added);
     if (assignment && !looksLikePlaceholder(assignment[3])) {
-      findings.push(
-        `${currentFile}  -  ${assignment[2]} is assigned a value that does not look like a placeholder`,
-      );
+      const finding = `${currentFile}  -  ${assignment[2]} is assigned a value that does not look like a placeholder`;
+      // Graded, not all-or-nothing: see looksLikeCredentialValue.
+      (looksLikeCredentialValue(assignment[3]) ? blocking : advisory).push(finding);
     }
   }
 
-  return [...new Set(findings)];
+  return { blocking: [...new Set(blocking)], advisory: [...new Set(advisory)] };
 };
 
 const git = (args) => {
@@ -308,27 +424,47 @@ const main = async () => {
   // immediately, so both skipped the scan entirely.
   if (!/\bgit\b[^\n]*\bcommit\b/.test(command)) process.exit(0);
 
-  // SCP-000 review S1, the defect that mattered most. PreToolUse fires BEFORE
-  // the shell runs, so for `git add -A && git commit ...` nothing is staged
-  // yet and `git diff --cached` is empty - the scan ran, saw nothing, and the
-  // commit went through with the credential in it. Whenever the command will
-  // stage something, look at the working tree instead of the index.
-  const stages =
-    /\bgit\b[^\n]*\s(?:add|stage)\b/.test(command) ||
-    /\s--all\b|\s-[A-Za-z]*a[A-Za-z]*(\s|$)/.test(command);
+  // Two defects, one cause: the index is not a reliable picture of what a
+  // commit will contain.
+  //
+  // SCP-000 review S1, the one that mattered most: PreToolUse fires BEFORE the
+  // shell runs, so for `git add -A && git commit ...` nothing is staged yet,
+  // `git diff --cached` is empty, and the scan saw nothing while the commit
+  // went through with the credential in it.
+  // SCP-000 review S16/M5: `git commit <path>` and `git commit -- <path>` commit
+  // that path directly without touching the index, so the index scan saw
+  // nothing. Measured: the same credential in the same file committed silently
+  // with a pathspec and was blocked with `git add -A`. Rather than parse a
+  // pathspec out of a shell string - which is where S1 and S5 came from - both
+  // views are scanned and the findings unioned. That is affordable now that
+  // blocking is limited to forbidden paths and unmistakable shapes, so a wider
+  // look cannot produce a wider false block.
+  const index = scanIndex();
+  const worktree = scanWorkingTree();
 
-  const findings = stages ? scanWorkingTree() : scanIndex();
+  const blocking = [...new Set([...index.blocking, ...worktree.blocking])];
+  const advisory = [...new Set([...index.advisory, ...worktree.advisory])];
 
-  if (findings.length === 0) process.exit(0);
+  if (advisory.length > 0) {
+    process.stderr.write(
+      'Note from .claude/hooks/guard-secrets.mjs - not blocking:\n\n' +
+        advisory.map((finding) => `  ${finding}`).join('\n') +
+        '\n\nThe generic key=value heuristic cannot tell a secret from a loop\n' +
+        'variable, so it only reports. Look, and if one of these is real, remove\n' +
+        'it before committing.\n',
+    );
+  }
+
+  if (blocking.length === 0) process.exit(0);
 
   process.stderr.write(
     'Blocked by .claude/hooks/guard-secrets.mjs\n\n' +
-      'This commit appears to contain a credential. A secret in git history stays\n' +
-      'in every clone and fork, so it is refused rather than reported.\n\n' +
-      findings.map((finding) => `  ${finding}`).join('\n') +
-      '\n\nIf every one of these is a placeholder, the pattern needs widening in\n' +
-      '.claude/hooks/guard-secrets.mjs - fix it there, in review, rather than\n' +
-      'bypassing the check.\n',
+      'This commit contains a forbidden path or an unmistakable credential. A\n' +
+      'secret in git history stays in every clone and fork, so it is refused.\n\n' +
+      blocking.map((finding) => `  ${finding}`).join('\n') +
+      '\n\nRemove it from the change. These rules match forbidden file types and\n' +
+      'token shapes that have no innocent reading, so if one has fired wrongly,\n' +
+      'that is a defect in the rule - raise it rather than working around it.\n',
   );
   process.exit(2);
 };

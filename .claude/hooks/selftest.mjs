@@ -121,6 +121,26 @@ const MUST_BLOCK = [
 // guard-protected-ops: must be allowed. Every one of these is a command this
 // repository actually runs.
 // ---------------------------------------------------------------------------
+// SCP-000 review S17/M4: four spellings reached the trunk because the rule
+// matched a bare branch name and a missing branch argument, and nothing covered
+// the two API routes that write a ref directly.
+const MUST_BLOCK_S17 = [
+  ['git push origin refs/heads/main', 'feature/x', 'push-to-protected'],
+  ['git push origin HEAD:refs/heads/main', 'feature/x', 'push-to-protected'],
+  ['git push -u origin HEAD', 'main', 'push-to-protected'],
+  ['git push origin HEAD', 'production', 'push-to-protected'],
+  [
+    'gh api -X POST /repos/o/r/merges -f base=main -f head=feature/x',
+    'feature/x',
+    'trunk-write-api',
+  ],
+  [
+    'gh api -X PATCH /repos/o/r/git/refs/heads/main -f sha=deadbeef',
+    'feature/x',
+    'trunk-write-api',
+  ],
+];
+
 const MUST_ALLOW = [
   ['git status --short', 'feature/x'],
   ['git add -A', 'feature/x'],
@@ -177,7 +197,7 @@ const MUST_ALLOW = [
 ];
 
 console.log('guard-protected-ops.mjs');
-for (const [command, branch, expectedId] of MUST_BLOCK) {
+for (const [command, branch, expectedId] of [...MUST_BLOCK, ...MUST_BLOCK_S17]) {
   const rule = evaluate(command, branch);
   check(`blocks: ${command}`, rule?.id ?? null, expectedId);
 }
@@ -266,8 +286,63 @@ const secretCases = [
 ];
 
 for (const [label, input] of secretCases) {
-  check(`blocks: ${label}`, scanDiff(input).length > 0, true);
+  check(`blocks: ${label}`, scanDiff(input).blocking.length > 0, true);
 }
+
+// ---------------------------------------------------------------------------
+// guard-secrets, SCP-000 review S15/H1: this repository's own lines.
+//
+// These are the exact shapes the S15 sweep measured - 33 findings across 24
+// files, none of them a credential. Every one must be free of a *blocking*
+// finding. They are asserted here rather than only measured, because the defect
+// existed in the first place for want of a test that read real files.
+// ---------------------------------------------------------------------------
+const MUST_NOT_BLOCK = [
+  ['php foreach key', 'foreach ($items as $key => $value) {'],
+  ['react key prop', '<li key={item.id}>{item.name}</li>'],
+  ['lockfile version', '      path-key: 3.1.1'],
+  ['documented artisan command', 'php artisan key:generate --show'],
+  ['actions cache key', "          key: composer-${{ runner.os }}-${{ hashFiles('x') }}"],
+  ['sed over APP_KEY', "sed -i 's|^APP_KEY=.*|APP_KEY=base64:Y2hhbmdlbWU|' .env"],
+  ['grep for APP_KEY', "if ! grep -qE '^APP_KEY=base64:.+' .env; then"],
+  ['php class constant', "    'validate_csrf_token' => ValidateCsrfToken::class,"],
+  ['javascript key variable', "  const key = segment.replace(/~1/g, '/');"],
+  ['security header', "    'Referrer-Policy' => 'no-referrer',"],
+  ['tracked .npmrc has no credential', 'resolution-mode=highest'],
+  ['redaction test fixture', "$this->redactor->redact([$key => 'hunter2']);"],
+];
+
+for (const [label, line] of MUST_NOT_BLOCK) {
+  const result = scanDiff({ names: ['x'], diff: asDiff('x', line) });
+  check(`does not block: ${label}`, result.blocking.join(' / ') || 'nothing', 'nothing');
+}
+
+// ---------------------------------------------------------------------------
+// guard-secrets, SCP-000 review H2: a review report has to be able to quote the
+// string it is reporting on, and the traceability gate requires those reports
+// to exist. Both reports in the second pass were blocked by this.
+// ---------------------------------------------------------------------------
+const EXEMPT_PATHS = [
+  '.claude/reviews/SCP-000/security-review.md',
+  '.claude/reviews/SCP-000/code-review.md',
+  '.claude/tasks/SCP-000.md',
+];
+
+for (const path of EXEMPT_PATHS) {
+  const result = scanDiff({
+    names: [path],
+    diff: asDiff(path, 'the guard refuses `GH=gho_16C7e42F292c6912E7710c838347Ae178B4a` here'),
+  });
+  check(`report may quote a token: ${path}`, result.blocking.join(' / ') || 'nothing', 'nothing');
+}
+
+// A forbidden PATH under an exempt directory is still refused: the exemption is
+// for prose about credentials, not for carrying one.
+check(
+  'exempt directory still refuses a real .env',
+  scanDiff({ names: ['.claude/reviews/SCP-000/.env'], diff: '' }).blocking.length > 0,
+  true,
+);
 
 // ---------------------------------------------------------------------------
 // guard-secrets: must be allowed. Taken from this repository.
@@ -356,8 +431,8 @@ const cleanCases = [
 ];
 
 for (const [label, input] of cleanCases) {
-  const findings = scanDiff(input);
-  check(`allows: ${label}`, findings.length === 0 ? true : findings.join(' / '), true);
+  const { blocking } = scanDiff(input);
+  check(`allows: ${label}`, blocking.length === 0 ? true : blocking.join(' / '), true);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
