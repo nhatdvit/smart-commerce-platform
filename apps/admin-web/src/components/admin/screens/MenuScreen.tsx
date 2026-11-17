@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { money } from '@/lib/money';
 
 import { useAdminData } from '../AdminDataProvider';
+import { FoodIcon, IconCalendar, IconPlus } from '../icons';
 import { PageHeading } from '../primitives';
 
 export function MenuScreen() {
@@ -28,14 +29,14 @@ export function MenuScreen() {
         actions={
           <>
             <button type="button" className="btn" onClick={() => notifyAction('schedule')}>
-              ◷ Lịch thực đơn
+              <IconCalendar size={15} /> Lịch thực đơn
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={() => openModal({ kind: 'add-product' })}
             >
-              ＋ Thêm món mới
+              <IconPlus size={15} /> Thêm món mới
             </button>
           </>
         }
@@ -65,7 +66,9 @@ export function MenuScreen() {
       <div className="product-grid">
         {visible.map((product) => (
           <article className="product-card" key={product.id}>
-            <div className="food-thumb">{product.emoji}</div>
+            <div className="food-thumb">
+              <FoodIcon name={product.icon} size={32} />
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <h3>{product.name}</h3>
               <p>{product.cat}</p>

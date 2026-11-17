@@ -1,6 +1,7 @@
 'use client';
 
 import { useAdminData } from '../AdminDataProvider';
+import { IconPlus, IconScissors, IconTicket } from '../icons';
 import { Metric, PageHeading } from '../primitives';
 
 export function PromotionsScreen() {
@@ -18,7 +19,7 @@ export function PromotionsScreen() {
             className="btn btn-primary"
             onClick={() => openModal({ kind: 'add-coupon' })}
           >
-            ＋ Tạo mã ưu đãi
+            <IconPlus size={15} /> Tạo mã ưu đãi
           </button>
         }
       />
@@ -31,7 +32,9 @@ export function PromotionsScreen() {
           {coupons.map((coupon) => (
             <div className="coupon" key={coupon.code}>
               <div>
-                <strong>✂ {coupon.code}</strong>
+                <strong>
+                  <IconScissors size={15} /> {coupon.code}
+                </strong>
                 <small>{coupon.desc}</small>
                 <small>
                   Đã dùng {coupon.used}/{coupon.limit} lượt
@@ -55,7 +58,7 @@ export function PromotionsScreen() {
           <Metric
             title="Lượt sử dụng"
             value={totalUses}
-            icon="◇"
+            icon={<IconTicket size={18} />}
             color="#fff3d9"
             foot="Tổng lượt dùng mã demo"
           />

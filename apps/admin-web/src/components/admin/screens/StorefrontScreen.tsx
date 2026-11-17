@@ -1,6 +1,7 @@
 'use client';
 
 import { useAdminData } from '../AdminDataProvider';
+import { FoodIcon, IconCart, IconEye, IconStorefront } from '../icons';
 import { PageHeading } from '../primitives';
 
 const THEME_ROWS: readonly (readonly [string, string])[] = [
@@ -31,7 +32,7 @@ export function StorefrontScreen() {
               notify('Đây là bản xem trước mini. Storefront thực tế là ứng dụng riêng.')
             }
           >
-            ◉ Xem bản xem trước
+            <IconEye size={15} /> Xem bản xem trước
           </button>
         }
       />
@@ -78,8 +79,12 @@ export function StorefrontScreen() {
           </div>
           <div className="preview">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15 }}>
-              <strong>🥐 Bữa Sáng Phú Quý</strong>
-              <span>🛒</span>
+              <strong>
+                <IconStorefront size={15} /> Bữa Sáng Phú Quý
+              </strong>
+              <span>
+                <IconCart size={15} />
+              </span>
             </div>
             <div className="preview-hero">
               <small>BỮA SÁNG ĐỦ ĐẦY</small>
@@ -91,9 +96,15 @@ export function StorefrontScreen() {
               <small>Đặt trước · Nhận đúng giờ</small>
             </div>
             <div className="preview-categories">
-              <span>🥖 Bánh mì</span>
-              <span>🍚 Xôi</span>
-              <span>☕ Đồ uống</span>
+              <span>
+                <FoodIcon name="banh-mi" size={13} /> Bánh mì
+              </span>
+              <span>
+                <FoodIcon name="xoi" size={13} /> Xôi
+              </span>
+              <span>
+                <FoodIcon name="drink" size={13} /> Đồ uống
+              </span>
             </div>
           </div>
           <p className="notice">

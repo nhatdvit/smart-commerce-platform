@@ -144,11 +144,36 @@ so the palette is unchanged. Requested by the product owner.
 **Visual effect:** intended — one coherent monochrome icon set instead of mixed
 emoji. Shapes and positions follow the design; only the rendering changed.
 
-One trap worth recording: the alignment rules for these icons are appended at
-the end of the stylesheet, **after** the media queries. Setting `display` on
-`.header-cart` or `.login` there silently beat the design's `display:none`
-below 760px and brought both back on mobile. They are aligned with
-`vertical-align` instead, and the stylesheet carries a comment saying why.
+The admin app got the same treatment, from the same set: the sidebar, topbar,
+metric tiles, page-action buttons, coupon cards and the product thumbnails that
+were food emoji. `DemoProduct.emoji` / `DemoReward.emoji` became
+`icon: FoodIconName`, so a product is tagged with a category rather than with a
+character. The two apps now share one visual language.
+
+One trap, hit once and worth recording: the alignment rules for these icons are
+appended at the end of each stylesheet, **after** the media queries. Setting
+`display` on `.header-cart` or `.login` there silently beat the storefront
+design's `display:none` below 760px and brought both back on mobile. They are
+aligned with `vertical-align` instead. The admin stylesheet was written with the
+same constraint from the start — nothing in its appended block sets `display` on
+`.icon-button`, `.menu-toggle`, `.close-nav`, `.crumb` children, `.live-pill`,
+`.overlay` or `.sidebar` — and both files carry a comment saying why.
+
+### 9. The ☕ watermark on the admin welcome card
+
+The design decorated that card with `content:'☕'` at 135px and 7% opacity — a
+giant emoji watermark, and on Windows a full-colour one. Replaced with a soft
+radial bloom in the same position and weight.
+
+**Visual effect:** intended — the same quiet highlight, without the clip art.
+
+### 10. Two pieces of dashboard copy
+
+`"Chào buổi sáng! ☀️"` was a fixed greeting regardless of the actual time, and
+`"Hôm nay bán thật đắt hàng nhé! 🥐"` read as filler. They are now
+`"Tổng quan hôm nay"` and `"Bắt đầu ca sáng"`. Requested by the product owner as
+part of making the screens look designed rather than generated; the rest of the
+Vietnamese copy is the client's voice and is untouched.
 
 ### 9. Storefront search and the cart drawer are React-controlled
 

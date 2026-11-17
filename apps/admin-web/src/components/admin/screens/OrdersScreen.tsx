@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ORDER_STATUS_LABELS } from '@/data/admin-demo';
 
 import { useAdminData } from '../AdminDataProvider';
+import { IconDownload } from '../icons';
 import { OrdersTable, PageHeading } from '../primitives';
 
 const STATUS_FILTERS = ['all', 'waiting', 'preparing', 'ready', 'done', 'cancelled'] as const;
@@ -38,7 +39,7 @@ export function OrdersScreen() {
             className="btn"
             onClick={() => notify('Xuất file sẽ được triển khai khi kết nối API Laravel.')}
           >
-            ↓ Xuất danh sách
+            <IconDownload size={15} /> Xuất danh sách
           </button>
         }
       />

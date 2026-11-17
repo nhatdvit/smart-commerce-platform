@@ -6,6 +6,16 @@ import { BESTSELLER_COUNTS, REVENUE_CHART, WEEKDAY_LABELS } from '@/data/admin-d
 import { money } from '@/lib/money';
 
 import { useAdminData } from '../AdminDataProvider';
+import {
+  FoodIcon,
+  IconChevronDown,
+  IconClock,
+  IconHeart,
+  IconMenuBook,
+  IconReceipt,
+  IconStar,
+  IconTrendUp,
+} from '../icons';
 import { Metric, OrdersTable, PageHeading } from '../primitives';
 
 export function DashboardScreen() {
@@ -14,15 +24,15 @@ export function DashboardScreen() {
   return (
     <>
       <PageHeading
-        title="Chào buổi sáng! ☀️"
+        title="Tổng quan hôm nay"
         description="Theo dõi hoạt động kinh doanh và chuẩn bị đơn hàng hôm nay."
         actions={
           <>
             <Link className="btn" href="/menu">
-              ▧ Quản lý thực đơn
+              <IconMenuBook size={15} /> Quản lý thực đơn
             </Link>
             <Link className="btn btn-primary" href="/orders">
-              ▤ Xem đơn hàng
+              <IconReceipt size={15} /> Xem đơn hàng
             </Link>
           </>
         }
@@ -30,7 +40,7 @@ export function DashboardScreen() {
 
       <div className="welcome">
         <div>
-          <h2>Hôm nay bán thật đắt hàng nhé! 🥐</h2>
+          <h2>Bắt đầu ca sáng</h2>
           <p>
             Bạn có <b>{pendingCount} đơn đang chờ xác nhận</b>. Hãy kiểm tra để khách nhận bữa sáng
             đúng giờ.
@@ -45,7 +55,7 @@ export function DashboardScreen() {
         <Metric
           title="Doanh thu hôm nay"
           value="1.285.000đ"
-          icon="↗"
+          icon={<IconTrendUp size={18} />}
           color="#fff3d9"
           foot={
             <>
@@ -56,7 +66,7 @@ export function DashboardScreen() {
         <Metric
           title="Tổng đơn hàng"
           value="48 đơn"
-          icon="▤"
+          icon={<IconReceipt size={18} />}
           color="#e9f0ff"
           foot={
             <>
@@ -67,14 +77,14 @@ export function DashboardScreen() {
         <Metric
           title="Đơn chờ xử lý"
           value={`${pendingCount} đơn`}
-          icon="◷"
+          icon={<IconClock size={18} />}
           color="#fff0e9"
           foot="Cần xác nhận sớm"
         />
         <Metric
           title="Khách hàng quay lại"
           value="67%"
-          icon="♡"
+          icon={<IconHeart size={18} />}
           color="#e9f8f0"
           foot={
             <>
@@ -89,7 +99,7 @@ export function DashboardScreen() {
           <div className="panel-title">
             <h3>Doanh thu 7 ngày gần đây</h3>
             <button type="button" onClick={() => notifyAction('demo')}>
-              7 ngày gần nhất ⌄
+              7 ngày gần nhất <IconChevronDown size={13} />
             </button>
           </div>
           <div className="chart-wrap">
@@ -113,12 +123,16 @@ export function DashboardScreen() {
 
         <section className="panel">
           <div className="panel-title">
-            <h3>⭐ Món bán chạy</h3>
+            <h3>
+              <IconStar size={15} /> Món bán chạy
+            </h3>
             <Link href="/menu">Xem tất cả →</Link>
           </div>
           {products.slice(0, 4).map((product, index) => (
             <div className="popular" key={product.id}>
-              <div className="food-thumb">{product.emoji}</div>
+              <div className="food-thumb">
+                <FoodIcon name={product.icon} />
+              </div>
               <div className="popular-info">
                 <strong>{product.name}</strong>
                 <small>{BESTSELLER_COUNTS[index]} lượt bán hôm nay</small>

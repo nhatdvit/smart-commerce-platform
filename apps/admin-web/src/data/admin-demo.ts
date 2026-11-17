@@ -8,6 +8,8 @@
  * Promotion and Loyalty endpoints land - this file is the only seam to change.
  */
 
+import type { FoodIconName } from '@/components/admin/icons';
+
 export type OrderStatus = 'waiting' | 'preparing' | 'ready' | 'done' | 'cancelled';
 
 export interface DemoOrder {
@@ -25,7 +27,8 @@ export interface DemoProduct {
   readonly id: number;
   readonly name: string;
   readonly cat: string;
-  readonly emoji: string;
+  /** Thumbnail stand-in for product photography. */
+  readonly icon: FoodIconName;
   /** Integer đồng. */
   readonly price: number;
   /** Portions still sellable today. */
@@ -44,7 +47,7 @@ export interface DemoCoupon {
 export interface DemoReward {
   readonly name: string;
   readonly points: number;
-  readonly emoji: string;
+  readonly icon: FoodIconName;
   readonly claimed: number;
 }
 
@@ -138,7 +141,7 @@ export const INITIAL_PRODUCTS: readonly DemoProduct[] = [
     id: 1,
     name: 'Bánh mì pate trứng',
     cat: 'Bánh mì',
-    emoji: '🥖',
+    icon: 'banh-mi',
     price: 20000,
     stock: 42,
     capacity: 60,
@@ -147,7 +150,7 @@ export const INITIAL_PRODUCTS: readonly DemoProduct[] = [
     id: 2,
     name: 'Bánh mì pate xá xíu',
     cat: 'Bánh mì',
-    emoji: '🥪',
+    icon: 'banh-mi',
     price: 28000,
     stock: 18,
     capacity: 45,
@@ -156,28 +159,28 @@ export const INITIAL_PRODUCTS: readonly DemoProduct[] = [
     id: 3,
     name: 'Bánh mì gà nướng',
     cat: 'Bánh mì',
-    emoji: '🥙',
+    icon: 'banh-mi',
     price: 25000,
     stock: 6,
     capacity: 40,
   },
-  { id: 4, name: 'Xôi gà xé', cat: 'Xôi', emoji: '🍚', price: 30000, stock: 22, capacity: 35 },
-  { id: 5, name: 'Phở bò', cat: 'Bún / Phở', emoji: '🍜', price: 40000, stock: 12, capacity: 30 },
+  { id: 4, name: 'Xôi gà xé', cat: 'Xôi', icon: 'xoi', price: 30000, stock: 22, capacity: 35 },
+  { id: 5, name: 'Phở bò', cat: 'Bún / Phở', icon: 'pho', price: 40000, stock: 12, capacity: 30 },
   {
     id: 6,
     name: 'Cà phê sữa đá',
     cat: 'Đồ uống',
-    emoji: '☕',
+    icon: 'drink',
     price: 18000,
     stock: 80,
     capacity: 100,
   },
-  { id: 7, name: 'Trà tắc', cat: 'Đồ uống', emoji: '🍹', price: 15000, stock: 52, capacity: 80 },
+  { id: 7, name: 'Trà tắc', cat: 'Đồ uống', icon: 'drink', price: 15000, stock: 52, capacity: 80 },
   {
     id: 8,
     name: 'Combo sáng năng lượng',
     cat: 'Combo',
-    emoji: '🥐',
+    icon: 'combo',
     price: 39000,
     stock: 15,
     capacity: 25,
@@ -190,9 +193,9 @@ export const INITIAL_COUPONS: readonly DemoCoupon[] = [
 ];
 
 export const INITIAL_REWARDS: readonly DemoReward[] = [
-  { name: 'Cà phê sữa đá', points: 150, emoji: '☕', claimed: 12 },
-  { name: 'Bánh mì pate trứng', points: 200, emoji: '🥖', claimed: 7 },
-  { name: 'Xôi gà xé', points: 250, emoji: '🍚', claimed: 4 },
+  { name: 'Cà phê sữa đá', points: 150, icon: 'drink', claimed: 12 },
+  { name: 'Bánh mì pate trứng', points: 200, icon: 'banh-mi', claimed: 7 },
+  { name: 'Xôi gà xé', points: 250, icon: 'xoi', claimed: 4 },
 ];
 
 export const DEMO_CUSTOMERS: readonly DemoCustomer[] = [

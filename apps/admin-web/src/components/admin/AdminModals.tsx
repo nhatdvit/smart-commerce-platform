@@ -6,6 +6,7 @@ import { ORDER_STATUS_LABELS, nextOrderStatus } from '@/data/admin-demo';
 import { money } from '@/lib/money';
 
 import { useAdminData } from './AdminDataProvider';
+import { FoodIcon } from './icons';
 
 interface ModalFrameProps {
   readonly title: string;
@@ -90,7 +91,7 @@ function ProductModal({ productId }: { productId: number }) {
       }
     >
       <p>
-        {product.emoji} {product.name} · {product.cat}
+        <FoodIcon name={product.icon} size={16} /> {product.name} · {product.cat}
       </p>
       <label className="form-field">
         <span>Giá bán (VND)</span>
@@ -138,7 +139,8 @@ function StockModal({ productId }: { productId: number }) {
       }
     >
       <p>
-        {product.emoji} {product.name} · Đã chuẩn bị {product.capacity} suất
+        <FoodIcon name={product.icon} size={16} /> {product.name} · Đã chuẩn bị {product.capacity}{' '}
+        suất
       </p>
       <label className="form-field">
         <span>Số suất còn bán</span>

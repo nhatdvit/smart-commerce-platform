@@ -55,7 +55,8 @@ export function PageHeading({ title, description, actions }: PageHeadingProps) {
 interface MetricProps {
   readonly title: string;
   readonly value: ReactNode;
-  readonly icon: string;
+  /** Line icon for the tinted square; see ./icons. */
+  readonly icon: ReactNode;
   /** Tint behind the icon, from the design's metric palette. */
   readonly color: string;
   readonly foot: ReactNode;

@@ -6,6 +6,14 @@ import { Fragment, type ReactNode } from 'react';
 
 import { useAdminData } from './AdminDataProvider';
 import { AdminModals } from './AdminModals';
+import {
+  IconBell,
+  IconChevronDown,
+  IconClose,
+  IconHamburger,
+  IconHelp,
+  IconStorefront,
+} from './icons';
 import { NAV_GROUPS, navLabelFor } from './nav';
 
 /**
@@ -42,17 +50,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
               onClick={closeSidebar}
               aria-label="Đóng menu"
             >
-              ✕
+              <IconClose size={18} />
             </button>
           </div>
 
           <div className="store-card">
-            <span className="store-avatar">🥐</span>
+            <span className="store-avatar">
+              <IconStorefront size={22} />
+            </span>
             <div>
               <strong>Bữa Sáng Phú Quý</strong>
               <small>● Đang hoạt động</small>
             </div>
-            <span>⌄</span>
+            <span>
+              <IconChevronDown size={16} />
+            </span>
           </div>
 
           <nav>
@@ -66,7 +78,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
                     className={item.href === pathname ? 'active' : undefined}
                     onClick={closeSidebar}
                   >
-                    <span>{item.icon}</span> {item.label}
+                    <span>
+                      <item.Icon size={18} />
+                    </span>{' '}
+                    {item.label}
                     {item.badge === 'pending' ? <em>{pendingCount}</em> : null}
                   </Link>
                 ))}
@@ -75,7 +90,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="sidebar-bottom">
-            <div className="help-icon">?</div>
+            <div className="help-icon">
+              <IconHelp size={18} />
+            </div>
             <div>
               <strong>Cần hỗ trợ?</strong>
               <small>Hướng dẫn sử dụng</small>
@@ -98,7 +115,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 aria-label="Mở menu"
                 onClick={() => setSidebarOpen(true)}
               >
-                ☰
+                <IconHamburger size={20} />
               </button>
               <div className="crumb">
                 Quản trị cửa hàng <span>/</span> <strong>{navLabelFor(pathname)}</strong>
@@ -114,7 +131,8 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 title="Thông báo"
                 onClick={() => notify(`Bạn có ${pendingCount} đơn hàng đang chờ xác nhận.`)}
               >
-                ♧<b className="notify-dot" />
+                <IconBell size={19} />
+                <b className="notify-dot" />
               </button>
               <div className="user-avatar">AD</div>
             </div>

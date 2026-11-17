@@ -4,6 +4,7 @@ import { DEMO_CUSTOMERS } from '@/data/admin-demo';
 import { money } from '@/lib/money';
 
 import { useAdminData } from '../AdminDataProvider';
+import { IconDownload, IconStar } from '../icons';
 import { PageHeading } from '../primitives';
 
 export function CustomersScreen() {
@@ -20,7 +21,7 @@ export function CustomersScreen() {
             className="btn"
             onClick={() => notify('Xuất file sẽ được triển khai khi kết nối API Laravel.')}
           >
-            ↓ Xuất danh sách
+            <IconDownload size={15} /> Xuất danh sách
           </button>
         }
       />
@@ -49,7 +50,9 @@ export function CustomersScreen() {
                   <td>{customer.orders}</td>
                   <td>{money(customer.spent)}</td>
                   <td>
-                    <strong>⭐ {customer.points}</strong>
+                    <strong>
+                      <IconStar size={13} /> {customer.points}
+                    </strong>
                   </td>
                   <td>
                     <span className="status ready">{customer.tier}</span>

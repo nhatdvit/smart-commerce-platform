@@ -3,6 +3,7 @@
 import { money } from '@/lib/money';
 
 import { useAdminData } from '../AdminDataProvider';
+import { IconClock, IconReceipt, IconTrendUp, IconWallet } from '../icons';
 import { Metric, PageHeading } from '../primitives';
 
 export function PaymentsScreen() {
@@ -15,7 +16,7 @@ export function PaymentsScreen() {
         description="Theo dõi tiền mặt và chuyển khoản VietQR của cửa hàng."
         actions={
           <button type="button" className="btn" onClick={() => notifyAction('bank')}>
-            ▣ Tài khoản ngân hàng
+            <IconWallet size={15} /> Tài khoản ngân hàng
           </button>
         }
       />
@@ -24,16 +25,28 @@ export function PaymentsScreen() {
         <Metric
           title="Đã thu hôm nay"
           value="1.285.000đ"
-          icon="↗"
+          icon={<IconTrendUp size={18} />}
           color="#e9f8f0"
           foot="Dữ liệu minh họa"
         />
-        <Metric title="Tiền mặt" value="485.000đ" icon="▤" color="#fff3d9" foot="Đã ghi nhận" />
-        <Metric title="Chuyển khoản" value="800.000đ" icon="▣" color="#e9f0ff" foot="Đã xác nhận" />
+        <Metric
+          title="Tiền mặt"
+          value="485.000đ"
+          icon={<IconReceipt size={18} />}
+          color="#fff3d9"
+          foot="Đã ghi nhận"
+        />
+        <Metric
+          title="Chuyển khoản"
+          value="800.000đ"
+          icon={<IconWallet size={18} />}
+          color="#e9f0ff"
+          foot="Đã xác nhận"
+        />
         <Metric
           title="Chờ đối soát"
           value="3 giao dịch"
-          icon="◷"
+          icon={<IconClock size={18} />}
           color="#fff0e9"
           foot="Xác nhận thủ công"
         />

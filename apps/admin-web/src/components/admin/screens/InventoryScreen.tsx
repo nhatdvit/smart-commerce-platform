@@ -1,6 +1,7 @@
 'use client';
 
 import { useAdminData } from '../AdminDataProvider';
+import { FoodIcon, IconAlert, IconBoxes, IconCheckCircle, IconPlus, IconXCircle } from '../icons';
 import { Metric, PageHeading } from '../primitives';
 
 export function InventoryScreen() {
@@ -22,7 +23,7 @@ export function InventoryScreen() {
             className="btn btn-primary"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-            ＋ Cập nhật số suất
+            <IconPlus size={15} /> Cập nhật số suất
           </button>
         }
       />
@@ -31,22 +32,28 @@ export function InventoryScreen() {
         <Metric
           title="Tổng suất chuẩn bị"
           value={totalCapacity}
-          icon="▥"
+          icon={<IconBoxes size={18} />}
           color="#e9f0ff"
           foot="Tất cả món hôm nay"
         />
         <Metric
           title="Suất còn bán"
           value={totalStock}
-          icon="◉"
+          icon={<IconCheckCircle size={18} />}
           color="#e9f8f0"
           foot="Cập nhật theo demo"
         />
-        <Metric title="Món sắp hết" value={lowCount} icon="!" color="#fff0e9" foot="Cần bổ sung" />
+        <Metric
+          title="Món sắp hết"
+          value={lowCount}
+          icon={<IconAlert size={18} />}
+          color="#fff0e9"
+          foot="Cần bổ sung"
+        />
         <Metric
           title="Món hết hàng"
           value={emptyCount}
-          icon="×"
+          icon={<IconXCircle size={18} />}
           color="#f2f3f6"
           foot="Kiểm tra thực đơn"
         />
@@ -67,7 +74,7 @@ export function InventoryScreen() {
             <div className="inventory-item" key={product.id}>
               <div>
                 <strong>
-                  {product.emoji} {product.name}
+                  <FoodIcon name={product.icon} size={16} /> {product.name}
                 </strong>
                 <small>{product.cat}</small>
               </div>

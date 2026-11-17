@@ -183,7 +183,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
         return;
       }
-      setRewards((current) => [...current, { name, points, emoji: '🎁', claimed: 0 }]);
+      setRewards((current) => [...current, { name, points, icon: 'gift', claimed: 0 }]);
       setModal(null);
       notify('Đã thêm quà demo');
     },
