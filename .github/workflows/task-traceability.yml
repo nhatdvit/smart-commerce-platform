@@ -1,0 +1,51 @@
+# Is this change traceable from requirement to review?
+#
+# Separate from ci.yml on purpose. ci.yml asks whether the code is correct and
+# runs on both push and pull_request; this asks whether anyone can tell what was
+# asked for, approved, tested and reviewed, which is only a meaningful question
+# once a pull request exists.
+#
+# It judges whether the evidence exists, not whether the code is good. No script
+# can honestly decide the second.
+#
+# Make it a required status check in branch protection, or it is advice. See
+# docs/workflow/quality-gates.md - as of writing, main has no protection at all.
+
+name: Task traceability
+
+on:
+  pull_request:
+    # `edited` so renaming a pull request re-checks that the title still names
+    # the task.
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: traceability-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  traceability:
+    name: Task traceability
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The check diffs against origin/<base> and reads every commit subject
+          # on the branch, so a shallow clone would make both impossible.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+
+      - name: Task record, evidence and findings
+        env:
+          # Passed as an environment variable rather than interpolated into the
+          # command: a pull request title is attacker-controlled text, and
+          # ${{ }} inside a run block would put it straight into a shell.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node infra/scripts/check-task-traceability.mjs
