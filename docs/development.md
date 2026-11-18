@@ -195,6 +195,49 @@ optional and sits behind the `storage` profile, so it never blocks the stack.
 Development uses the local filesystem disk; set `MINIO_IMAGE` to a registry you
 can read if you need S3 semantics locally.
 
+### `pnpm audit` fails on picomatch
+
+The `Dependency audit` job runs `pnpm audit --audit-level high`. One advisory is
+suppressed, in `pnpm.auditConfig.ignoreGhsas` in the root `package.json`:
+
+- **GHSA-fc5q-39xc-vjpf** — picomatch, ReDoS through single-branch repeated
+  extglobs, high.
+
+It is suppressed because it cannot be fixed, not because it is inconvenient.
+The advisory reports `first_patched_version: null`, and `4.0.7` — the newest
+version picomatch has ever published — is itself inside the vulnerable range
+`<=4.0.7`. There is nothing to upgrade to, and no `overrides` entry would help,
+because an override needs a safe version to point at. It reaches the tree only
+as a transitive devDependency of `admin-web`:
+
+```text
+tailwindcss 3.4.17 > chokidar > anymatch   > picomatch
+tailwindcss 3.4.17 > sucrase  > tinyglobby > picomatch
+```
+
+Both paths are build-time only; picomatch is never bundled into a shipped page.
+The attack needs an attacker-controlled glob pattern, and the only globs that
+reach it here are the `content` paths written in `tailwind.config`.
+
+This advisory was published on 2026-10-19 and started failing CI on 2026-11-18
+without any dependency change on our side — `pnpm audit` resolves against the
+live advisory database, so a green run does not stay green.
+
+**Check whether it can be removed:**
+
+```bash
+npm view picomatch versions --json
+```
+
+If a version above `4.0.7` exists, run `pnpm update picomatch -r`, delete the
+`pnpm.auditConfig` block and its note in `package.json`, and confirm that
+`pnpm audit --audit-level high` still exits 0.
+
+Keep the list at this one entry. The gate stays at `--audit-level high` for
+everything else: `pnpm audit --audit-level moderate` still exits 1 on the four
+moderate advisories, which is the intended behaviour and shows the check itself
+is not disabled.
+
 ## Resetting everything
 
 ```bash

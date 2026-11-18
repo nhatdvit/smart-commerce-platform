@@ -9,7 +9,8 @@
     "pnpm": ">=10.0.0"
   },
   "comments": {
-    "scope": "These scripts cover the JavaScript workspaces only. The Laravel API is managed by Composer and artisan, never by pnpm or Turborepo (CLAUDE.md §4). The api:* scripts below are thin docker compose wrappers, not dependency management."
+    "scope": "These scripts cover the JavaScript workspaces only. The Laravel API is managed by Composer and artisan, never by pnpm or Turborepo (CLAUDE.md §4). The api:* scripts below are thin docker compose wrappers, not dependency management.",
+    "auditConfig": "pnpm.auditConfig.ignoreGhsas below suppresses exactly one advisory, and only because it cannot be fixed by upgrading. GHSA-fc5q-39xc-vjpf (picomatch, ReDoS through single-branch repeated extglobs, high) reports first_patched_version: null, and 4.0.7 - the newest version ever published - is itself inside the vulnerable range <=4.0.7. There is no safe version to move to and no override that would help. It reaches us only as a transitive devDependency of admin-web: tailwindcss 3.4.17 > chokidar > anymatch > picomatch, and tailwindcss 3.4.17 > sucrase > tinyglobby > picomatch. Both are build-time only and never bundled into a shipped page. The attack needs an attacker-controlled glob pattern; the only globs reaching picomatch here are the content paths written in tailwind.config. The gate stays at --audit-level high for everything else, so this list must hold one entry and no more. Delete it the moment picomatch publishes a patched release - docs/development.md says how to check."
   },
   "scripts": {
     "build": "turbo run build",
@@ -43,5 +44,12 @@
     "turbo": "2.3.3",
     "typescript": "5.7.2",
     "yaml": "^2.9.1"
+  },
+  "pnpm": {
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-fc5q-39xc-vjpf"
+      ]
+    }
   }
 }
