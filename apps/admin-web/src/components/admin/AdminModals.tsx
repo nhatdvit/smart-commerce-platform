@@ -4,6 +4,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { ORDER_STATUS_LABELS, nextOrderStatus } from '@/data/admin-demo';
 import { money } from '@/lib/money';
+import {
+  EMPTY_PRODUCT_FORM,
+  FOOD_ICON_CHOICES,
+  MAX_CATEGORY_LENGTH,
+  MAX_NAME_LENGTH,
+  productFormValues,
+  validateProductForm,
+  type ProductFieldErrors,
+  type ProductFormValues,
+} from '@/lib/product-form';
 
 import { useAdminData } from './AdminDataProvider';
 import { FoodIcon } from './icons';
@@ -12,14 +22,18 @@ interface ModalFrameProps {
   readonly title: string;
   readonly children: ReactNode;
   readonly actions?: ReactNode;
+  /**
+   * When given, the body is a real `<form>` and Enter submits it. Without it
+   * the dialog stays a plain div, as the read-only dialogs want.
+   */
+  readonly onSubmit?: () => void;
 }
 
-function ModalFrame({ title, children, actions }: ModalFrameProps) {
+function ModalFrame({ title, children, actions, onSubmit }: ModalFrameProps) {
   const { closeModal } = useAdminData();
 
-  return (
-    <div className="modal">
-      <h2>{title}</h2>
+  const body = (
+    <>
       {children}
       <div className="modal-actions">
         <button type="button" className="btn" onClick={closeModal}>
@@ -27,7 +41,54 @@ function ModalFrame({ title, children, actions }: ModalFrameProps) {
         </button>
         {actions}
       </div>
+    </>
+  );
+
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <h2>{title}</h2>
+      {onSubmit === undefined ? (
+        body
+      ) : (
+        // noValidate: the browser's own bubbles would pre-empt the inline
+        // messages, and cannot express the cross-field rule stock <= capacity.
+        <form
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          {body}
+        </form>
+      )}
     </div>
+  );
+}
+
+interface FieldProps {
+  readonly label: string;
+  readonly error?: string;
+  readonly hint?: string;
+  readonly children: ReactNode;
+}
+
+/** A labelled input with room for one validation message underneath. */
+function Field({ label, error, hint, children }: FieldProps) {
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      {children}
+      {error === undefined ? (
+        hint === undefined ? null : (
+          <em className="field-hint">{hint}</em>
+        )
+      ) : (
+        <em className="field-error" role="alert">
+          {error}
+        </em>
+      )}
+    </label>
   );
 }
 
@@ -67,51 +128,182 @@ function OrderModal({ orderId }: { orderId: string }) {
   );
 }
 
-function ProductModal({ productId }: { productId: number }) {
-  const { products, saveProduct } = useAdminData();
-  const product = products.find((candidate) => candidate.id === productId);
-  const [price, setPrice] = useState(String(product?.price ?? 0));
-  const [stock, setStock] = useState(String(product?.stock ?? 0));
+/**
+ * Add and edit are the same dialog: `productId` undefined means add.
+ *
+ * One component on purpose - the previous pair had drifted to the point where
+ * editing could change a price and a portion count while adding was a
+ * placeholder with no fields at all.
+ */
+function ProductFormModal({ productId }: { readonly productId?: number }) {
+  const { products, createProduct, updateProduct } = useAdminData();
+  const editing = products.find((candidate) => candidate.id === productId);
+  const [values, setValues] = useState<ProductFormValues>(() =>
+    editing === undefined ? EMPTY_PRODUCT_FORM : productFormValues(editing),
+  );
+  const [errors, setErrors] = useState<ProductFieldErrors>({});
 
+  // An id that matches nothing: the item was deleted under the open dialog.
+  // Render nothing rather than quietly re-adding it as a new one on save.
+  if (productId !== undefined && editing === undefined) {
+    return null;
+  }
+
+  const categories = [...new Set(products.map((product) => product.cat))];
+
+  function set<K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) {
+    setValues((current) => ({ ...current, [key]: value }));
+    // Clear that field's message as soon as it is touched; the next submit
+    // decides whether it comes back.
+    setErrors((current) => {
+      if (current[key] === undefined) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[key];
+
+      return next;
+    });
+  }
+
+  function submit() {
+    const result = validateProductForm(values, products, productId);
+    if (!result.ok) {
+      setErrors(result.errors);
+
+      return;
+    }
+    if (productId === undefined) {
+      createProduct(result.draft);
+    } else {
+      updateProduct(productId, result.draft);
+    }
+  }
+
+  return (
+    <ModalFrame
+      title={productId === undefined ? 'Thêm món mới' : 'Chỉnh sửa món ăn'}
+      onSubmit={submit}
+      actions={
+        <button type="submit" className="btn btn-primary">
+          {productId === undefined ? 'Thêm vào thực đơn' : 'Lưu thay đổi'}
+        </button>
+      }
+    >
+      <Field label="Tên món" error={errors.name}>
+        <input
+          autoFocus
+          maxLength={MAX_NAME_LENGTH}
+          placeholder="VD: Bánh mì chả lụa"
+          aria-invalid={errors.name !== undefined}
+          value={values.name}
+          onChange={(event) => set('name', event.target.value)}
+        />
+      </Field>
+
+      <Field
+        label="Danh mục"
+        error={errors.cat}
+        hint="Chọn danh mục có sẵn hoặc nhập tên danh mục mới."
+      >
+        <input
+          list="product-categories"
+          maxLength={MAX_CATEGORY_LENGTH}
+          placeholder="VD: Bánh mì"
+          aria-invalid={errors.cat !== undefined}
+          value={values.cat}
+          onChange={(event) => set('cat', event.target.value)}
+        />
+      </Field>
+      <datalist id="product-categories">
+        {categories.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+
+      <Field label="Ảnh minh hoạ">
+        <select
+          value={values.icon}
+          onChange={(event) =>
+            // Narrowed through the choice list rather than cast, so an
+            // unexpected value cannot reach FoodIcon as a valid name.
+            set(
+              'icon',
+              FOOD_ICON_CHOICES.find((choice) => choice.value === event.target.value)?.value ??
+                values.icon,
+            )
+          }
+        >
+          {FOOD_ICON_CHOICES.map((choice) => (
+            <option key={choice.value} value={choice.value}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Giá bán (VND)" error={errors.price}>
+        <input
+          type="number"
+          min={0}
+          step={1000}
+          placeholder="25000"
+          aria-invalid={errors.price !== undefined}
+          value={values.price}
+          onChange={(event) => set('price', event.target.value)}
+        />
+      </Field>
+
+      <div className="form-row">
+        <Field label="Số suất chuẩn bị" error={errors.capacity}>
+          <input
+            type="number"
+            min={0}
+            placeholder="40"
+            aria-invalid={errors.capacity !== undefined}
+            value={values.capacity}
+            onChange={(event) => set('capacity', event.target.value)}
+          />
+        </Field>
+        <Field label="Số suất còn lại" error={errors.stock}>
+          <input
+            type="number"
+            min={0}
+            placeholder="40"
+            aria-invalid={errors.stock !== undefined}
+            value={values.stock}
+            onChange={(event) => set('stock', event.target.value)}
+          />
+        </Field>
+      </div>
+    </ModalFrame>
+  );
+}
+
+function DeleteProductModal({ productId }: { readonly productId: number }) {
+  const { products, deleteProduct } = useAdminData();
+  const product = products.find((candidate) => candidate.id === productId);
   if (product === undefined) {
     return null;
   }
 
   return (
     <ModalFrame
-      title="Chỉnh sửa món ăn"
+      title="Xoá món khỏi thực đơn"
       actions={
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => saveProduct(product.id, Number(price), Number(stock))}
-        >
-          Lưu thay đổi
+        <button type="button" className="btn btn-danger" onClick={() => deleteProduct(product.id)}>
+          Xoá món
         </button>
       }
     >
       <p>
-        <FoodIcon name={product.icon} size={16} /> {product.name} · {product.cat}
+        Xoá <b>{product.name}</b> khỏi thực đơn? Món đang còn {product.stock}/{product.capacity}{' '}
+        suất.
       </p>
-      <label className="form-field">
-        <span>Giá bán (VND)</span>
-        <input
-          type="number"
-          min={0}
-          step={1000}
-          value={price}
-          onChange={(event) => setPrice(event.target.value)}
-        />
-      </label>
-      <label className="form-field">
-        <span>Số suất còn lại</span>
-        <input
-          type="number"
-          min={0}
-          value={stock}
-          onChange={(event) => setStock(event.target.value)}
-        />
-      </label>
+      <p className="notice">
+        Bản demo xoá ngay trong bộ nhớ. Khi nối API, món đã từng được đặt sẽ được ngừng bán thay vì
+        xoá khỏi cơ sở dữ liệu: đơn cũ phải giữ nguyên bản chụp món đã bán (CLAUDE.md mục 6).
+      </p>
     </ModalFrame>
   );
 }
@@ -318,17 +510,18 @@ export function AdminModals() {
       }}
     >
       {modal.kind === 'order' ? <OrderModal orderId={modal.orderId} /> : null}
-      {modal.kind === 'product' ? <ProductModal productId={modal.productId} /> : null}
+      {modal.kind === 'product' ? (
+        <ProductFormModal key={modal.productId} productId={modal.productId} />
+      ) : null}
+      {modal.kind === 'delete-product' ? (
+        <DeleteProductModal key={modal.productId} productId={modal.productId} />
+      ) : null}
       {modal.kind === 'stock' ? <StockModal productId={modal.productId} /> : null}
       {modal.kind === 'add-coupon' ? <AddCouponModal /> : null}
       {modal.kind === 'add-reward' ? <AddRewardModal /> : null}
       {modal.kind === 'loyalty-settings' ? <LoyaltySettingsModal /> : null}
       {modal.kind === 'coupon-detail' ? <CouponDetailModal code={modal.code} /> : null}
-      {modal.kind === 'add-product' ? (
-        <ModalFrame title="Thêm món mới">
-          <p>Đây là bản demo quản trị. Chức năng thêm món đầy đủ sẽ được kết nối Laravel API.</p>
-        </ModalFrame>
-      ) : null}
+      {modal.kind === 'add-product' ? <ProductFormModal /> : null}
     </div>
   );
 }

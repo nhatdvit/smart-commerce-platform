@@ -297,6 +297,11 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      # Resolves against the live advisory database, so a job that passed
+      # yesterday can fail today with no change on our side. One advisory that
+      # has no patched release is suppressed in the root package.json, under
+      # pnpm.auditConfig.ignoreGhsas; the reasoning and the check for retiring
+      # it are in docs/development.md. The output still reports it as ignored.
       - name: pnpm audit
         run: pnpm audit --audit-level high
 

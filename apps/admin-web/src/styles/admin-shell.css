@@ -121,3 +121,89 @@ nav button > span {
 .brand strong {
   letter-spacing: 0.2px;
 }
+
+/*
+ * Port addition (edit 5).
+ *
+ * The delivered design had one "Chỉnh sửa →" link per menu card and a
+ * placeholder "add" dialog, so it never styled a destructive control, an
+ * inline validation message or a two-column field row. These are those three,
+ * built from the design's own tokens (--red for destructive, --line for field
+ * borders, the 11px/700 label scale) rather than a new palette.
+ *
+ * As with the blocks above: no `display` rule here touches anything the
+ * breakpoints toggle, because this file's media queries are further up.
+ */
+
+/* Destructive action, for a dialog's confirm button. */
+.btn-danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+/* The row of links at the foot of a menu card. */
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.card-actions .table-action {
+  padding: 0;
+}
+
+.table-action.danger {
+  color: var(--red);
+}
+
+/* Count above the grid: "6/8 món". */
+.result-count {
+  margin: 0 0 13px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Price and portions sit side by side; stacks under the 760px breakpoint. */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.form-row .form-field {
+  margin: 15px 0 0;
+}
+
+.field-error,
+.field-hint {
+  display: block;
+  margin-top: 7px;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.field-error {
+  color: var(--red);
+}
+
+.field-hint {
+  color: var(--muted);
+}
+
+/* Border follows the message, so the field is not flagged by colour alone. */
+.form-field input[aria-invalid='true'],
+.form-field select[aria-invalid='true'] {
+  border-color: var(--red);
+  background: #fffafa;
+}
+
+@media (max-width: 760px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

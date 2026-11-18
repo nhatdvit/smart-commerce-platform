@@ -22,6 +22,7 @@ import {
   type DemoProduct,
   type DemoReward,
 } from '@/data/admin-demo';
+import type { ProductDraft } from '@/lib/product-form';
 
 export type AdminModal =
   | { readonly kind: 'order'; readonly orderId: string }
@@ -31,6 +32,7 @@ export type AdminModal =
   | { readonly kind: 'add-reward' }
   | { readonly kind: 'loyalty-settings' }
   | { readonly kind: 'add-product' }
+  | { readonly kind: 'delete-product'; readonly productId: number }
   | { readonly kind: 'coupon-detail'; readonly code: string };
 
 interface AdminContextValue {
@@ -49,7 +51,9 @@ interface AdminContextValue {
   /** The design's catch-all for controls that are not wired to an API yet. */
   readonly notifyAction: (action: string) => void;
   readonly advanceOrder: (orderId: string) => void;
-  readonly saveProduct: (productId: number, price: number, stock: number) => void;
+  readonly createProduct: (draft: ProductDraft) => void;
+  readonly updateProduct: (productId: number, draft: ProductDraft) => void;
+  readonly deleteProduct: (productId: number) => void;
   readonly saveStock: (productId: number, stock: number) => void;
   readonly addCoupon: (code: string) => void;
   readonly addReward: (name: string, points: number) => void;
@@ -114,24 +118,48 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [orders, notify],
   );
 
-  const saveProduct = useCallback(
-    (productId: number, price: number, stock: number) => {
-      if (!Number.isInteger(price) || price < 0 || !Number.isInteger(stock) || stock < 0) {
-        notify('Giá và số suất phải là số nguyên không âm');
-
-        return;
-      }
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === productId
-            ? { ...product, price, stock, capacity: Math.max(product.capacity, stock) }
-            : product,
-        ),
-      );
+  /**
+   * Adds a menu item. The draft is already valid - `validateProductForm`
+   * owns the rules, including the duplicate-name check, so this only has to
+   * mint an id and store it.
+   */
+  const createProduct = useCallback(
+    (draft: ProductDraft) => {
+      setProducts((current) => [
+        ...current,
+        // Max+1 rather than length+1: deleting an item would otherwise hand
+        // the next one an id that is still in use.
+        { ...draft, id: current.reduce((top, product) => Math.max(top, product.id), 0) + 1 },
+      ]);
       setModal(null);
-      notify('Đã lưu món ăn (dữ liệu demo)');
+      notify(`Đã thêm "${draft.name}" vào thực đơn (dữ liệu demo)`);
     },
     [notify],
+  );
+
+  const updateProduct = useCallback(
+    (productId: number, draft: ProductDraft) => {
+      setProducts((current) =>
+        current.map((product) => (product.id === productId ? { ...product, ...draft } : product)),
+      );
+      setModal(null);
+      notify(`Đã lưu "${draft.name}" (dữ liệu demo)`);
+    },
+    [notify],
+  );
+
+  const deleteProduct = useCallback(
+    (productId: number) => {
+      // Read the name before the state updater runs, for the toast.
+      const removed = products.find((product) => product.id === productId);
+      if (removed === undefined) {
+        return;
+      }
+      setProducts((current) => current.filter((product) => product.id !== productId));
+      setModal(null);
+      notify(`Đã xoá "${removed.name}" khỏi thực đơn (dữ liệu demo)`);
+    },
+    [products, notify],
   );
 
   const saveStock = useCallback(
@@ -211,7 +239,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       notify,
       notifyAction,
       advanceOrder,
-      saveProduct,
+      createProduct,
+      updateProduct,
+      deleteProduct,
       saveStock,
       addCoupon,
       addReward,
@@ -230,7 +260,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       notify,
       notifyAction,
       advanceOrder,
-      saveProduct,
+      createProduct,
+      updateProduct,
+      deleteProduct,
       saveStock,
       addCoupon,
       addReward,
