@@ -184,6 +184,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CurrentUser'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -1548,6 +1550,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
     post:
       operationId: createAdminProduct
       tags: [Admin - Catalog]
@@ -1910,6 +1914,20 @@ components:
             request_id: 0f8d2c7a4b1e4f9a8c3d2e1f0a9b8c7d
             timestamp: '2026-11-11T02:14:07Z'
             path: /api/v1/carts/0193f0.../items
+    CsrfTokenMismatch:
+      description: |
+        The CSRF token is missing or stale. Any cookie-authenticated write can
+        answer this, not only the operations that list it: a session cookie
+        outliving its token is normal after a long-open tab.
+
+        The recovery is specific, which is why it has its own code rather than a
+        generic 403: fetch `GET /sanctum/csrf-cookie` again and retry the
+        request. Re-authenticating would not help.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
     RateLimited:
       description: Too many requests. Shed by the gateway or by a named Laravel limiter.
       headers:
@@ -2000,6 +2018,7 @@ components:
         - STORE_SCOPE_DENIED
         - RESOURCE_NOT_FOUND
         - METHOD_NOT_ALLOWED
+        - CSRF_TOKEN_MISMATCH
         - IDEMPOTENCY_KEY_REUSED
         - REQUEST_IN_PROGRESS
         - INVALID_STATE_TRANSITION
@@ -2289,6 +2308,20 @@ components:
         sort_order:
           type: integer
 
+    CategoryRef:
+      type: object
+      description: |
+        A category as carried by the thing that belongs to it, so a list screen
+        does not have to resolve every `category_id` against a second request.
+      required: [id, name, slug]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        slug:
+          type: string
+
     CategoryPage:
       allOf:
         - $ref: '#/components/schemas/PageMeta'
@@ -2400,6 +2433,11 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
+        category:
+          description: The same category, expanded. Null when uncategorised.
+          oneOf:
+            - $ref: '#/components/schemas/CategoryRef'
+            - type: 'null'
         name:
           type: string
         slug:
@@ -2417,6 +2455,15 @@ components:
         image_url:
           type: [string, 'null']
           format: uri
+        icon:
+          type: [string, 'null']
+          maxLength: 40
+          description: |
+            A display key the admin app resolves to a thumbnail, for a catalogue
+            that has no photography yet. Presentation only: it never affects
+            price, availability or what is sellable, and `image_url` supersedes
+            it once a real photo exists.
+          examples: ['banh-mi']
         attributes:
           $ref: '#/components/schemas/ProductAttributes'
         variants:
@@ -2446,9 +2493,19 @@ components:
       additionalProperties: false
       properties:
         category_id:
+          description: An existing category. Mutually exclusive with `category_name`.
           oneOf:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
+        category_name:
+          type: [string, 'null']
+          maxLength: 120
+          description: |
+            A category named rather than referenced: matched case-insensitively
+            within this store's catalogue and created when it does not exist
+            yet. The menu form lets staff type a category, and making the client
+            create one through a separate write first would be worse. Sending
+            both this and `category_id` is a 422.
         name:
           type: string
           minLength: 1
@@ -2465,6 +2522,10 @@ components:
         inventory_tracking:
           type: boolean
           default: true
+        icon:
+          type: [string, 'null']
+          maxLength: 40
+          pattern: '^[a-z0-9-]+$'
         attributes:
           $ref: '#/components/schemas/ProductAttributes'
         variants:
@@ -2521,6 +2582,13 @@ components:
             image_url:
               type: [string, 'null']
               format: uri
+            icon:
+              type: [string, 'null']
+              maxLength: 40
+            category:
+              oneOf:
+                - $ref: '#/components/schemas/CategoryRef'
+                - type: 'null'
             attributes:
               $ref: '#/components/schemas/ProductAttributes'
         variant:
@@ -2547,6 +2615,14 @@ components:
             Advisory: the authoritative check happens under a row lock at
             checkout, so a client must handle `OUT_OF_STOCK` even when this
             number looked sufficient.
+          x-provisional: true
+        daily_capacity:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            Portions prepared for today, the denominator of "8 of 30 left". Null
+            when this item is not counted. It is a plan, not a stock level:
+            `available_quantity` is what is left of it and may never exceed it.
           x-provisional: true
         sort_order:
           type: integer
@@ -2718,6 +2794,17 @@ components:
               is_available:
                 type: boolean
                 default: true
+              available_quantity:
+                type: [integer, 'null']
+                minimum: 0
+                x-provisional: true
+              daily_capacity:
+                type: [integer, 'null']
+                minimum: 0
+                description: |
+                  Omitted leaves today's counts as they are, so a menu edit does
+                  not silently reset a kitchen's portions.
+                x-provisional: true
               sort_order:
                 type: integer
               modifier_price_overrides:
@@ -2746,6 +2833,13 @@ components:
           description: |
             Today's remaining portions, or null to stop counting this item.
             Rejected when lower than what is already reserved.
+          x-provisional: true
+        daily_capacity:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            Portions prepared for today. Raised when more are cooked; omitted it
+            stays as it is. `available_quantity` may never exceed it.
           x-provisional: true
 
     CreateCartRequest:

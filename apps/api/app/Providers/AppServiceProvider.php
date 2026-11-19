@@ -16,6 +16,7 @@ use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
@@ -75,6 +76,7 @@ final class AppServiceProvider extends ServiceProvider
         }
 
         $this->configureAuthentication();
+        $this->configureResponses();
         $this->configureModels();
         $this->configureFactories();
         $this->configureRateLimiting();
@@ -93,6 +95,16 @@ final class AppServiceProvider extends ServiceProvider
         // produces the documented 401 envelope for every client, whatever
         // headers it sent.
         Authenticate::redirectUsing(static fn (): ?string => null);
+    }
+
+    private function configureResponses(): void
+    {
+        // The designed contract (docs/api/openapi.yaml) has no `data`
+        // envelope: GET /admin/menus/{menu} answers with the Menu object
+        // itself, and every list answers with {items, next_cursor, has_more}.
+        // Laravel wraps API Resources in `data` unless told otherwise, which
+        // would make every documented response wrong by one level.
+        JsonResource::withoutWrapping();
     }
 
     private function configureFactories(): void

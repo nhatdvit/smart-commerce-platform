@@ -11,7 +11,7 @@
  */
 
 import type { FoodIconName } from '@/components/admin/icons';
-import type { DemoProduct } from '@/data/admin-demo';
+import type { MenuProduct } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 
 /** Thumbnail choices, labelled for the dialog's select. */
@@ -38,7 +38,7 @@ export interface ProductFormValues {
 }
 
 /** A menu item that passed validation, ready to be stored. */
-export type ProductDraft = Omit<DemoProduct, 'id'>;
+export type ProductDraft = Omit<MenuProduct, 'id'>;
 
 export type ProductFieldErrors = Partial<Record<keyof ProductFormValues, string>>;
 
@@ -60,7 +60,7 @@ export const EMPTY_PRODUCT_FORM: ProductFormValues = {
   capacity: '',
 };
 
-export function productFormValues(product: DemoProduct): ProductFormValues {
+export function productFormValues(product: MenuProduct): ProductFormValues {
   return {
     name: product.name,
     cat: product.cat,
@@ -98,8 +98,8 @@ function parseWholeNumber(raw: string): number | undefined {
  */
 export function validateProductForm(
   values: ProductFormValues,
-  products: readonly DemoProduct[],
-  editingId?: number,
+  products: readonly MenuProduct[],
+  editingId?: string,
 ): ProductFormResult {
   const errors: ProductFieldErrors = {};
 

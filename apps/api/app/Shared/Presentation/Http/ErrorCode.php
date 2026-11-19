@@ -25,6 +25,15 @@ enum ErrorCode: string
     // 404
     case ResourceNotFound = 'RESOURCE_NOT_FOUND';
 
+    /**
+     * 419 - the cookie-authenticated flow's CSRF token is missing or stale.
+     *
+     * Its own code rather than a generic 403: the client's recovery is
+     * specific, and knowable only from the code. Fetch /sanctum/csrf-cookie
+     * again and retry; re-authenticating would not help.
+     */
+    case CsrfTokenMismatch = 'CSRF_TOKEN_MISMATCH';
+
     // 405
     case MethodNotAllowed = 'METHOD_NOT_ALLOWED';
 
@@ -56,6 +65,7 @@ enum ErrorCode: string
             self::Forbidden, self::StoreScopeDenied => 403,
             self::ResourceNotFound => 404,
             self::MethodNotAllowed => 405,
+            self::CsrfTokenMismatch => 419,
             self::IdempotencyKeyReused,
             self::RequestInProgress,
             self::InvalidStateTransition,

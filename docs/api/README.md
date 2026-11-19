@@ -14,8 +14,13 @@ orchestrators never depend on the business contract.
 | 404             | Not found, or not visible to this caller                          |
 | 405             | Method not allowed                                                |
 | 409             | Conflict: invalid transition, out of stock, idempotency key reuse |
+| 419             | CSRF token missing or stale on a cookie-authenticated write       |
 | 422             | Semantically invalid request that parsed correctly                |
 | 429             | Rate limited                                                      |
+
+A 419 is not an authentication failure: the session is fine, the token that
+proves the request came from the app is not. The client fetches
+`GET /sanctum/csrf-cookie` again and retries; signing in again would not help.
 
 ## Error body
 

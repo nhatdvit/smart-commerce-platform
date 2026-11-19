@@ -1,11 +1,11 @@
 /**
- * Demo data for the admin dashboard design.
+ * Demo data for the parts of the dashboard that have no API yet.
  *
- * Phase 01 exposes two operations on the API (`/health/*`); none of the 46
- * designed admin operations are built yet, so every figure on these screens is
- * illustrative sample data held in memory, exactly as the delivered prototype
- * was. Replace module by module as the Order, Catalog, Inventory, Payment,
- * Promotion and Loyalty endpoints land - this file is the only seam to change.
+ * The menu screen no longer reads from here: products and menus are real, and
+ * live in `@/lib/menu-api`. Orders, coupons, rewards and customers are still
+ * illustrative sample data held in memory, because the Order, Promotion and
+ * Loyalty endpoints are designed but not built. Replace each the same way as
+ * its module lands - delete its block here and point the provider at the API.
  */
 
 import type { FoodIconName } from '@/components/admin/icons';
@@ -21,20 +21,6 @@ export interface DemoOrder {
   readonly status: OrderStatus;
   readonly payment: string;
   readonly time: string;
-}
-
-export interface DemoProduct {
-  readonly id: number;
-  readonly name: string;
-  readonly cat: string;
-  /** Thumbnail stand-in for product photography. */
-  readonly icon: FoodIconName;
-  /** Integer đồng. */
-  readonly price: number;
-  /** Portions still sellable today. */
-  readonly stock: number;
-  /** Portions prepared today. */
-  readonly capacity: number;
 }
 
 export interface DemoCoupon {
@@ -133,57 +119,6 @@ export const INITIAL_ORDERS: readonly DemoOrder[] = [
     status: 'waiting',
     payment: 'Chuyển khoản',
     time: '08:15',
-  },
-];
-
-export const INITIAL_PRODUCTS: readonly DemoProduct[] = [
-  {
-    id: 1,
-    name: 'Bánh mì pate trứng',
-    cat: 'Bánh mì',
-    icon: 'banh-mi',
-    price: 20000,
-    stock: 42,
-    capacity: 60,
-  },
-  {
-    id: 2,
-    name: 'Bánh mì pate xá xíu',
-    cat: 'Bánh mì',
-    icon: 'banh-mi',
-    price: 28000,
-    stock: 18,
-    capacity: 45,
-  },
-  {
-    id: 3,
-    name: 'Bánh mì gà nướng',
-    cat: 'Bánh mì',
-    icon: 'banh-mi',
-    price: 25000,
-    stock: 6,
-    capacity: 40,
-  },
-  { id: 4, name: 'Xôi gà xé', cat: 'Xôi', icon: 'xoi', price: 30000, stock: 22, capacity: 35 },
-  { id: 5, name: 'Phở bò', cat: 'Bún / Phở', icon: 'pho', price: 40000, stock: 12, capacity: 30 },
-  {
-    id: 6,
-    name: 'Cà phê sữa đá',
-    cat: 'Đồ uống',
-    icon: 'drink',
-    price: 18000,
-    stock: 80,
-    capacity: 100,
-  },
-  { id: 7, name: 'Trà tắc', cat: 'Đồ uống', icon: 'drink', price: 15000, stock: 52, capacity: 80 },
-  {
-    id: 8,
-    name: 'Combo sáng năng lượng',
-    cat: 'Combo',
-    icon: 'combo',
-    price: 39000,
-    stock: 15,
-    capacity: 25,
   },
 ];
 

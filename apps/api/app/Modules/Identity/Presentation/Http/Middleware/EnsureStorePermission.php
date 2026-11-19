@@ -27,6 +27,15 @@ use Symfony\Component\HttpFoundation\Response;
  *   2. store context resolved - otherwise there is no object to authorize against;
  *   3. permission in that store - role alone is not enough; the grant has to
  *      apply to this store.
+ *
+ * Several permissions are ALL required. Where a route is open to either of two
+ * grants, they are written as alternatives in one argument:
+ *
+ *     ->middleware('store.can:menu.manage|kitchen.operate')
+ *
+ * which reads "menu.manage or kitchen.operate". Marking an item sold out is the
+ * case that needs it: it is the most-used action in a working kitchen and must
+ * not require a manager.
  */
 final class EnsureStorePermission
 {
@@ -58,8 +67,20 @@ final class EnsureStorePermission
 
         $storeId = $this->storeContext->require()->id;
 
-        foreach ($required as $permission) {
-            if (! $this->permissions->allows($user, $permission, $storeId)) {
+        foreach ($required as $requirement) {
+            $alternatives = explode('|', $requirement);
+
+            $satisfied = false;
+
+            foreach ($alternatives as $permission) {
+                if ($this->permissions->allows($user, trim($permission), $storeId)) {
+                    $satisfied = true;
+
+                    break;
+                }
+            }
+
+            if (! $satisfied) {
                 // The same answer whether the user lacks the permission or is
                 // not a member at all, so the response cannot be used to probe
                 // which stores exist or who staffs them.

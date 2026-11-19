@@ -79,12 +79,1199 @@
                     }
                 }
             }
+        },
+        "/admin/menus": {
+            "get": {
+                "operationId": "admin.menus.index",
+                "description": "A store has a handful of menus, so every one is returned, inside the\ndesigned page envelope: the shape stays the documented one even where\npagination has nothing to do.",
+                "summary": "Menus for this store",
+                "tags": [
+                    "AdminMenu"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        },
+                                        "next_cursor": {
+                                            "type": "null"
+                                        },
+                                        "has_more": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "items",
+                                        "next_cursor",
+                                        "has_more"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/admin/menus/{menu}": {
+            "get": {
+                "operationId": "admin.menus.show",
+                "tags": [
+                    "AdminMenu"
+                ],
+                "parameters": [
+                    {
+                        "name": "menu",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`MenuResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MenuResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "admin.menus.update",
+                "tags": [
+                    "AdminMenu"
+                ],
+                "parameters": [
+                    {
+                        "name": "menu",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReplaceMenuRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`MenuResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MenuResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/menu-items/{menuItem}/availability": {
+            "put": {
+                "operationId": "admin.menu-items.availability",
+                "tags": [
+                    "AdminMenuItem"
+                ],
+                "parameters": [
+                    {
+                        "name": "menuItem",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateMenuItemAvailabilityRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`MenuItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MenuItemResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/products": {
+            "get": {
+                "operationId": "admin.products.index",
+                "summary": "Master-data products, including drafts and archived ones",
+                "tags": [
+                    "AdminProduct"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "status[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "DRAFT",
+                                    "ACTIVE",
+                                    "ARCHIVED"
+                                ]
+                            },
+                            "maxItems": 3
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 120
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "has_more": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "items",
+                                        "next_cursor",
+                                        "has_more"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "admin.products.store",
+                "tags": [
+                    "AdminProduct"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveProductRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`ProductResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/products/{product}": {
+            "put": {
+                "operationId": "admin.products.update",
+                "tags": [
+                    "AdminProduct"
+                ],
+                "parameters": [
+                    {
+                        "name": "product",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveProductRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`ProductResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "operationId": "auth.login",
+                "tags": [
+                    "Session"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CurrentUserResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUserResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "operationId": "auth.logout",
+                "summary": "Idempotent: calling it twice, or with a session already gone, is not an error",
+                "tags": [
+                    "Session"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
         }
     },
     "components": {
+        "schemas": {
+            "CurrentUserResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "roles": {
+                        "type": "array",
+                        "items": []
+                    },
+                    "store_memberships": {
+                        "type": "array",
+                        "items": []
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "email",
+                    "phone",
+                    "roles",
+                    "store_memberships"
+                ],
+                "title": "CurrentUserResource"
+            },
+            "LoginRequest": {
+                "type": "object",
+                "description": "Validates the designed `LoginRequest`.\n\nThe password is never logged or echoed: bootstrap/app.php already lists it\namong the fields excluded from flashed input.",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 254
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Minimum length is a rule for CHOOSING a password, not for typing\none: enforcing it here would tell an attacker which guesses are\ntoo short to be real.",
+                        "maxLength": 255
+                    },
+                    "remember": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "email",
+                    "password"
+                ],
+                "title": "LoginRequest"
+            },
+            "MenuItemResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "product": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "slug": {
+                                "type": "string"
+                            },
+                            "description": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "image_url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "icon": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "category": {
+                                "type": [
+                                    "object",
+                                    "null"
+                                ],
+                                "properties": {
+                                    "id": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "slug": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name",
+                                    "slug"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "slug",
+                            "description",
+                            "image_url",
+                            "icon",
+                            "category"
+                        ]
+                    },
+                    "variant": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "sku": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "sku"
+                        ]
+                    },
+                    "price": {
+                        "type": "object",
+                        "description": "The store price, which overrides the variant default.",
+                        "properties": {
+                            "amount": {
+                                "type": "string"
+                            },
+                            "currency": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "amount",
+                            "currency"
+                        ]
+                    },
+                    "is_available": {
+                        "type": "boolean"
+                    },
+                    "available_quantity": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "daily_capacity": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "sort_order": {
+                        "type": "integer"
+                    },
+                    "modifier_groups": {
+                        "type": "array",
+                        "description": "Modifiers are designed but not built in this milestone.",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 0,
+                        "maxItems": 0
+                    }
+                },
+                "required": [
+                    "id",
+                    "product",
+                    "variant",
+                    "price",
+                    "is_available",
+                    "available_quantity",
+                    "daily_capacity",
+                    "sort_order",
+                    "modifier_groups"
+                ],
+                "title": "MenuItemResource"
+            },
+            "MenuResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "store_id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "DRAFT",
+                            "ACTIVE",
+                            "ARCHIVED"
+                        ]
+                    },
+                    "schedules": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 0,
+                        "maxItems": 0
+                    },
+                    "exceptions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 0,
+                        "maxItems": 0
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": []
+                    }
+                },
+                "required": [
+                    "id",
+                    "store_id",
+                    "name",
+                    "status",
+                    "schedules",
+                    "exceptions",
+                    "items"
+                ],
+                "title": "MenuResource"
+            },
+            "ProductResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "category_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "category": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "slug": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "slug"
+                        ]
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "DRAFT",
+                            "ACTIVE",
+                            "ARCHIVED"
+                        ]
+                    },
+                    "inventory_tracking": {
+                        "type": "boolean"
+                    },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "attributes": {
+                        "type": "object",
+                        "properties": {
+                            "ingredients": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "allergens": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "spice_level": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "tags": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            },
+                            "dietary": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "required": [
+                            "ingredients",
+                            "allergens",
+                            "spice_level",
+                            "tags",
+                            "dietary"
+                        ]
+                    },
+                    "variants": {
+                        "type": "array",
+                        "items": []
+                    },
+                    "modifier_groups": {
+                        "type": "array",
+                        "description": "Designed, not built in this milestone. An empty array is the\ntruthful answer: this product carries no modifier groups.",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 0,
+                        "maxItems": 0
+                    }
+                },
+                "required": [
+                    "id",
+                    "category_id",
+                    "category",
+                    "name",
+                    "slug",
+                    "description",
+                    "status",
+                    "inventory_tracking",
+                    "image_url",
+                    "icon",
+                    "attributes",
+                    "variants",
+                    "modifier_groups"
+                ],
+                "title": "ProductResource"
+            },
+            "ReplaceMenuRequest": {
+                "type": "object",
+                "description": "Validates `UpdateMenuRequest`: a full replacement of a menu.\n\nThe portion limits match the admin form's\n(`apps/admin-web/src/lib/product-form.ts`), and the price rule is the same\ndigits-only string rule the catalog uses - one definition of \"a price\", not\ntwo that can drift (CLAUDE.md section 6).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "DRAFT",
+                            "ACTIVE",
+                            "ARCHIVED"
+                        ]
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "uuid"
+                                },
+                                "variant_id": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                },
+                                "selling_price_amount": {
+                                    "type": "string",
+                                    "pattern": "^[0-9]+$",
+                                    "maxLength": 100000000
+                                },
+                                "is_available": {
+                                    "type": "boolean"
+                                },
+                                "available_quantity": {
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ],
+                                    "minimum": 0,
+                                    "maximum": 10000
+                                },
+                                "daily_capacity": {
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ],
+                                    "minimum": 0,
+                                    "maximum": 10000
+                                },
+                                "sort_order": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10000
+                                },
+                                "modifier_price_overrides": {
+                                    "type": "string",
+                                    "description": "Designed, not built. Silently dropping overrides would leave the\ncaller believing a price it never saved."
+                                }
+                            },
+                            "required": [
+                                "variant_id",
+                                "selling_price_amount"
+                            ]
+                        },
+                        "maxItems": 500
+                    },
+                    "schedules": {
+                        "type": "array",
+                        "description": "Schedules and date exceptions are designed but not stored yet.\nAccepting them would promise a menu window that nothing enforces.",
+                        "items": {
+                            "type": "string"
+                        },
+                        "maxItems": 0
+                    },
+                    "exceptions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "maxItems": 0
+                    }
+                },
+                "required": [
+                    "name",
+                    "status",
+                    "items",
+                    "schedules"
+                ],
+                "title": "ReplaceMenuRequest"
+            },
+            "SaveProductRequest": {
+                "type": "object",
+                "description": "Validates the `ProductRequest` payload for both create and update.\n\nOne class for both, because the designed contract has one request schema for\nboth and a rule that holds on create but not on update is not a rule.\n\nThese limits deliberately mirror the client-side rules in\n`apps/admin-web/src/lib/product-form.ts`. The client's copy exists to give\nimmediate feedback in the form; this one is the rule, because the server is\nthe only party that cannot be bypassed (CLAUDE.md section 6).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "slug": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "pattern": "^[a-z0-9-]+$",
+                        "maxLength": 160
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "DRAFT",
+                            "ACTIVE",
+                            "ARCHIVED"
+                        ]
+                    },
+                    "inventory_tracking": {
+                        "type": "boolean"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "pattern": "^[a-z0-9-]+$",
+                        "maxLength": 40
+                    },
+                    "category_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "Two ways to say which category, and sending both is a 422 rather\nthan a guess. The pair is checked again in the application layer,\nwhich is where the rule belongs for non-HTTP callers."
+                    },
+                    "category_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 120
+                    },
+                    "attributes": {
+                        "type": "object",
+                        "properties": {
+                            "ingredients": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "maxLength": 120
+                                },
+                                "maxItems": 60
+                            },
+                            "allergens": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "maxLength": 120
+                                },
+                                "maxItems": 40
+                            },
+                            "spice_level": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ],
+                                "minimum": 0,
+                                "maximum": 5
+                            },
+                            "tags": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "maxLength": 40
+                                },
+                                "maxItems": 20
+                            },
+                            "dietary": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string",
+                                    "enum": [
+                                        "VEGETARIAN",
+                                        "VEGAN",
+                                        "HALAL",
+                                        "GLUTEN_FREE"
+                                    ]
+                                },
+                                "maxItems": 10
+                            }
+                        }
+                    },
+                    "variants": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "format": "uuid"
+                                },
+                                "sku": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "maxLength": 64
+                                },
+                                "name": {
+                                    "type": "string",
+                                    "maxLength": 160
+                                },
+                                "base_price_amount": {
+                                    "type": "string",
+                                    "description": "Digits only, as a string. A JSON number cannot carry 64-bit dong\nsafely, and the digits-only pattern is what rejects a negative\nprice, \"1e3\" and \"12.50\" in one rule (CLAUDE.md section 6).",
+                                    "pattern": "^[0-9]+$",
+                                    "maxLength": 100000000
+                                },
+                                "status": {
+                                    "type": "string",
+                                    "enum": [
+                                        "DRAFT",
+                                        "ACTIVE",
+                                        "ARCHIVED"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "name",
+                                "base_price_amount",
+                                "status"
+                            ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                    },
+                    "modifier_group_ids": {
+                        "type": "string",
+                        "description": "Designed, not built. Accepting and discarding them would be worse\nthan refusing: the caller would believe the modifiers were saved."
+                    }
+                },
+                "required": [
+                    "name",
+                    "status",
+                    "variants"
+                ],
+                "title": "SaveProductRequest"
+            },
+            "UpdateMenuItemAvailabilityRequest": {
+                "type": "object",
+                "description": "Validates `UpdateMenuItemAvailabilityRequest`.\n\nThe sold-out switch is required; the portion counts are optional, and\n\"omitted\" is kept distinct from \"set to null\" so flipping the switch cannot\nwipe the kitchen's numbers.",
+                "properties": {
+                    "is_available": {
+                        "type": "boolean"
+                    },
+                    "available_quantity": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 10000
+                    },
+                    "daily_capacity": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 10000
+                    }
+                },
+                "required": [
+                    "is_available"
+                ],
+                "title": "UpdateMenuItemAvailabilityRequest"
+            }
+        },
         "responses": {
             "AuthenticationException": {
                 "description": "Unauthenticated",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Error overview."
+                                }
+                            },
+                            "required": [
+                                "message"
+                            ]
+                        }
+                    }
+                }
+            },
+            "ValidationException": {
+                "description": "Validation error",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Errors overview."
+                                },
+                                "errors": {
+                                    "type": "object",
+                                    "description": "A detailed description of each field that failed validation.",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "errors"
+                            ]
+                        }
+                    }
+                }
+            },
+            "AuthorizationException": {
+                "description": "Authorization error",
                 "content": {
                     "application/json": {
                         "schema": {

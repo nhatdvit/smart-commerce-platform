@@ -31,6 +31,42 @@ arch('the store domain layer is equally framework-free')
         'Illuminate\Support\Facades',
     ]);
 
+arch('the catalog domain layer is framework-free')
+    ->expect('App\Modules\Catalog\Domain')
+    ->not->toUse([
+        'Illuminate\Database\Eloquent\Model',
+        'Illuminate\Http\Request',
+        'Illuminate\Support\Facades',
+    ]);
+
+arch('the menu domain layer is framework-free')
+    ->expect('App\Modules\Menu\Domain')
+    ->not->toUse([
+        'Illuminate\Database\Eloquent\Model',
+        'Illuminate\Http\Request',
+        'Illuminate\Support\Facades',
+    ]);
+
+/*
+ * The one allowed direction between these two modules.
+ *
+ * Menu reads the catalog through Catalog's exported application contract and
+ * its DTO, never through its tables or its Eloquent models. Catalog knows
+ * nothing of Menu at all, which is what keeps a retail catalogue possible
+ * without a menu (CLAUDE.md sections 3 and 16).
+ */
+arch('the menu module reaches the catalog only through its exported contract')
+    ->expect('App\Modules\Menu')
+    ->not->toUse([
+        'App\Modules\Catalog\Infrastructure',
+        'App\Modules\Catalog\Domain',
+        'App\Modules\Catalog\Presentation',
+    ]);
+
+arch('the catalog module does not depend on the menu module')
+    ->expect('App\Modules\Catalog')
+    ->not->toUse('App\Modules\Menu');
+
 arch('shared domain code is framework-free')
     ->expect('App\Shared\Domain')
     ->not->toUse([
@@ -58,6 +94,22 @@ arch('enums are final by nature and models are explicitly final')
     ->classes()
     ->toBeFinal();
 
+arch('catalog and menu models are final too')
+    ->expect([
+        'App\Modules\Catalog\Infrastructure\Persistence\Model',
+        'App\Modules\Menu\Infrastructure\Persistence\Model',
+    ])
+    ->classes()
+    ->toBeFinal();
+
 arch('contracts are interfaces')
     ->expect('App\Modules\Identity\Application\Contract')
+    ->toBeInterfaces();
+
+arch('every module contract is an interface')
+    ->expect([
+        'App\Modules\Catalog\Application\Contract',
+        'App\Modules\Catalog\Domain\Contract',
+        'App\Modules\Menu\Domain\Contract',
+    ])
     ->toBeInterfaces();

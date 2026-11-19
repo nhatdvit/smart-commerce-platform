@@ -116,6 +116,14 @@ docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml e
 The gateway is the only published port. PostgreSQL and Redis bind to
 `127.0.0.1` in development and to nothing at all in production.
 
+Use the dashboard through the gateway at `http://admin.localhost:8080`, not
+through the Next.js port. The dashboard authenticates with a session cookie,
+which the browser only sends when the page and the API share an origin — which
+they do on the admin host and nowhere else. The demo seeder creates one staff
+account per role — `owner@example.test`, `manager@example.test`,
+`cashier@example.test`, `kitchen@example.test` — all with the password
+`password`, and only outside production.
+
 Optional monitoring:
 
 ```bash

@@ -207,3 +207,53 @@ nav button > span {
     gap: 0;
   }
 }
+
+/* ---------------------------------------------------------------- Sign in --
+ * Shown in place of the whole dashboard when there is no session. Deliberately
+ * plain: it exists so the staff screens are reachable, not as a designed
+ * login experience.
+ */
+.signin-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 380px;
+  display: grid;
+  gap: 10px;
+  padding: 28px;
+}
+
+.signin-card h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.signin-card p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.signin-card label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.signin-card input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+}
+
+.signin-card button {
+  margin-top: 6px;
+  justify-content: center;
+}

@@ -135,7 +135,7 @@ function OrderModal({ orderId }: { orderId: string }) {
  * editing could change a price and a portion count while adding was a
  * placeholder with no fields at all.
  */
-function ProductFormModal({ productId }: { readonly productId?: number }) {
+function ProductFormModal({ productId }: { readonly productId?: string }) {
   const { products, createProduct, updateProduct } = useAdminData();
   const editing = products.find((candidate) => candidate.id === productId);
   const [values, setValues] = useState<ProductFormValues>(() =>
@@ -280,7 +280,7 @@ function ProductFormModal({ productId }: { readonly productId?: number }) {
   );
 }
 
-function DeleteProductModal({ productId }: { readonly productId: number }) {
+function DeleteProductModal({ productId }: { readonly productId: string }) {
   const { products, deleteProduct } = useAdminData();
   const product = products.find((candidate) => candidate.id === productId);
   if (product === undefined) {
@@ -308,7 +308,7 @@ function DeleteProductModal({ productId }: { readonly productId: number }) {
   );
 }
 
-function StockModal({ productId }: { productId: number }) {
+function StockModal({ productId }: { productId: string }) {
   const { products, saveStock } = useAdminData();
   const product = products.find((candidate) => candidate.id === productId);
   const [stock, setStock] = useState(String(product?.stock ?? 0));

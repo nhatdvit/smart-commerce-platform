@@ -143,6 +143,11 @@ final class ApiExceptionRenderer
             403 => ErrorCode::Forbidden,
             404 => ErrorCode::ResourceNotFound,
             405 => ErrorCode::MethodNotAllowed,
+            // Laravel turns a TokenMismatchException into a 419 HttpException
+            // before it reaches here. Without this case it would fall through
+            // to INTERNAL_ERROR, and a client with a stale CSRF cookie would
+            // be told the server broke.
+            419 => ErrorCode::CsrfTokenMismatch,
             409 => ErrorCode::InvalidStateTransition,
             422 => ErrorCode::ValidationFailed,
             429 => ErrorCode::RateLimited,

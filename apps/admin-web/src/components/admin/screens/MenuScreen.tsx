@@ -9,7 +9,7 @@ import { FoodIcon, IconCalendar, IconPlus } from '../icons';
 import { PageHeading } from '../primitives';
 
 export function MenuScreen() {
-  const { products, openModal, notifyAction } = useAdminData();
+  const { products, openModal, notifyAction, menuError, menuBusy } = useAdminData();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
 
@@ -76,14 +76,32 @@ export function MenuScreen() {
         {visible.length}/{products.length} món
       </p>
 
-      {visible.length === 0 ? (
+      {/*
+       * A menu that could not be loaded is not an empty menu. Saying so keeps
+       * a staff member from "fixing" it by re-adding every dish on top of
+       * whatever is really stored.
+       */}
+      {menuError === '' ? null : (
+        <div className="panel empty">
+          <strong>Không tải được thực đơn</strong>
+          {menuError}
+        </div>
+      )}
+
+      {menuError !== '' ? null : visible.length === 0 ? (
         <div className="panel empty">
           <strong>
-            {products.length === 0 ? 'Thực đơn chưa có món nào' : 'Không có món nào phù hợp'}
+            {menuBusy
+              ? 'Đang tải thực đơn...'
+              : products.length === 0
+                ? 'Thực đơn chưa có món nào'
+                : 'Không có món nào phù hợp'}
           </strong>
-          {products.length === 0
-            ? 'Bấm "Thêm món mới" để tạo món đầu tiên.'
-            : 'Thử bỏ bộ lọc danh mục hoặc xoá từ khoá tìm kiếm.'}
+          {menuBusy
+            ? 'Vui lòng đợi trong giây lát.'
+            : products.length === 0
+              ? 'Bấm "Thêm món mới" để tạo món đầu tiên.'
+              : 'Thử bỏ bộ lọc danh mục hoặc xoá từ khoá tìm kiếm.'}
         </div>
       ) : (
         <div className="product-grid">
