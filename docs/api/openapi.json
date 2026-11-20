@@ -208,6 +208,56 @@
                 }
             }
         },
+        "/admin/menu-items/daily-portions": {
+            "put": {
+                "operationId": "admin.menu-items.daily-portions",
+                "description": "One request for the whole menu, because that is one decision a kitchen\nmakes once; sending it dish by dish would leave the shop half-prepared\nwhenever a tab is closed in the middle.",
+                "summary": "The morning prep sheet: how many portions of each dish were made today",
+                "tags": [
+                    "AdminMenuItem"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SetDailyPortionsRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        }
+                                    },
+                                    "required": [
+                                        "items"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/menu-items/{menuItem}/availability": {
             "put": {
                 "operationId": "admin.menu-items.availability",
@@ -1785,6 +1835,40 @@
                     "variants"
                 ],
                 "title": "SaveProductRequest"
+            },
+            "SetDailyPortionsRequest": {
+                "type": "object",
+                "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty bánh mì has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                },
+                                "prepared_quantity": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 10000
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "prepared_quantity"
+                            ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 500,
+                        "uniqueItems": true
+                    }
+                },
+                "required": [
+                    "items"
+                ],
+                "title": "SetDailyPortionsRequest"
             },
             "TransitionOrderRequest": {
                 "type": "object",

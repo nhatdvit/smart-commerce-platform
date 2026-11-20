@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 
 import { mediaUrl } from '@/lib/api-client';
 import { ACCEPTED_IMAGE_TYPES, uploadProductImage } from '@/lib/image-upload';
+import type { PreparedPortions } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 import {
   FULFILLMENT_LABELS,
@@ -22,6 +23,7 @@ import {
   FOOD_ICON_CHOICES,
   MAX_CATEGORY_LENGTH,
   MAX_NAME_LENGTH,
+  MAX_PORTIONS,
   productFormValues,
   validateProductForm,
   type ProductFieldErrors,
@@ -649,6 +651,119 @@ function StockModal({ productId }: { productId: string }) {
   );
 }
 
+/**
+ * The morning prep sheet: how many portions of each dish were made today.
+ *
+ * Every box starts EMPTY, showing today's prepared count as a placeholder, and
+ * a dish left blank is not touched. Prefilling them would make "open the
+ * dialog and save" reset what is left on every dish on the menu - including
+ * ones half sold at 09:00 - which is a quiet way to promise food that is gone.
+ *
+ * A number here sets both of a dish's counts, because at the start of service
+ * what was prepared and what is left are the same thing. Selling eight bánh mì
+ * is the per-dish "Điều chỉnh" dialog instead.
+ */
+function DailyPortionsModal() {
+  const { products, savePortions, menuBusy } = useAdminData();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [error, setError] = useState('');
+
+  function submit() {
+    const lines: PreparedPortions[] = [];
+
+    for (const product of products) {
+      const typed = (values[product.id] ?? '').trim();
+
+      if (typed === '') {
+        continue;
+      }
+
+      // Digits only, not Number(): Number('') is 0 and Number('4e2') is 400,
+      // so either would save a quantity nobody typed (see product-form.ts).
+      if (!/^\d+$/.test(typed)) {
+        setError(`"${product.name}": số suất phải là số nguyên, không âm.`);
+
+        return;
+      }
+
+      const prepared = Number(typed);
+
+      if (prepared > MAX_PORTIONS) {
+        setError(`"${product.name}": số suất chuẩn bị tối đa ${MAX_PORTIONS}.`);
+
+        return;
+      }
+
+      lines.push({ productId: product.id, prepared });
+    }
+
+    if (lines.length === 0) {
+      setError('Nhập số suất cho ít nhất một món.');
+
+      return;
+    }
+
+    savePortions(lines);
+  }
+
+  return (
+    <ModalFrame
+      title="Số suất chuẩn bị hôm nay"
+      onSubmit={submit}
+      actions={
+        <button type="submit" className="btn btn-primary" disabled={menuBusy}>
+          Lưu bảng chuẩn bị
+        </button>
+      }
+    >
+      {products.length === 0 ? (
+        <p>Thực đơn chưa có món nào. Thêm món ở màn hình Thực đơn trước.</p>
+      ) : (
+        <>
+          <p>
+            Nhập số suất đã chuẩn bị cho hôm nay. Bỏ trống là giữ nguyên, nhập 0 là báo hết món.
+          </p>
+          <div className="portion-sheet">
+            {products.map((product) => (
+              <label className="portion-row" key={product.id}>
+                <span className="portion-name">
+                  <FoodIcon name={product.icon} size={15} /> {product.name}
+                </span>
+                <em className="portion-now">
+                  còn {product.stock}/{product.capacity}
+                </em>
+                <input
+                  type="number"
+                  min={0}
+                  max={MAX_PORTIONS}
+                  inputMode="numeric"
+                  placeholder={String(product.capacity)}
+                  aria-label={`Số suất chuẩn bị cho ${product.name}`}
+                  value={values[product.id] ?? ''}
+                  onChange={(event) => {
+                    const typed = event.target.value;
+                    setValues((current) => ({ ...current, [product.id]: typed }));
+                    setError('');
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          {error === '' ? null : (
+            <em className="field-error" role="alert">
+              {error}
+            </em>
+          )}
+          <p className="notice">
+            Cả bảng được lưu trong một lần: hoặc tất cả các món được ghi nhận, hoặc không món nào -
+            máy chủ áp dụng trong cùng một transaction.
+          </p>
+        </>
+      )}
+    </ModalFrame>
+  );
+}
+
 function AddCouponModal() {
   const { addCoupon } = useAdminData();
   const [code, setCode] = useState('');
@@ -819,6 +934,7 @@ export function AdminModals() {
         <DeleteProductModal key={modal.productId} productId={modal.productId} />
       ) : null}
       {modal.kind === 'stock' ? <StockModal productId={modal.productId} /> : null}
+      {modal.kind === 'daily-portions' ? <DailyPortionsModal /> : null}
       {modal.kind === 'add-coupon' ? <AddCouponModal /> : null}
       {modal.kind === 'add-reward' ? <AddRewardModal /> : null}
       {modal.kind === 'loyalty-settings' ? <LoyaltySettingsModal /> : null}

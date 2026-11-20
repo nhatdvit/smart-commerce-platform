@@ -348,6 +348,54 @@ export async function saveMenuProductStock(
   };
 }
 
+/** One line of the morning prep sheet. */
+export interface PreparedPortions {
+  readonly productId: string;
+  /** Portions made today. Zero marks the dish sold out. */
+  readonly prepared: number;
+}
+
+/**
+ * Records the morning prep for several dishes at once.
+ *
+ * One request, applied as one transaction by the server: a kitchen that wrote
+ * down forty bánh mì and thirty xôi meant both, and a half-applied sheet would
+ * show portions nobody made. That is also why this does not loop over
+ * `saveMenuProductStock` - a closed tab in the middle would leave the shop
+ * half-prepared.
+ *
+ * It sets both of a dish's numbers, which is only right at the start of
+ * service. Selling eight bánh mì is `saveMenuProductStock`.
+ */
+export async function saveDailyPortions(
+  snapshot: MenuSnapshot,
+  lines: readonly PreparedPortions[],
+): Promise<MenuSnapshot> {
+  const payload = lines.map((line) => {
+    const current = snapshot.products.find((product) => product.id === line.productId);
+
+    if (current === undefined) {
+      throw new Error('Có món không còn trong thực đơn, vui lòng tải lại trang.');
+    }
+
+    return { id: current.menuItemId, prepared_quantity: line.prepared };
+  });
+
+  const response = await api.put<{ readonly items: readonly ApiMenuItem[] }>(
+    '/admin/menu-items/daily-portions',
+    { items: payload },
+  );
+
+  const updated = new Map(
+    response.items.map((item) => [item.product.id, toMenuProduct(item)] as const),
+  );
+
+  return {
+    menu: snapshot.menu,
+    products: snapshot.products.map((product) => updated.get(product.id) ?? product),
+  };
+}
+
 async function replaceMenu(
   snapshot: MenuSnapshot,
   items: readonly ReturnType<typeof toItemPayload>[],
