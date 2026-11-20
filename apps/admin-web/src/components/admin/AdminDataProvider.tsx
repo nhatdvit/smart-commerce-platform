@@ -22,10 +22,12 @@ import {
   archiveMenuProduct,
   createMenuProduct,
   loadMenu,
+  saveDailyPortions,
   saveMenuProductStock,
   updateMenuProduct,
   type MenuProduct,
   type MenuSnapshot,
+  type PreparedPortions,
 } from '@/lib/menu-api';
 import {
   DEFAULT_ORDER_QUERY,
@@ -44,6 +46,7 @@ export type AdminModal =
   | { readonly kind: 'order'; readonly orderId: string }
   | { readonly kind: 'product'; readonly productId: string }
   | { readonly kind: 'stock'; readonly productId: string }
+  | { readonly kind: 'daily-portions' }
   | { readonly kind: 'add-coupon' }
   | { readonly kind: 'add-reward' }
   | { readonly kind: 'loyalty-settings' }
@@ -89,6 +92,8 @@ interface AdminContextValue {
   readonly updateProduct: (productId: string, draft: ProductDraft) => void;
   readonly deleteProduct: (productId: string) => void;
   readonly saveStock: (productId: string, stock: number) => void;
+  /** The morning prep sheet: what was made today, for several dishes at once. */
+  readonly savePortions: (lines: readonly PreparedPortions[]) => void;
   readonly addCoupon: (code: string) => void;
   readonly addReward: (name: string, points: number) => void;
 }
@@ -428,6 +433,28 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [notify, runMenuWrite],
   );
 
+  /**
+   * Records the morning prep for several dishes at once.
+   *
+   * The whole sheet is one request, so it lands or it does not; the server
+   * applies it in one transaction for the same reason.
+   */
+  const savePortions = useCallback(
+    (lines: readonly PreparedPortions[]) => {
+      if (lines.length === 0) {
+        notify('Chưa nhập số suất cho món nào');
+
+        return;
+      }
+
+      void runMenuWrite(
+        (current) => saveDailyPortions(current, lines),
+        `Đã ghi số suất chuẩn bị cho ${lines.length} món`,
+      );
+    },
+    [notify, runMenuWrite],
+  );
+
   const addCoupon = useCallback(
     (rawCode: string) => {
       const code = rawCode
@@ -509,6 +536,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       saveStock,
+      savePortions,
       addCoupon,
       addReward,
     }),
@@ -541,6 +569,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       updateProduct,
       deleteProduct,
       saveStock,
+      savePortions,
       addCoupon,
       addReward,
     ],

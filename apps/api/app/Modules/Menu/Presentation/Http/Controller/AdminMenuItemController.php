@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Menu\Presentation\Http\Controller;
 
 use App\Modules\Catalog\Application\Contract\ProvidesVariantSnapshots;
+use App\Modules\Menu\Application\Action\SetDailyPortions;
 use App\Modules\Menu\Application\Action\UpdateMenuItemAvailability;
 use App\Modules\Menu\Application\DTO\MenuItemView;
 use App\Modules\Menu\Domain\Entity\Menu;
+use App\Modules\Menu\Domain\Entity\MenuItem;
+use App\Modules\Menu\Presentation\Http\Request\SetDailyPortionsRequest;
 use App\Modules\Menu\Presentation\Http\Request\UpdateMenuItemAvailabilityRequest;
 use App\Modules\Menu\Presentation\Http\Resource\MenuItemResource;
 use App\Modules\Store\Application\StoreContext;
@@ -63,5 +66,45 @@ final class AdminMenuItemController extends Controller
         }
 
         return (new MenuItemResource(new MenuItemView($item, $snapshot)))->response();
+    }
+
+    /**
+     * The morning prep sheet: how many portions of each dish were made today.
+     *
+     * One request for the whole menu, because that is one decision a kitchen
+     * makes once; sending it dish by dish would leave the shop half-prepared
+     * whenever a tab is closed in the middle.
+     */
+    public function dailyPortions(
+        SetDailyPortionsRequest $request,
+        StoreContext $storeContext,
+        SetDailyPortions $setDailyPortions,
+    ): JsonResponse {
+        Gate::authorize('updateAvailability', Menu::class);
+
+        $storeId = $storeContext->require()->id;
+        $items = $setDailyPortions->handle($storeId, $request->toInput());
+
+        // One catalog call for the whole sheet, never one per dish.
+        $snapshots = $this->catalog->forStore(
+            $storeId,
+            array_values(array_map(static fn (MenuItem $item): string => $item->variantId, $items)),
+        );
+
+        $views = [];
+
+        foreach ($items as $item) {
+            $snapshot = $snapshots[$item->variantId] ?? null;
+
+            if ($snapshot === null) {
+                // Unreachable: the composite foreign key means a live item
+                // cannot reference a variant from another store, or none.
+                throw new BusinessRuleViolation(ErrorCode::ResourceNotFound, 'Menu item not found');
+            }
+
+            $views[] = new MenuItemView($item, $snapshot);
+        }
+
+        return new JsonResponse(['items' => MenuItemResource::collection($views)->resolve()]);
     }
 }

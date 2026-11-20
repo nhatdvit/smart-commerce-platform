@@ -448,3 +448,54 @@ nav button > span {
   color: #7f8a9b;
   font-style: normal;
 }
+
+/* ------------------------------------------------------ Morning prep sheet --
+ * One row per dish in the "số suất chuẩn bị" dialog. The number box is fixed
+ * width and right-aligned so a column of them reads like a tally sheet, which
+ * is what it replaces.
+ */
+.portion-sheet {
+  display: grid;
+  gap: 4px;
+  max-height: 46vh;
+  overflow-y: auto;
+  margin: 12px 0 4px;
+}
+
+.portion-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 92px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.portion-row:last-child {
+  border-bottom: 0;
+}
+
+.portion-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--navy);
+  min-width: 0;
+}
+
+.portion-now {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.portion-row input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 10px;
+  text-align: right;
+}

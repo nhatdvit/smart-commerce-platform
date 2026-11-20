@@ -117,6 +117,17 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->whereUuid('menu')
             ->name('menus.update');
 
+        /*
+         * The morning prep sheet, for the whole menu at once.
+         *
+         * Declared before the {menuItem} routes so the literal path is not
+         * read as an id - it would be refused anyway, since that id must be a
+         * UUID, but the order is what makes the intent obvious.
+         */
+        Route::put('/menu-items/daily-portions', [AdminMenuItemController::class, 'dailyPortions'])
+            ->middleware('store.can:menu.manage|kitchen.operate')
+            ->name('menu-items.daily-portions');
+
         // Either grant is enough here: marking an item sold out is the
         // most-used action in a working kitchen and must not need a manager.
         Route::put('/menu-items/{menuItem}/availability', [AdminMenuItemController::class, 'update'])
