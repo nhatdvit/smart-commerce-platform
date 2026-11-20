@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Catalog\Infrastructure\Storage;
 
 use App\Modules\Catalog\Application\DTO\StoredImage;
+use App\Modules\Catalog\Application\DTO\StoredImageRef;
 use App\Modules\Catalog\Domain\Contract\ProductImageStorage;
+use DateTimeImmutable;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -30,6 +32,9 @@ use RuntimeException;
  */
 final readonly class DiskProductImageStorage implements ProductImageStorage
 {
+    /** Where product photography lives on the disk. */
+    private const string ROOT = 'media/products';
+
     /** Content type to extension. The only extensions this class can produce. */
     private const array EXTENSIONS = [
         'image/jpeg' => 'jpg',
@@ -83,8 +88,41 @@ final readonly class DiskProductImageStorage implements ProductImageStorage
         return $contents === null ? null : ['contents' => $contents, 'content_type' => $contentType];
     }
 
+    public function olderThan(DateTimeImmutable $writtenBefore): array
+    {
+        $cutoff = $writtenBefore->getTimestamp();
+        $images = [];
+
+        // One directory per store, so the store is read off the path rather
+        // than parsed out of a URL that is opaque by contract.
+        foreach ($this->disk->directories(self::ROOT) as $storeDirectory) {
+            $storeId = basename($storeDirectory);
+
+            foreach ($this->disk->files($storeDirectory) as $path) {
+                if ($this->disk->lastModified($path) >= $cutoff) {
+                    // Young enough that a form could still be holding it.
+                    continue;
+                }
+
+                $images[] = new StoredImageRef(
+                    $storeId,
+                    sprintf('/api/v1/media/products/%s/%s', $storeId, basename($path)),
+                );
+            }
+        }
+
+        return $images;
+    }
+
+    public function delete(StoredImageRef $image): bool
+    {
+        $path = $this->path($image->storeId, basename($image->imageUrl));
+
+        return $this->disk->exists($path) && $this->disk->delete($path);
+    }
+
     private function path(string $storeId, string $fileName): string
     {
-        return sprintf('media/products/%s/%s', $storeId, $fileName);
+        return sprintf('%s/%s/%s', self::ROOT, $storeId, $fileName);
     }
 }

@@ -73,6 +73,13 @@ a client:
 Uploads live in the `api-storage` Docker volume, not in the image: back it up
 with the database, because a product's photo exists nowhere else.
 
+An upload happens before the product exists, so an abandoned form leaves a file
+behind. `catalog:prune-product-images` deletes photos no product points at,
+nightly at 03:15. It only touches files older than 24 hours: a photo uploaded
+into a dialog that is still open is indistinguishable from an orphan, and
+deleting it would break a save in progress. Run it with `--dry-run` to see what
+would go, and `--hours=` to change the grace period.
+
 ## Money
 
 VND amounts are whole đồng, and every amount is an **object** carrying its own

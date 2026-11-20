@@ -100,6 +100,22 @@ final class EloquentProductRepository implements ProductRepository
         ];
     }
 
+    public function imageUrlsInUse(string $storeId, array $imageUrls): array
+    {
+        if ($imageUrls === []) {
+            return [];
+        }
+
+        /** @var list<string> $inUse */
+        $inUse = ProductModel::query()
+            ->where('store_id', $storeId)
+            ->whereIn('image_url', $imageUrls)
+            ->pluck('image_url')
+            ->all();
+
+        return array_values(array_unique($inUse));
+    }
+
     public function create(Product $product): Product
     {
         $row = ProductModel::query()->create($this->columns($product));

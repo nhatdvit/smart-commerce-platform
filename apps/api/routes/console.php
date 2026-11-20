@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Catalog\Presentation\Console\PruneProductImagesCommand;
 use App\Shared\Presentation\Console\DispatchOutboxCommand;
 use App\Shared\Presentation\Console\PruneIdempotencyRecordsCommand;
 use Illuminate\Support\Facades\Schedule;
@@ -27,4 +28,14 @@ Schedule::command(DispatchOutboxCommand::class)
 Schedule::command(PruneIdempotencyRecordsCommand::class)
     ->hourly()
     ->withoutOverlapping(10)
+    ->runInBackground();
+
+// Deletes uploaded product photos no product points at: an abandoned form, or
+// a photo replaced by another. Daily and at 03:15 store-local-ish quiet hours,
+// because nothing here is urgent and the grace period inside the command is a
+// day anyway - a file uploaded into a dialog that is still open must survive
+// the run.
+Schedule::command(PruneProductImagesCommand::class)
+    ->dailyAt('03:15')
+    ->withoutOverlapping(30)
     ->runInBackground();

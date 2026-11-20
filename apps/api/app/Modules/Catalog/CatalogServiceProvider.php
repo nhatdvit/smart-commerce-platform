@@ -13,6 +13,7 @@ use App\Modules\Catalog\Infrastructure\Persistence\EloquentCategoryRepository;
 use App\Modules\Catalog\Infrastructure\Persistence\EloquentProductRepository;
 use App\Modules\Catalog\Infrastructure\Persistence\EloquentVariantSnapshotProvider;
 use App\Modules\Catalog\Infrastructure\Storage\DiskProductImageStorage;
+use App\Modules\Catalog\Presentation\Console\PruneProductImagesCommand;
 use App\Modules\Catalog\Presentation\Policy\ProductPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
@@ -52,5 +53,9 @@ final class CatalogServiceProvider extends ServiceProvider
         // The policy guards the DOMAIN product, not the Eloquent row, so
         // authorization is expressed against the business object.
         Gate::policy(Product::class, ProductPolicy::class);
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([PruneProductImagesCommand::class]);
+        }
     }
 }

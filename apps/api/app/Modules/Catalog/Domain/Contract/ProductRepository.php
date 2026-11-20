@@ -47,6 +47,23 @@ interface ProductRepository
         int $limit,
     ): array;
 
+    /**
+     * Which of these photo URLs any product in this store still points at.
+     *
+     * Asked with the candidates in hand rather than "list every photo in use",
+     * so the query stays bounded and the answer cannot be stale in the
+     * dangerous direction: a photo saved between the two is simply absent from
+     * the candidate list, and keeping a file one more day costs nothing.
+     *
+     * Archived products count as using their photo. A retired dish is still
+     * readable, and a receipt pointing at a deleted file is worse than a file
+     * nobody shows.
+     *
+     * @param  list<string>  $imageUrls
+     * @return list<string>
+     */
+    public function imageUrlsInUse(string $storeId, array $imageUrls): array;
+
     /** Returns the product as stored, with its generated ids. */
     public function create(Product $product): Product;
 

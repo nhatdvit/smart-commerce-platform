@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Catalog\Domain\Contract;
 
 use App\Modules\Catalog\Application\DTO\StoredImage;
+use App\Modules\Catalog\Application\DTO\StoredImageRef;
+use DateTimeImmutable;
 
 /**
  * Where product photography is kept.
@@ -30,4 +32,18 @@ interface ProductImageStorage
      * @return array{contents: string, content_type: string}|null
      */
     public function read(string $storeId, string $fileName): ?array;
+
+    /**
+     * Stored files last written before $writtenBefore.
+     *
+     * The cutoff is part of the question rather than a filter applied after,
+     * because the only thing that distinguishes an abandoned upload from one a
+     * form is still holding is its age - and the filesystem is what knows it.
+     *
+     * @return list<StoredImageRef>
+     */
+    public function olderThan(DateTimeImmutable $writtenBefore): array;
+
+    /** Removes a stored file. False when it was already gone. */
+    public function delete(StoredImageRef $image): bool;
 }
