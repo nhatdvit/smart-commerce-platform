@@ -184,6 +184,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CurrentUser'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
         '422':
           $ref: '#/components/responses/ValidationFailed'
         '429':
@@ -952,10 +954,13 @@ paths:
       description: |
         Permission `order.read`, scoped to the resolved store.
 
-        The default sort is oldest-first among open orders, because this is a
-        work queue and the oldest unserved order is the most urgent. Filtering
-        by `status` is what turns it into a kitchen list, a pickup list, or a
-        day's history.
+        The default sort is oldest-first, because this is a work queue and the
+        oldest unserved order is the most urgent. Filtering by `status` is what
+        turns it into a kitchen list, a pickup list, or a day's history.
+
+        The response also carries `status_counts` for the whole store, so a
+        queue badge shows the real number of waiting orders rather than the
+        number that happens to be on the first page.
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -966,9 +971,24 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/OrderStatus'
+        - name: q
+          in: query
+          description: |
+            Partial, case-insensitive match on the order code, the contact name
+            or phone, or a line's product name — what staff actually type when
+            a customer says "the xôi order for Thảo".
+          schema:
+            type: string
+            maxLength: 120
         - name: payment_status
           in: query
-          description: Repeatable. Useful for finding unpaid cash orders.
+          description: |
+            Repeatable. Useful for finding unpaid cash orders.
+
+            **Not implemented yet, and refused with 422 rather than ignored.**
+            Reading payment state belongs to the payments screen's slice;
+            silently dropping this filter would show a cashier "unpaid orders"
+            that are in fact every order in the shop.
           schema:
             type: array
             items:
@@ -1045,12 +1065,20 @@ paths:
       tags: [Admin - Orders]
       summary: Move an order to the next status
       description: |
-        Permission `order.transition`; `KITCHEN_STAFF` additionally needs
-        `kitchen.operate` for the preparation states.
+        Permission `order.transition`. `kitchen.operate` alone is enough for
+        `PREPARING` and `READY` — what a cook does all morning, which must not
+        need a manager — but not for `COMPLETED` or `CANCELLED`: those touch the
+        money and the customer.
 
         Only transitions the state machine allows are accepted, and every one is
         recorded in `order_status_history` with the actor and the reason. An
-        invalid jump is a 409, never a quiet no-op.
+        invalid jump is a 409, never a quiet no-op. So is re-sending the status
+        the order already holds, which is what a stale screen sends.
+
+        `PENDING_PAYMENT → PLACED` is a legal edge of the machine but is NOT
+        accepted here: an order waiting for a transfer enters the queue when its
+        payment is confirmed against the real bank credit. Allowing it on this
+        endpoint would be a one-click way to serve an unpaid order.
 
         **Completing an order does not collect money.** Moving to `COMPLETED`
         leaves payment exactly as it was; an unpaid cash order stays unpaid
@@ -1548,6 +1576,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
     post:
       operationId: createAdminProduct
       tags: [Admin - Catalog]
@@ -1578,6 +1608,110 @@ paths:
           $ref: '#/components/responses/StoreScopeDenied'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+
+  /admin/products/images:
+    post:
+      operationId: uploadProductImage
+      tags: [Admin - Catalog]
+      summary: Upload a product photo
+      description: |
+        Permission `catalog.manage`.
+
+        Separate from the product write because a photo is chosen before the
+        product exists: the form uploads, shows what was stored, and only then
+        saves the product with the returned `image_url`. The same upload can be
+        reused by several products, and a product that is never saved simply
+        leaves an unreferenced file behind.
+
+        The body is `multipart/form-data` with one `file` part. Only real
+        raster images are accepted — JPEG, PNG and WebP — and the type is read
+        from the bytes, not from the filename or the declared type. SVG is
+        refused on purpose: it is a document that can carry script, and it
+        would be served from the same origin as the dashboard.
+
+        **Size.** The gateway and PHP both cap a request body at 2 MB, so a
+        larger file is refused with `413` before any of this runs. Clients are
+        expected to downscale before uploading; the dashboard resizes to at
+        most 1024px and re-encodes, which also drops the EXIF block a phone
+        camera writes - including where the photo was taken.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: The stored image.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedImage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '413':
+          description: |
+            The body exceeds the 2 MB request cap. Produced by the gateway, so
+            the envelope every other failure uses is not guaranteed here.
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /media/products/{store}/{file}:
+    get:
+      operationId: getProductImage
+      tags: [Catalog]
+      summary: An uploaded product photo
+      description: |
+        Serves the bytes of an uploaded photo. Public, because product
+        photography is what a storefront shows; the file name is a random UUID,
+        so nothing is enumerable.
+
+        The response carries the stored content type and `nosniff`, so a file
+        can only ever be interpreted as the image type it was accepted as.
+
+        It is served by the API because this deployment keeps uploads on its
+        own disk. Once object storage is configured, `image_url` points at the
+        bucket instead and this route is only a fallback - which is why clients
+        must treat `image_url` as opaque rather than building it themselves.
+      security: []
+      parameters:
+        - name: store
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+        - name: file
+          in: path
+          required: true
+          description: The stored file name, `<uuid>.<jpg|png|webp>`.
+          schema:
+            type: string
+            pattern: '^[0-9a-f-]{36}\.(jpg|png|webp)$'
+      responses:
+        '200':
+          description: The image.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /admin/products/{product}:
     put:
@@ -1910,6 +2044,20 @@ components:
             request_id: 0f8d2c7a4b1e4f9a8c3d2e1f0a9b8c7d
             timestamp: '2026-11-11T02:14:07Z'
             path: /api/v1/carts/0193f0.../items
+    CsrfTokenMismatch:
+      description: |
+        The CSRF token is missing or stale. Any cookie-authenticated write can
+        answer this, not only the operations that list it: a session cookie
+        outliving its token is normal after a long-open tab.
+
+        The recovery is specific, which is why it has its own code rather than a
+        generic 403: fetch `GET /sanctum/csrf-cookie` again and retry the
+        request. Re-authenticating would not help.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
     RateLimited:
       description: Too many requests. Shed by the gateway or by a named Laravel limiter.
       headers:
@@ -2000,6 +2148,7 @@ components:
         - STORE_SCOPE_DENIED
         - RESOURCE_NOT_FOUND
         - METHOD_NOT_ALLOWED
+        - CSRF_TOKEN_MISMATCH
         - IDEMPOTENCY_KEY_REUSED
         - REQUEST_IN_PROGRESS
         - INVALID_STATE_TRANSITION
@@ -2289,6 +2438,20 @@ components:
         sort_order:
           type: integer
 
+    CategoryRef:
+      type: object
+      description: |
+        A category as carried by the thing that belongs to it, so a list screen
+        does not have to resolve every `category_id` against a second request.
+      required: [id, name, slug]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+        slug:
+          type: string
+
     CategoryPage:
       allOf:
         - $ref: '#/components/schemas/PageMeta'
@@ -2400,6 +2563,11 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
+        category:
+          description: The same category, expanded. Null when uncategorised.
+          oneOf:
+            - $ref: '#/components/schemas/CategoryRef'
+            - type: 'null'
         name:
           type: string
         slug:
@@ -2417,6 +2585,15 @@ components:
         image_url:
           type: [string, 'null']
           format: uri
+        icon:
+          type: [string, 'null']
+          maxLength: 40
+          description: |
+            A display key the admin app resolves to a thumbnail, for a catalogue
+            that has no photography yet. Presentation only: it never affects
+            price, availability or what is sellable, and `image_url` supersedes
+            it once a real photo exists.
+          examples: ['banh-mi']
         attributes:
           $ref: '#/components/schemas/ProductAttributes'
         variants:
@@ -2428,6 +2605,25 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ModifierGroup'
+
+    UploadedImage:
+      type: object
+      description: Where an uploaded photo now lives, ready to be saved on a product.
+      required: [image_url, content_type, byte_size]
+      additionalProperties: false
+      properties:
+        image_url:
+          type: string
+          description: |
+            Opaque to the client: today a path on this API, tomorrow a bucket
+            URL. Store it and send it back unchanged; never construct one.
+          examples: ['/api/v1/media/products/0193f0a2-6f3b-7c21-9a44-2f1c8e7b5d90/0193f0a3-1111-7c21-9a44-2f1c8e7b5d90.webp']
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        byte_size:
+          type: integer
+          minimum: 1
 
     ProductPage:
       allOf:
@@ -2446,9 +2642,19 @@ components:
       additionalProperties: false
       properties:
         category_id:
+          description: An existing category. Mutually exclusive with `category_name`.
           oneOf:
             - $ref: '#/components/schemas/Uuid'
             - type: 'null'
+        category_name:
+          type: [string, 'null']
+          maxLength: 120
+          description: |
+            A category named rather than referenced: matched case-insensitively
+            within this store's catalogue and created when it does not exist
+            yet. The menu form lets staff type a category, and making the client
+            create one through a separate write first would be worse. Sending
+            both this and `category_id` is a 422.
         name:
           type: string
           minLength: 1
@@ -2465,6 +2671,20 @@ components:
         inventory_tracking:
           type: boolean
           default: true
+        image_url:
+          type: [string, 'null']
+          maxLength: 500
+          description: |
+            A photo from `POST /admin/products/images`, sent back unchanged, or
+            null to go back to an icon. Mutually exclusive with `icon`: a
+            product shows one thing, and holding both would leave what a
+            customer sees up to whichever client rendered it. Sending both is a
+            422.
+        icon:
+          type: [string, 'null']
+          maxLength: 40
+          pattern: '^[a-z0-9-]+$'
+          description: A display key, used when there is no photo.
         attributes:
           $ref: '#/components/schemas/ProductAttributes'
         variants:
@@ -2521,6 +2741,13 @@ components:
             image_url:
               type: [string, 'null']
               format: uri
+            icon:
+              type: [string, 'null']
+              maxLength: 40
+            category:
+              oneOf:
+                - $ref: '#/components/schemas/CategoryRef'
+                - type: 'null'
             attributes:
               $ref: '#/components/schemas/ProductAttributes'
         variant:
@@ -2547,6 +2774,14 @@ components:
             Advisory: the authoritative check happens under a row lock at
             checkout, so a client must handle `OUT_OF_STOCK` even when this
             number looked sufficient.
+          x-provisional: true
+        daily_capacity:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            Portions prepared for today, the denominator of "8 of 30 left". Null
+            when this item is not counted. It is a plan, not a stock level:
+            `available_quantity` is what is left of it and may never exceed it.
           x-provisional: true
         sort_order:
           type: integer
@@ -2718,6 +2953,17 @@ components:
               is_available:
                 type: boolean
                 default: true
+              available_quantity:
+                type: [integer, 'null']
+                minimum: 0
+                x-provisional: true
+              daily_capacity:
+                type: [integer, 'null']
+                minimum: 0
+                description: |
+                  Omitted leaves today's counts as they are, so a menu edit does
+                  not silently reset a kitchen's portions.
+                x-provisional: true
               sort_order:
                 type: integer
               modifier_price_overrides:
@@ -2746,6 +2992,13 @@ components:
           description: |
             Today's remaining portions, or null to stop counting this item.
             Rejected when lower than what is already reserved.
+          x-provisional: true
+        daily_capacity:
+          type: [integer, 'null']
+          minimum: 0
+          description: |
+            Portions prepared for today. Raised when more are cooked; omitted it
+            stays as it is. `available_quantity` may never exceed it.
           x-provisional: true
 
     CreateCartRequest:
@@ -3183,7 +3436,14 @@ components:
         totals:
           $ref: '#/components/schemas/OrderTotals'
         payment:
-          $ref: '#/components/schemas/PaymentSummary'
+          oneOf:
+            - $ref: '#/components/schemas/PaymentSummary'
+            - type: 'null'
+          description: |
+            Null when the order has no payment row at all — a real anomaly left
+            by a half-finished checkout. Answered as null rather than invented,
+            so a screen can show it as such instead of being told the order is
+            unpaid cash.
         status_history:
           type: array
           items:
@@ -3198,6 +3458,22 @@ components:
           type: string
           format: date-time
 
+    OrderLinePreview:
+      type: object
+      description: |
+        Just enough of a line to recognise the order: "2 bánh mì pate trứng".
+        Names and quantities only — per-line money belongs to the detail
+        response, so a queue read cannot be used to scrape a price list.
+      required: [product_name, variant_name, quantity]
+      properties:
+        product_name:
+          type: string
+        variant_name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+
     OrderSummary:
       type: object
       description: List projection. Enough for a queue row without loading every line.
@@ -3210,15 +3486,32 @@ components:
         status:
           $ref: '#/components/schemas/OrderStatus'
         payment_status:
-          $ref: '#/components/schemas/PaymentStatus'
+          oneOf:
+            - $ref: '#/components/schemas/PaymentStatus'
+            - type: 'null'
+          description: Null when the order has no payment row; see `Order.payment`.
         payment_method:
-          $ref: '#/components/schemas/PaymentMethod'
+          oneOf:
+            - $ref: '#/components/schemas/PaymentMethod'
+            - type: 'null'
         fulfillment_type:
           $ref: '#/components/schemas/FulfillmentType'
         total:
           $ref: '#/components/schemas/Money'
         item_count:
           type: integer
+          description: Lines on the order.
+        unit_count:
+          type: integer
+          description: Units across every line — what the kitchen actually makes.
+        items:
+          type: array
+          description: |
+            A short preview of the lines, because the queue row says what was
+            ordered. Without it every row would need a detail request, which is
+            an N+1 built into the screen.
+          items:
+            $ref: '#/components/schemas/OrderLinePreview'
         contact_name:
           type: [string, 'null']
         scheduled_at:
@@ -3235,12 +3528,33 @@ components:
       allOf:
         - $ref: '#/components/schemas/PageMeta'
         - type: object
-          required: [items]
+          required: [items, status_counts]
           properties:
             items:
               type: array
               items:
                 $ref: '#/components/schemas/OrderSummary'
+            status_counts:
+              type: object
+              description: |
+                How many orders the store currently has in each OPEN status —
+                the five a staff member can still act on. Terminal statuses
+                (`COMPLETED`, `CANCELLED`, `EXPIRED`) are deliberately absent:
+                counting every order a store has ever served would grow without
+                bound and answer a question nobody asked.
+
+                It is the STORE's count, not the page's, so a queue badge can
+                show the real number of waiting orders rather than the number
+                that happens to be on the first page.
+              additionalProperties:
+                type: integer
+                minimum: 0
+              examples:
+                - PENDING_PAYMENT: 1
+                  PLACED: 3
+                  CONFIRMED: 0
+                  PREPARING: 2
+                  READY: 1
 
     OrderCreated:
       type: object

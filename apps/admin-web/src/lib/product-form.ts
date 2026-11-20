@@ -11,7 +11,7 @@
  */
 
 import type { FoodIconName } from '@/components/admin/icons';
-import type { DemoProduct } from '@/data/admin-demo';
+import type { MenuProduct } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 
 /** Thumbnail choices, labelled for the dialog's select. */
@@ -27,18 +27,30 @@ export const FOOD_ICON_CHOICES: readonly {
   { value: 'gift', label: 'Khác' },
 ];
 
+/**
+ * What a card shows: an uploaded photo, or an icon standing in for one.
+ *
+ * One or the other, never both. Keeping both would mean two sources of truth
+ * for the same square of the card, and they would drift the first time someone
+ * uploaded a photo without clearing the icon.
+ */
+export type ProductImageKind = 'icon' | 'photo';
+
 /** What the inputs hold: strings, because that is what an `<input>` gives. */
 export interface ProductFormValues {
   readonly name: string;
   readonly cat: string;
+  readonly imageKind: ProductImageKind;
   readonly icon: FoodIconName;
+  /** The uploaded photo's URL, present only while `imageKind` is 'photo'. */
+  readonly imageUrl: string | null;
   readonly price: string;
   readonly stock: string;
   readonly capacity: string;
 }
 
 /** A menu item that passed validation, ready to be stored. */
-export type ProductDraft = Omit<DemoProduct, 'id'>;
+export type ProductDraft = Omit<MenuProduct, 'id'>;
 
 export type ProductFieldErrors = Partial<Record<keyof ProductFormValues, string>>;
 
@@ -54,17 +66,23 @@ export const MAX_CATEGORY_LENGTH = 60;
 export const EMPTY_PRODUCT_FORM: ProductFormValues = {
   name: '',
   cat: '',
+  imageKind: 'icon',
   icon: 'banh-mi',
+  imageUrl: null,
   price: '',
   stock: '',
   capacity: '',
 };
 
-export function productFormValues(product: DemoProduct): ProductFormValues {
+export function productFormValues(product: MenuProduct): ProductFormValues {
   return {
     name: product.name,
     cat: product.cat,
+    // A dish that has a photo opens on the photo; one that never had opens on
+    // the icon it is already showing.
+    imageKind: product.imageUrl === null ? 'icon' : 'photo',
     icon: product.icon,
+    imageUrl: product.imageUrl,
     price: String(product.price),
     stock: String(product.stock),
     capacity: String(product.capacity),
@@ -98,8 +116,8 @@ function parseWholeNumber(raw: string): number | undefined {
  */
 export function validateProductForm(
   values: ProductFormValues,
-  products: readonly DemoProduct[],
-  editingId?: number,
+  products: readonly MenuProduct[],
+  editingId?: string,
 ): ProductFormResult {
   const errors: ProductFieldErrors = {};
 
@@ -147,6 +165,12 @@ export function validateProductForm(
     errors.stock = 'Số suất còn lại không thể nhiều hơn số suất đã chuẩn bị.';
   }
 
+  // "Ảnh" was chosen but the upload never finished, so there is nothing to
+  // save. Falling back to an icon silently would lose what the user asked for.
+  if (values.imageKind === 'photo' && values.imageUrl === null) {
+    errors.imageUrl = 'Vui lòng tải ảnh lên hoặc chuyển sang dùng icon.';
+  }
+
   if (
     Object.keys(errors).length > 0 ||
     price === undefined ||
@@ -156,5 +180,20 @@ export function validateProductForm(
     return { ok: false, errors };
   }
 
-  return { ok: true, draft: { name, cat, icon: values.icon, price, stock, capacity } };
+  const showsPhoto = values.imageKind === 'photo';
+
+  return {
+    ok: true,
+    draft: {
+      name,
+      cat,
+      // Exactly one of the two reaches the server, which enforces the same
+      // rule: the other is cleared rather than carried along as a leftover.
+      icon: values.icon,
+      imageUrl: showsPhoto ? values.imageUrl : null,
+      price,
+      stock,
+      capacity,
+    },
+  };
 }

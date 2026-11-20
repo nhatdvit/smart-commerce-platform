@@ -27,6 +27,10 @@ final class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'phone' => null,
             'password_hash' => self::$passwordHash ??= Hash::make('password'),
+            // Set explicitly so the attribute is present on the model a test
+            // holds. Strict mode turns reading an unretrieved attribute into
+            // an exception, and the session guard reads this one on logout.
+            'remember_token' => null,
             'status' => UserStatus::Active,
         ];
     }

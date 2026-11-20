@@ -170,9 +170,22 @@ duplicates are normal.
 Appointment-based services are out of scope and would need a future `Booking`
 module rather than being bent into `Menu`.
 
-## What Phase 01 deliberately leaves out
+## What exists so far
 
-Only `Identity` and `Store` exist, because the milestone needs a Sanctum
-baseline and the store-scoping convention. The other thirteen modules from
-`CLAUDE.md` §5 are absent rather than present as empty scaffolds (§4), as is any
-AI infrastructure (§11) and any payment gateway adapter (§6).
+`Identity` and `Store` from Phase 01 — the Sanctum baseline and the
+store-scoping convention — plus `Catalog` and `Menu`, built as the vertical
+slice behind the dashboard's menu screen.
+
+`Menu` depends on `Catalog` in one direction and through one seam:
+`Catalog\Application\Contract\ProvidesVariantSnapshots`. It never reads the
+catalog's tables, and `Catalog` knows nothing of `Menu` at all — which is what
+keeps a retail catalogue possible with no menu and no kitchen (§16). An
+architecture test enforces both directions.
+
+Neither module carries the whole of its designed contract: modifiers, menu
+schedules and date exceptions are designed and not built, and the endpoints
+refuse them rather than accepting and discarding them.
+
+The remaining eleven modules from `CLAUDE.md` §5 are absent rather than present
+as empty scaffolds (§4), as is any AI infrastructure (§11) and any payment
+gateway adapter (§6).

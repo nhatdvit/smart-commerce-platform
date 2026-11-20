@@ -108,6 +108,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      # Uploaded product photography. A named volume because the rest of
+      # storage/ lives in the image: without this, every rebuild would delete
+      # the photos a shop had uploaded. Shared with the worker and the
+      # scheduler, which read the same files.
+      - api-storage:/var/www/html/storage/app
     networks:
       - frontend
       - backend
@@ -144,6 +150,8 @@ services:
       redis:
         condition: service_healthy
     command: ['php', 'artisan', 'horizon']
+    volumes:
+      - api-storage:/var/www/html/storage/app
     networks:
       # backend is internal in production; egress is the deliberate, worker-only
       # route out for notification providers (CLAUDE.md §9).
@@ -176,6 +184,8 @@ services:
       redis:
         condition: service_healthy
     command: ['php', 'artisan', 'schedule:work']
+    volumes:
+      - api-storage:/var/www/html/storage/app
     networks:
       - backend
     deploy:
@@ -294,6 +304,10 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  # Uploaded media. Survives an image rebuild, which the rest of storage/ does
+  # not; back it up with the database, since an order's product photo is only
+  # here.
+  api-storage:
 
 networks:
   frontend:

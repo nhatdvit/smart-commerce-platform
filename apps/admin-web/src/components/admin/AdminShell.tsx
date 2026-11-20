@@ -15,6 +15,7 @@ import {
   IconStorefront,
 } from './icons';
 import { NAV_GROUPS, navLabelFor } from './nav';
+import { SignInPanel } from './SignInPanel';
 
 /**
  * The admin chrome: sidebar, breadcrumb topbar, modal host and toast.
@@ -25,11 +26,27 @@ import { NAV_GROUPS, navLabelFor } from './nav';
  * navigating between screens does not remount the demo state.
  */
 export function AdminShell({ children }: { children: ReactNode }) {
-  const { pendingCount, sidebarOpen, setSidebarOpen, notify, toastMessage } = useAdminData();
+  const { pendingCount, sidebarOpen, setSidebarOpen, notify, toastMessage, session, signOut } =
+    useAdminData();
   const pathname = usePathname();
 
   function closeSidebar() {
     setSidebarOpen(false);
+  }
+
+  // Nothing on these screens is public: every admin endpoint needs both a
+  // session and a store-scoped permission, so without a session there is
+  // nothing to show. The brief flash of an empty shell while the session is
+  // being checked is avoided by waiting for the answer.
+  if (session !== 'signed-in') {
+    return (
+      <>
+        {session === 'signed-out' ? <SignInPanel /> : <div className="signin-shell" />}
+        <div className={toastMessage === '' ? 'toast' : 'toast show'} role="status">
+          {toastMessage}
+        </div>
+      </>
+    );
   }
 
   return (
@@ -142,6 +159,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
               >
                 <IconBell size={19} />
                 <b className="notify-dot" />
+              </button>
+              <button type="button" className="btn" title="Đăng xuất" onClick={signOut}>
+                Đăng xuất
               </button>
               <div className="user-avatar">AD</div>
             </div>

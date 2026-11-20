@@ -101,6 +101,30 @@ return [
 
     /*
      |--------------------------------------------------------------------------
+     | Media (product photography)
+     |--------------------------------------------------------------------------
+     |
+     | Uploads live on the configured disk. The default is the API's own
+     | private disk, because the S3 path is not usable in this deployment yet:
+     | the MinIO image cannot be pulled anonymously and no Flysystem S3 adapter
+     | is installed (CLAUDE.md §9 keeps MinIO optional). Point `disk` at s3
+     | once both exist - nothing above this line changes.
+     |
+     | The size cap matches what the gateway (client_max_body_size) and PHP
+     | (upload_max_filesize) already enforce. Three numbers that disagree would
+     | mean a file accepted here and refused one layer out.
+     |
+     | SVG is deliberately absent: it is a document that can carry script, and
+     | it would be served from the dashboard's own origin.
+     */
+    'media' => [
+        'disk' => env('COMMERCE_MEDIA_DISK', 'local'),
+        'max_bytes' => (int) env('COMMERCE_MEDIA_MAX_BYTES', 2 * 1024 * 1024),
+        'image_mime_types' => ['image/jpeg', 'image/png', 'image/webp'],
+    ],
+
+    /*
+     |--------------------------------------------------------------------------
      | Inventory
      |--------------------------------------------------------------------------
      |

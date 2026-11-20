@@ -2,24 +2,29 @@
 
 declare(strict_types=1);
 
+use App\Modules\Catalog\Presentation\Http\Controller\AdminProductController;
+use App\Modules\Catalog\Presentation\Http\Controller\ProductImageController;
+use App\Modules\Identity\Presentation\Http\Controller\SessionController;
+use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
+use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
+use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
  * Versioned business API. The api/v1 prefix is applied in bootstrap/app.php.
  *
- * Phase 01 exposes only the metadata endpoint below. The customer and
- * operations endpoints from CLAUDE.md section 8 arrive with their modules:
+ * Built so far: the metadata endpoints, the session endpoints, and the admin
+ * catalog, menu and order endpoints that drive the operations dashboard's menu
+ * and order screens. The rest of CLAUDE.md section 8 arrives with its module:
  *
  *   GET    /stores/{id}                        Store
  *   GET    /menus/today                        Menu
- *   GET    /products, /products/{id}           Catalog
+ *   GET    /products, /products/{id}           Catalog (public)
  *   POST   /carts, /carts/{id}/items           Cart
  *   POST   /orders                             Order   (Idempotency-Key required)
- *   GET    /orders/{id}, /orders/{id}/payment  Order, Payment
+ *   GET    /orders/{id}, /orders/{id}/payment  Order, Payment  (customer-facing)
  *   GET    /payment-methods                    Payment
- *   GET    /admin/orders                       Order
- *   PUT    /admin/menus/{id}                   Menu
  *   GET    /admin/payments                     Payment
  *   POST   /admin/payments/{id}/confirm        Payment
  *   PUT    /admin/stores/{id}/bank-account     Payment
@@ -30,7 +35,8 @@ use Illuminate\Support\Facades\Route;
  *       ->middleware(['auth:sanctum', 'store.resolve', 'store.can:payment.bank-account.manage']);
  *
  * store.resolve decides WHICH store from trusted sources only, and store.can
- * checks that this user holds the permission IN that store.
+ * checks that this user holds the permission IN that store. Both, every time:
+ * dropping either one is a privilege-escalation bug.
  */
 
 Route::get('/', static fn (Request $request): array => [
@@ -42,3 +48,101 @@ Route::get('/', static fn (Request $request): array => [
 Route::get('/me', static fn (Request $request): array => [
     'id' => $request->user()?->getAuthIdentifier(),
 ])->middleware('auth:sanctum')->name('api.me');
+
+/*
+ * Session lifecycle for the first-party web apps (cookie authentication).
+ * Rate limited per credential and per IP by the `login` limiter.
+ */
+Route::post('/auth/login', [SessionController::class, 'login'])
+    ->middleware('throttle:login')
+    ->name('api.auth.login');
+
+Route::post('/auth/logout', [SessionController::class, 'logout'])
+    ->middleware('auth:sanctum')
+    ->name('api.auth.logout');
+
+/*
+ * Operations dashboard: catalog master data and menus.
+ *
+ * Every route carries all three guards. store.resolve takes the store from the
+ * host or the route - never from a query parameter - and store.can checks the
+ * permission IN that store. The controllers then authorize the OBJECT through a
+ * policy, which is the check that catches an id from another store arriving on
+ * a route the caller may otherwise use.
+ */
+/*
+ * Uploaded product photography, served to anyone: it is what a storefront
+ * shows. The file name is a random UUID, and both parameters are constrained
+ * below, so nothing here can be enumerated or walked.
+ */
+Route::get('/media/products/{store}/{file}', [ProductImageController::class, 'show'])
+    ->whereUuid('store')
+    ->where('file', '[0-9a-f-]{36}\.(jpg|png|webp)')
+    ->name('api.media.product-image');
+
+Route::middleware(['auth:sanctum', 'store.resolve'])
+    ->prefix('admin')
+    ->name('api.admin.')
+    ->group(static function (): void {
+        // Before /products/{product}, or the literal path would be read as a
+        // product id - and refused, since that id is not a UUID.
+        Route::post('/products/images', [ProductImageController::class, 'store'])
+            ->middleware('store.can:catalog.manage')
+            ->name('products.images.store');
+
+        Route::get('/products', [AdminProductController::class, 'index'])
+            ->middleware('store.can:catalog.read')
+            ->name('products.index');
+
+        Route::post('/products', [AdminProductController::class, 'store'])
+            ->middleware('store.can:catalog.manage')
+            ->name('products.store');
+
+        Route::put('/products/{product}', [AdminProductController::class, 'update'])
+            ->middleware('store.can:catalog.manage')
+            ->whereUuid('product')
+            ->name('products.update');
+
+        Route::get('/menus', [AdminMenuController::class, 'index'])
+            ->middleware('store.can:menu.read')
+            ->name('menus.index');
+
+        Route::get('/menus/{menu}', [AdminMenuController::class, 'show'])
+            ->middleware('store.can:menu.read')
+            ->whereUuid('menu')
+            ->name('menus.show');
+
+        Route::put('/menus/{menu}', [AdminMenuController::class, 'update'])
+            ->middleware('store.can:menu.manage')
+            ->whereUuid('menu')
+            ->name('menus.update');
+
+        // Either grant is enough here: marking an item sold out is the
+        // most-used action in a working kitchen and must not need a manager.
+        Route::put('/menu-items/{menuItem}/availability', [AdminMenuItemController::class, 'update'])
+            ->middleware('store.can:menu.manage|kitchen.operate')
+            ->whereUuid('menuItem')
+            ->name('menu-items.availability');
+
+        /*
+         * The operations queue.
+         *
+         * The transition route admits either grant, because a cook has to be
+         * able to move an order to PREPARING and READY without a manager. Which
+         * moves a cook may actually make is decided by the policy, not by the
+         * route: `kitchen.operate` alone cannot complete or cancel an order.
+         */
+        Route::get('/orders', [AdminOrderController::class, 'index'])
+            ->middleware('store.can:order.read')
+            ->name('orders.index');
+
+        Route::get('/orders/{order}', [AdminOrderController::class, 'show'])
+            ->middleware('store.can:order.read')
+            ->whereUuid('order')
+            ->name('orders.show');
+
+        Route::post('/orders/{order}/status', [AdminOrderController::class, 'transition'])
+            ->middleware(['store.can:order.transition|kitchen.operate', 'throttle:commerce-write'])
+            ->whereUuid('order')
+            ->name('orders.status');
+    });

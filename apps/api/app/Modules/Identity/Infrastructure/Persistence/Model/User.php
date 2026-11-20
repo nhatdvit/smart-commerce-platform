@@ -50,6 +50,9 @@ final class User extends Authenticatable
      */
     protected $hidden = [
         'password_hash',
+        // A session secret, not a credential the user knows, but it must never
+        // appear in a response or a log either.
+        'remember_token',
     ];
 
     /** UUIDv7 keys are time-ordered, which keeps index locality on insert. */

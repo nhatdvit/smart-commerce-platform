@@ -2,8 +2,16 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { ORDER_STATUS_LABELS, type DemoOrder, type OrderStatus } from '@/data/admin-demo';
 import { money } from '@/lib/money';
+import {
+  ORDER_STATUS_LABELS,
+  PAYMENT_METHOD_LABELS,
+  itemsSummary,
+  statusTone,
+  timeLabel,
+  type AdminOrder,
+  type OrderStatus,
+} from '@/lib/orders-api';
 
 import { useAdminData } from './AdminDataProvider';
 
@@ -77,12 +85,40 @@ export function Metric({ title, value, icon, color, foot }: MetricProps) {
   );
 }
 
+/**
+ * The status badge.
+ *
+ * The tone is chosen by `statusTone`, not by the status name: eight server
+ * statuses share five colours, because what a glance needs to know is
+ * "waiting, working, ready, done, or gone wrong".
+ */
 export function StatusBadge({ status }: { status: OrderStatus }) {
-  return <span className={`status ${status}`}>{ORDER_STATUS_LABELS[status]}</span>;
+  return <span className={`status ${statusTone(status)}`}>{ORDER_STATUS_LABELS[status]}</span>;
+}
+
+/**
+ * How this order is paid, under the total.
+ *
+ * Shown because it is what tells a cashier whether there is money to collect
+ * at handover, and it is NOT inferred from the order's status: an order can be
+ * complete with its payment still pending (CLAUDE.md section 6).
+ */
+function PaymentHint({ order }: { order: AdminOrder }) {
+  if (order.paymentMethod === null) {
+    return <span className="cell-sub warn">Chưa ghi nhận thanh toán</span>;
+  }
+
+  const method = PAYMENT_METHOD_LABELS[order.paymentMethod];
+
+  return (
+    <span className={order.paymentStatus === 'PAID' ? 'cell-sub paid' : 'cell-sub'}>
+      {order.paymentStatus === 'PAID' ? `${method} · đã thu` : `${method} · chưa thu`}
+    </span>
+  );
 }
 
 /** The order list, shared by the dashboard and the orders screen. */
-export function OrdersTable({ orders }: { orders: readonly DemoOrder[] }) {
+export function OrdersTable({ orders }: { orders: readonly AdminOrder[] }) {
   const { openModal } = useAdminData();
 
   return (
@@ -109,16 +145,23 @@ export function OrdersTable({ orders }: { orders: readonly DemoOrder[] }) {
             orders.map((order) => (
               <tr key={order.id}>
                 <td>
-                  <strong>{order.id}</strong>
+                  <strong>{order.code}</strong>
                 </td>
                 <td>
-                  <strong>{order.name}</strong>
+                  <strong>{order.contactName}</strong>
                   <br />
-                  <span style={{ color: '#9ca6b6', fontSize: 10 }}>{order.items}</span>
+                  <span className="cell-sub">{itemsSummary(order.items)}</span>
                 </td>
-                <td>{order.time}</td>
+                {/*
+                 * The time the customer is coming for it, which is what the
+                 * counter works to. An order with no requested time falls back
+                 * to when it was placed.
+                 */}
+                <td>{timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)}</td>
                 <td>
                   <strong>{money(order.total)}</strong>
+                  <br />
+                  <PaymentHint order={order} />
                 </td>
                 <td>
                   <StatusBadge status={order.status} />

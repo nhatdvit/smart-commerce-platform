@@ -16,6 +16,10 @@ export const ERROR_CODE = {
   // 404
   RESOURCE_NOT_FOUND: 'RESOURCE_NOT_FOUND',
 
+  // 419 - cookie-authenticated flows
+  /** CSRF token missing or stale: fetch /sanctum/csrf-cookie again and retry. */
+  CSRF_TOKEN_MISMATCH: 'CSRF_TOKEN_MISMATCH',
+
   // 409 - conflicts and concurrency
   IDEMPOTENCY_KEY_REUSED: 'IDEMPOTENCY_KEY_REUSED',
   /** Same idempotency key, still running. Retry; do not change the key. */

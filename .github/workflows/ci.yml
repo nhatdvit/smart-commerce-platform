@@ -93,7 +93,13 @@ jobs:
     env:
       APP_ENV: testing
       # Test-only key. Real secrets never live in a workflow file.
-      APP_KEY: base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmcx
+      #
+      # It must decode to exactly 32 bytes: AES-256-CBC refuses anything else
+      # with "Unsupported cipher or incorrect key length", and the failure only
+      # surfaces on a code path that actually encrypts — a login that sets a
+      # session cookie. The previous value decoded to 30 bytes and went
+      # unnoticed until the auth endpoints got their first test.
+      APP_KEY: base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmdlMzI=
       APP_DEBUG: 'true'
       # These three feed the OpenAPI document, so they must match the values it
       # was exported with, or the "OpenAPI document is current" check below
@@ -345,7 +351,8 @@ jobs:
       - name: Render dev stack
         run: |
           cp .env.example .env
-          sed -i 's|^APP_KEY=.*|APP_KEY=base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmcx|' .env
+          # Same 32-byte test-only key as the Pest job; see the note there.
+          sed -i 's|^APP_KEY=.*|APP_KEY=base64:Y2hhbmdlbWVjaGFuZ2VtZWNoYW5nZW1lY2hhbmdlMzI=|' .env
           docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml config -q
 
       - name: Render production stack

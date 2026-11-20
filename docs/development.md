@@ -137,6 +137,28 @@ Nginx reached no PHP-FPM worker. Either the api container is down, or
 `infra/nginx/conf.d/fastcgi-api.inc` at `/var/www/html/public/index.php`; it
 must match the image `WORKDIR`.
 
+A third cause, and the one that bites right after a rebuild: nginx resolves an
+upstream host name once at startup and caches the address. Recreating `api`
+without recreating `gateway` gives the api container a new IP while nginx keeps
+dialling the old one, so `/health/live` answers 502 even though
+`docker compose ps` reports every container healthy. The gateway log names it:
+
+```text
+connect() failed (111: Connection refused) while connecting to upstream,
+upstream: "fastcgi://172.20.0.5:9000"
+```
+
+while `getent hosts api` inside the gateway already returns the new address.
+Restart the gateway so it re-resolves:
+
+```bash
+docker compose --env-file .env -f infra/compose.yaml -f infra/compose.dev.yaml restart gateway
+```
+
+`docker compose up -d` only recreates containers whose image or configuration
+changed, so a gateway on the stock `nginx` image is left running untouched
+while `api` is replaced underneath it. That is the whole mechanism.
+
 ### 500 with "could not be opened in append mode"
 
 `storage/logs` is not writable by `www-data`. The image sets this up; it breaks

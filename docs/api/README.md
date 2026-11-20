@@ -14,8 +14,13 @@ orchestrators never depend on the business contract.
 | 404             | Not found, or not visible to this caller                          |
 | 405             | Method not allowed                                                |
 | 409             | Conflict: invalid transition, out of stock, idempotency key reuse |
+| 419             | CSRF token missing or stale on a cookie-authenticated write       |
 | 422             | Semantically invalid request that parsed correctly                |
 | 429             | Rate limited                                                      |
+
+A 419 is not an authentication failure: the session is fine, the token that
+proves the request came from the app is not. The client fetches
+`GET /sanctum/csrf-cookie` again and retries; signing in again would not help.
 
 ## Error body
 
@@ -47,6 +52,60 @@ enumerate objects.
 Domain and application code throws
 `App\Shared\Domain\Exception\BusinessRuleViolation` with an `ErrorCode`, not an
 HTTP exception — the rule stays independent of the transport.
+
+## Uploaded media
+
+Product photography is uploaded to `POST /api/v1/admin/products/images` and
+served from `GET /api/v1/media/products/{store}/{file}`. Three rules matter to
+a client:
+
+- **`image_url` is opaque.** Save what the upload returned and send it back
+  unchanged. It is a path on this API while uploads live on the API's own
+  disk, and a bucket URL once object storage is configured.
+- **A product shows a photo or an icon, never both.** `image_url` and `icon`
+  are mutually exclusive; sending both is a 422.
+- **2 MB, and only JPEG, PNG or WebP.** The gateway and PHP both cap the body,
+  so a bigger file is refused by the gateway before the API sees it. The type
+  is read from the bytes, not from the filename. Clients are expected to
+  downscale first; the dashboard resizes to 1024px and re-encodes, which also
+  drops the EXIF a phone camera writes, including where the photo was taken.
+
+Uploads live in the `api-storage` Docker volume, not in the image: back it up
+with the database, because a product's photo exists nowhere else.
+
+An upload happens before the product exists, so an abandoned form leaves a file
+behind. `catalog:prune-product-images` deletes photos no product points at,
+nightly at 03:15. It only touches files older than 24 hours: a photo uploaded
+into a dialog that is still open is indistinguishable from an orphan, and
+deleting it would break a save in progress. Run it with `--dry-run` to see what
+would go, and `--hours=` to change the grace period.
+
+## Orders and the operations queue
+
+`GET /api/v1/admin/orders` is a work queue, and three things about it are
+deliberate:
+
+- **Order status and payment status are two state machines.** `COMPLETED`
+  never implies `PAID`; an order can be handed over with its payment still
+  `PENDING`, which is exactly what an uncollected cash order is. The queue row
+  carries both, and a client must never derive one from the other.
+- **`status_counts` is the store's count, not the page's.** It covers the five
+  OPEN statuses only, so a queue badge shows the real number of waiting orders
+  rather than the number that happens to be on the first page. Counting every
+  order a store has ever served would grow without bound.
+- **`payment_status` as a filter is refused with 422, not ignored.** It is
+  designed, and it arrives with the payments screen. A filter that silently did
+  nothing would show a cashier "unpaid orders" that are in fact every order in
+  the shop.
+
+`POST /api/v1/admin/orders/{order}/status` takes the target status, not a
+"next" command: two staff members tapping at once would both mean something
+different by "next". The server validates the move against the committed status
+under a row lock, so the second tap is a `409 INVALID_STATE_TRANSITION` the
+operator can see, and every accepted move writes a history row with the actor
+and the reason. `PENDING_PAYMENT → PLACED` is a legal edge of the machine but
+is not accepted here — an order waiting for a transfer joins the queue when its
+payment is confirmed against the real bank credit.
 
 ## Money
 
@@ -285,10 +344,13 @@ is how to find every place a decision will land:
 grep -n 'x-provisional' docs/api/openapi.yaml
 ```
 
-Phase 01 implements `GET /api/v1/` and `GET /api/v1/me`, plus the `/health/live`
-and `/health/ready` probes that sit outside the versioned API. Everything else
-is designed and not yet built; `pnpm openapi:conformance` prints the exact
-remaining list.
+Built so far: the metadata and session endpoints, the `/health/live` and
+`/health/ready` probes that sit outside the versioned API, the admin catalog
+and menu endpoints behind the menu screen (including product photography), and
+the admin order endpoints behind the operations queue. Everything else is
+designed and not yet built; `pnpm openapi:conformance` prints the exact
+remaining list, and fails the build if something is implemented that nobody
+designed.
 
 ## Changing the contract
 

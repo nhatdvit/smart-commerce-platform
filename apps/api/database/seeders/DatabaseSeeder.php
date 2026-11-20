@@ -21,11 +21,19 @@ final class DatabaseSeeder extends Seeder
         $this->call(RolePermissionSeeder::class);
 
         if (app()->isProduction()) {
+            // Still reference data: a store with no menu cannot sell anything,
+            // and nothing in the contract lets an operator create one.
+            $this->call(DefaultMenuSeeder::class);
             $this->command?->info('Production environment: reference data only, no demo data.');
 
             return;
         }
 
         $this->call(DemoStoreSeeder::class);
+        // After the demo store exists, so it gets a menu too.
+        $this->call(DefaultMenuSeeder::class);
+        // Last: the orders snapshot whatever the menu offers by now, and they
+        // are attributed to the demo staff the store seeder created.
+        $this->call(DemoOrderSeeder::class);
     }
 }
