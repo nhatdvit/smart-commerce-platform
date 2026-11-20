@@ -84,6 +84,7 @@ final class Product
         }
 
         self::assertVariantNamesAreDistinct($variants);
+        self::assertOneThingIsShown($imageUrl, $icon);
 
         return new self(
             $id,
@@ -112,6 +113,26 @@ final class Product
     public static function normaliseName(string $name): string
     {
         return DisplayName::normalise($name);
+    }
+
+    /**
+     * A product shows a photo or an icon, never both.
+     *
+     * Holding both would leave what a customer sees up to whichever client
+     * rendered it, and the two would drift: a shop that uploads a photo and
+     * forgets the icon would still see the icon on a screen that preferred it.
+     * The rule lives here rather than in a Form Request so it also holds for a
+     * seeder or an import.
+     */
+    private static function assertOneThingIsShown(?string $imageUrl, ?string $icon): void
+    {
+        if ($imageUrl !== null && $icon !== null) {
+            throw new BusinessRuleViolation(
+                ErrorCode::ValidationFailed,
+                'A product shows either a photo or an icon, not both',
+                [['field' => 'image_url', 'message' => 'Chọn một: ảnh tải lên hoặc icon.']],
+            );
+        }
     }
 
     /** @param list<ProductVariant> $variants */

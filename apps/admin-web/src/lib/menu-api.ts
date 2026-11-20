@@ -24,7 +24,10 @@ export interface MenuProduct {
   readonly id: string;
   readonly name: string;
   readonly cat: string;
+  /** The icon shown when there is no photo. */
   readonly icon: FoodIconName;
+  /** An uploaded photo, or null when the dish shows its icon instead. */
+  readonly imageUrl: string | null;
   /** Integer đồng, as the API sends it. */
   readonly price: number;
   /** Portions still sellable today. */
@@ -68,6 +71,7 @@ interface ApiMenuItem {
     readonly id: string;
     readonly name: string;
     readonly icon: string | null;
+    readonly image_url: string | null;
     readonly category: ApiCategory | null;
   };
   readonly variant: { readonly id: string; readonly name: string };
@@ -91,6 +95,7 @@ interface ApiProduct {
   readonly category_id: string | null;
   readonly category: ApiCategory | null;
   readonly icon: string | null;
+  readonly image_url: string | null;
   readonly status: string;
   readonly variants: readonly {
     readonly id: string;
@@ -111,6 +116,7 @@ export interface MenuProductDraft {
   readonly name: string;
   readonly cat: string;
   readonly icon: FoodIconName;
+  readonly imageUrl: string | null;
   readonly price: number;
   readonly stock: number;
   readonly capacity: number;
@@ -137,12 +143,26 @@ function toMenuProduct(item: ApiMenuItem): MenuProductRecord {
     name: item.product.name,
     cat: item.product.category?.name ?? UNCATEGORISED,
     icon: toIcon(item.product.icon),
+    imageUrl: item.product.image_url,
     price: toAmount(item.price),
     stock: item.available_quantity ?? PORTIONS_FALLBACK,
     capacity: item.daily_capacity ?? item.available_quantity ?? PORTIONS_FALLBACK,
     variantId: item.variant.id,
     menuItemId: item.id,
   };
+}
+
+/**
+ * The photo-or-icon pair, as the API wants it.
+ *
+ * Exactly one is set and the other is explicitly null — not omitted — so a
+ * save actually clears what the dish stopped showing. The server enforces the
+ * same rule and refuses a payload carrying both.
+ */
+function imageFields(draft: MenuProductDraft): { image_url: string | null; icon: string | null } {
+  return draft.imageUrl === null
+    ? { image_url: null, icon: draft.icon }
+    : { image_url: draft.imageUrl, icon: null };
 }
 
 /** The item payload for a menu replacement, carrying today's counts unchanged. */
@@ -195,7 +215,7 @@ export async function createMenuProduct(
     name: draft.name,
     status: 'ACTIVE',
     category_name: draft.cat,
-    icon: draft.icon,
+    ...imageFields(draft),
     variants: [
       // One default variant: the form offers one price, so inventing sizes
       // nobody asked for would be worse than honest.
@@ -244,7 +264,7 @@ export async function updateMenuProduct(
     name: draft.name,
     status: 'ACTIVE',
     category_name: draft.cat,
-    icon: draft.icon,
+    ...imageFields(draft),
     variants: [
       {
         id: current.variantId,
@@ -286,7 +306,7 @@ export async function archiveMenuProduct(
     name: current.name,
     status: 'ARCHIVED',
     category_name: current.cat,
-    icon: current.icon,
+    ...imageFields(current),
     variants: [
       {
         id: current.variantId,

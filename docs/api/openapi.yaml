@@ -1583,6 +1583,110 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /admin/products/images:
+    post:
+      operationId: uploadProductImage
+      tags: [Admin - Catalog]
+      summary: Upload a product photo
+      description: |
+        Permission `catalog.manage`.
+
+        Separate from the product write because a photo is chosen before the
+        product exists: the form uploads, shows what was stored, and only then
+        saves the product with the returned `image_url`. The same upload can be
+        reused by several products, and a product that is never saved simply
+        leaves an unreferenced file behind.
+
+        The body is `multipart/form-data` with one `file` part. Only real
+        raster images are accepted — JPEG, PNG and WebP — and the type is read
+        from the bytes, not from the filename or the declared type. SVG is
+        refused on purpose: it is a document that can carry script, and it
+        would be served from the same origin as the dashboard.
+
+        **Size.** The gateway and PHP both cap a request body at 2 MB, so a
+        larger file is refused with `413` before any of this runs. Clients are
+        expected to downscale before uploading; the dashboard resizes to at
+        most 1024px and re-encodes, which also drops the EXIF block a phone
+        camera writes - including where the photo was taken.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: The stored image.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadedImage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '413':
+          description: |
+            The body exceeds the 2 MB request cap. Produced by the gateway, so
+            the envelope every other failure uses is not guaranteed here.
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /media/products/{store}/{file}:
+    get:
+      operationId: getProductImage
+      tags: [Catalog]
+      summary: An uploaded product photo
+      description: |
+        Serves the bytes of an uploaded photo. Public, because product
+        photography is what a storefront shows; the file name is a random UUID,
+        so nothing is enumerable.
+
+        The response carries the stored content type and `nosniff`, so a file
+        can only ever be interpreted as the image type it was accepted as.
+
+        It is served by the API because this deployment keeps uploads on its
+        own disk. Once object storage is configured, `image_url` points at the
+        bucket instead and this route is only a fallback - which is why clients
+        must treat `image_url` as opaque rather than building it themselves.
+      security: []
+      parameters:
+        - name: store
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+        - name: file
+          in: path
+          required: true
+          description: The stored file name, `<uuid>.<jpg|png|webp>`.
+          schema:
+            type: string
+            pattern: '^[0-9a-f-]{36}\.(jpg|png|webp)$'
+      responses:
+        '200':
+          description: The image.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /admin/products/{product}:
     put:
       operationId: updateAdminProduct
@@ -2476,6 +2580,25 @@ components:
           items:
             $ref: '#/components/schemas/ModifierGroup'
 
+    UploadedImage:
+      type: object
+      description: Where an uploaded photo now lives, ready to be saved on a product.
+      required: [image_url, content_type, byte_size]
+      additionalProperties: false
+      properties:
+        image_url:
+          type: string
+          description: |
+            Opaque to the client: today a path on this API, tomorrow a bucket
+            URL. Store it and send it back unchanged; never construct one.
+          examples: ['/api/v1/media/products/0193f0a2-6f3b-7c21-9a44-2f1c8e7b5d90/0193f0a3-1111-7c21-9a44-2f1c8e7b5d90.webp']
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        byte_size:
+          type: integer
+          minimum: 1
+
     ProductPage:
       allOf:
         - $ref: '#/components/schemas/PageMeta'
@@ -2522,10 +2645,20 @@ components:
         inventory_tracking:
           type: boolean
           default: true
+        image_url:
+          type: [string, 'null']
+          maxLength: 500
+          description: |
+            A photo from `POST /admin/products/images`, sent back unchanged, or
+            null to go back to an icon. Mutually exclusive with `icon`: a
+            product shows one thing, and holding both would leave what a
+            customer sees up to whichever client rendered it. Sending both is a
+            422.
         icon:
           type: [string, 'null']
           maxLength: 40
           pattern: '^[a-z0-9-]+$'
+          description: A display key, used when there is no photo.
         attributes:
           $ref: '#/components/schemas/ProductAttributes'
         variants:

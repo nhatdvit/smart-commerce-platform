@@ -42,6 +42,17 @@ final class SaveProductRequest extends FormRequest
             'status' => ['required', 'string', Rule::in($statuses)],
             'inventory_tracking' => ['sometimes', 'boolean'],
             'icon' => ['sometimes', 'nullable', 'string', 'max:40', 'regex:/^[a-z0-9-]+$/'],
+            // A photo from the upload endpoint, echoed back unchanged. Checked
+            // against the shape this API issues so a product cannot be made to
+            // point at someone else's host, which would turn a menu into a
+            // beacon for whoever owns it.
+            'image_url' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:500',
+                'regex:#^/api/v1/media/products/[0-9a-f-]{36}/[0-9a-f-]{36}\.(jpg|png|webp)$#',
+            ],
 
             // Two ways to say which category, and sending both is a 422 rather
             // than a guess. The pair is checked again in the application layer,
@@ -89,6 +100,7 @@ final class SaveProductRequest extends FormRequest
             'variants.*.base_price_amount.regex' => 'Giá bán phải là số nguyên đồng, không âm.',
             'variants.*.base_price_amount.max' => 'Giá bán vượt mức cho phép.',
             'name.required' => 'Vui lòng nhập tên món.',
+            'image_url.regex' => 'Ảnh phải là ảnh đã tải lên qua hệ thống.',
             'modifier_group_ids.prohibited' => 'Tuỳ chọn món (modifier) chưa được hỗ trợ trong giai đoạn này.',
         ];
     }
@@ -108,7 +120,7 @@ final class SaveProductRequest extends FormRequest
             categoryName: $this->nullableString($data['category_name'] ?? null),
             description: $this->nullableString($data['description'] ?? null),
             inventoryTracking: (bool) ($data['inventory_tracking'] ?? true),
-            imageUrl: null,
+            imageUrl: $this->nullableString($data['image_url'] ?? null),
             icon: $this->nullableString($data['icon'] ?? null),
             attributes: isset($data['attributes']) && is_array($data['attributes'])
                 ? ProductAttributes::fromArray($data['attributes'])

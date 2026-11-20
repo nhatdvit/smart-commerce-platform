@@ -3,6 +3,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { ORDER_STATUS_LABELS, nextOrderStatus } from '@/data/admin-demo';
+import { mediaUrl } from '@/lib/api-client';
+import { ACCEPTED_IMAGE_TYPES, uploadProductImage } from '@/lib/image-upload';
 import { money } from '@/lib/money';
 import {
   EMPTY_PRODUCT_FORM,
@@ -89,6 +91,126 @@ function Field({ label, error, hint, children }: FieldProps) {
         </em>
       )}
     </label>
+  );
+}
+
+/**
+ * The photo-or-icon choice.
+ *
+ * Two radios rather than "upload clears the icon" magic: the shop owner says
+ * which of the two the dish shows, and only that one is editable. Picking a
+ * file uploads it straight away, so what the dialog previews is the stored
+ * image - not a local preview that might never have reached the server.
+ */
+function ProductImageField({
+  values,
+  errors,
+  set,
+}: {
+  readonly values: ProductFormValues;
+  readonly errors: ProductFieldErrors;
+  readonly set: <K extends keyof ProductFormValues>(key: K, value: ProductFormValues[K]) => void;
+}) {
+  const { notify } = useAdminData();
+  const [uploading, setUploading] = useState(false);
+
+  function choose(file: File | undefined) {
+    if (file === undefined) {
+      return;
+    }
+
+    setUploading(true);
+    uploadProductImage(file)
+      .then((uploaded) => set('imageUrl', uploaded.image_url))
+      .catch((error: unknown) =>
+        notify(error instanceof Error ? error.message : 'Không tải được ảnh lên.'),
+      )
+      .finally(() => setUploading(false));
+  }
+
+  return (
+    <div className="form-field image-field">
+      <span>Ảnh minh hoạ</span>
+
+      <div className="image-choice" role="radiogroup" aria-label="Kiểu ảnh minh hoạ">
+        <label>
+          <input
+            type="radio"
+            name="product-image-kind"
+            checked={values.imageKind === 'icon'}
+            onChange={() => set('imageKind', 'icon')}
+          />
+          Dùng icon
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="product-image-kind"
+            checked={values.imageKind === 'photo'}
+            onChange={() => set('imageKind', 'photo')}
+          />
+          Tải ảnh lên
+        </label>
+      </div>
+
+      {values.imageKind === 'icon' ? (
+        <select
+          aria-label="Icon minh hoạ"
+          value={values.icon}
+          onChange={(event) =>
+            // Narrowed through the choice list rather than cast, so an
+            // unexpected value cannot reach FoodIcon as a valid name.
+            set(
+              'icon',
+              FOOD_ICON_CHOICES.find((choice) => choice.value === event.target.value)?.value ??
+                values.icon,
+            )
+          }
+        >
+          {FOOD_ICON_CHOICES.map((choice) => (
+            <option key={choice.value} value={choice.value}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <div className="image-upload">
+          {values.imageUrl === null ? null : (
+            <div className="image-preview">
+              {/* A plain img, like every other image here: the path is opaque
+                  and served by the API, not a remote pattern next/image can be
+                  configured for ahead of time. */}
+              <img src={mediaUrl(values.imageUrl)} alt="Ảnh món đã tải lên" />
+              <button
+                type="button"
+                className="table-action danger"
+                onClick={() => set('imageUrl', null)}
+              >
+                Xoá ảnh
+              </button>
+            </div>
+          )}
+          <input
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES}
+            aria-invalid={errors.imageUrl !== undefined}
+            disabled={uploading}
+            onChange={(event) => choose(event.target.files?.[0])}
+          />
+          <em className="field-hint">
+            {uploading
+              ? 'Đang tải ảnh lên...'
+              : 'JPEG, PNG hoặc WebP. Ảnh sẽ được thu nhỏ tự động.'}
+          </em>
+        </div>
+      )}
+
+      {errors.imageUrl === undefined ? null : (
+        <em className="field-error" role="alert">
+          {errors.imageUrl}
+        </em>
+      )}
+    </div>
   );
 }
 
@@ -221,26 +343,7 @@ function ProductFormModal({ productId }: { readonly productId?: string }) {
         ))}
       </datalist>
 
-      <Field label="Ảnh minh hoạ">
-        <select
-          value={values.icon}
-          onChange={(event) =>
-            // Narrowed through the choice list rather than cast, so an
-            // unexpected value cannot reach FoodIcon as a valid name.
-            set(
-              'icon',
-              FOOD_ICON_CHOICES.find((choice) => choice.value === event.target.value)?.value ??
-                values.icon,
-            )
-          }
-        >
-          {FOOD_ICON_CHOICES.map((choice) => (
-            <option key={choice.value} value={choice.value}>
-              {choice.label}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <ProductImageField values={values} errors={errors} set={set} />
 
       <Field label="Giá bán (VND)" error={errors.price}>
         <input

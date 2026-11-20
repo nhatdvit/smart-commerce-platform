@@ -442,6 +442,121 @@
                 }
             }
         },
+        "/media/products/{store}/{file}": {
+            "get": {
+                "operationId": "media.product-image",
+                "description": "The content type is pinned to what the file was accepted as and\n`nosniff` forbids the browser from deciding otherwise, so a file can\nnever be interpreted as anything but that image type. Both route\nparameters are constrained to a UUID shape, which leaves no way to\nexpress a path at all, let alone one that climbs out of the directory.",
+                "summary": "Serves one stored photo",
+                "tags": [
+                    "ProductImage"
+                ],
+                "parameters": [
+                    {
+                        "name": "store",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "file",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "headers": {
+                            "X-Content-Type-Options": {
+                                "schema": {
+                                    "type": "string",
+                                    "const": "nosniff"
+                                }
+                            },
+                            "Content-Disposition": {
+                                "schema": {
+                                    "type": "string",
+                                    "const": "inline"
+                                }
+                            },
+                            "Cache-Control": {
+                                "schema": {
+                                    "type": "string",
+                                    "const": "public, max-age=31536000, immutable"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/products/images": {
+            "post": {
+                "operationId": "admin.products.images.store",
+                "tags": [
+                    "ProductImage"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UploadProductImageRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "image_url": {
+                                            "type": "string"
+                                        },
+                                        "content_type": {
+                                            "type": "string"
+                                        },
+                                        "byte_size": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "image_url",
+                                        "content_type",
+                                        "byte_size"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "operationId": "auth.login",
@@ -1066,6 +1181,15 @@
                         "pattern": "^[a-z0-9-]+$",
                         "maxLength": 40
                     },
+                    "image_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "A photo from the upload endpoint, echoed back unchanged. Checked\nagainst the shape this API issues so a product cannot be made to\npoint at someone else's host, which would turn a menu into a\nbeacon for whoever owns it.",
+                        "pattern": "#^/api/v1/media/products/[0-9a-f-]{36}/[0-9a-f-]{36}\\.(jpg|png|webp)$#",
+                        "maxLength": 500
+                    },
                     "category_id": {
                         "type": [
                             "string",
@@ -1218,6 +1342,22 @@
                     "is_available"
                 ],
                 "title": "UpdateMenuItemAvailabilityRequest"
+            },
+            "UploadProductImageRequest": {
+                "type": "object",
+                "description": "Validates one uploaded product photo.\n\nThese rules are the cheap first pass. They read what the client declared, so\nthe authoritative check is the content sniff in UploadProductImage, which\nreads the bytes: a rule on the declared type can be satisfied by renaming a\nfile.",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 2048 kilobytes."
+                    }
+                },
+                "required": [
+                    "file"
+                ],
+                "title": "UploadProductImageRequest"
             }
         },
         "responses": {

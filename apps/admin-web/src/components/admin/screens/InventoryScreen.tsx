@@ -1,7 +1,8 @@
 'use client';
 
 import { useAdminData } from '../AdminDataProvider';
-import { FoodIcon, IconAlert, IconBoxes, IconCheckCircle, IconPlus, IconXCircle } from '../icons';
+import { IconAlert, IconBoxes, IconCheckCircle, IconPlus, IconXCircle } from '../icons';
+import { ProductThumb } from '../ProductThumb';
 import { Metric, PageHeading } from '../primitives';
 
 export function InventoryScreen() {
@@ -74,7 +75,7 @@ export function InventoryScreen() {
             <div className="inventory-item" key={product.id}>
               <div>
                 <strong>
-                  <FoodIcon name={product.icon} size={16} /> {product.name}
+                  <ProductThumb product={product} size={16} /> {product.name}
                 </strong>
                 <small>{product.cat}</small>
               </div>

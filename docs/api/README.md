@@ -53,6 +53,26 @@ Domain and application code throws
 `App\Shared\Domain\Exception\BusinessRuleViolation` with an `ErrorCode`, not an
 HTTP exception — the rule stays independent of the transport.
 
+## Uploaded media
+
+Product photography is uploaded to `POST /api/v1/admin/products/images` and
+served from `GET /api/v1/media/products/{store}/{file}`. Three rules matter to
+a client:
+
+- **`image_url` is opaque.** Save what the upload returned and send it back
+  unchanged. It is a path on this API while uploads live on the API's own
+  disk, and a bucket URL once object storage is configured.
+- **A product shows a photo or an icon, never both.** `image_url` and `icon`
+  are mutually exclusive; sending both is a 422.
+- **2 MB, and only JPEG, PNG or WebP.** The gateway and PHP both cap the body,
+  so a bigger file is refused by the gateway before the API sees it. The type
+  is read from the bytes, not from the filename. Clients are expected to
+  downscale first; the dashboard resizes to 1024px and re-encodes, which also
+  drops the EXIF a phone camera writes, including where the photo was taken.
+
+Uploads live in the `api-storage` Docker volume, not in the image: back it up
+with the database, because a product's photo exists nowhere else.
+
 ## Money
 
 VND amounts are whole đồng, and every amount is an **object** carrying its own

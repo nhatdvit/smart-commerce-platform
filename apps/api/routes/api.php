@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Catalog\Presentation\Http\Controller\AdminProductController;
+use App\Modules\Catalog\Presentation\Http\Controller\ProductImageController;
 use App\Modules\Identity\Presentation\Http\Controller\SessionController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
@@ -69,10 +70,26 @@ Route::post('/auth/logout', [SessionController::class, 'logout'])
  * policy, which is the check that catches an id from another store arriving on
  * a route the caller may otherwise use.
  */
+/*
+ * Uploaded product photography, served to anyone: it is what a storefront
+ * shows. The file name is a random UUID, and both parameters are constrained
+ * below, so nothing here can be enumerated or walked.
+ */
+Route::get('/media/products/{store}/{file}', [ProductImageController::class, 'show'])
+    ->whereUuid('store')
+    ->where('file', '[0-9a-f-]{36}\.(jpg|png|webp)')
+    ->name('api.media.product-image');
+
 Route::middleware(['auth:sanctum', 'store.resolve'])
     ->prefix('admin')
     ->name('api.admin.')
     ->group(static function (): void {
+        // Before /products/{product}, or the literal path would be read as a
+        // product id - and refused, since that id is not a UUID.
+        Route::post('/products/images', [ProductImageController::class, 'store'])
+            ->middleware('store.can:catalog.manage')
+            ->name('products.images.store');
+
         Route::get('/products', [AdminProductController::class, 'index'])
             ->middleware('store.can:catalog.read')
             ->name('products.index');

@@ -99,7 +99,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
   const headers: Record<string, string> = { Accept: 'application/json' };
 
-  if (body !== undefined) {
+  // FormData sets its own Content-Type, including the multipart boundary the
+  // server needs to parse the body. Setting one here would overwrite it with a
+  // header that has no boundary, and the upload would arrive empty.
+  if (body !== undefined && !(body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -112,7 +115,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     method,
     headers,
     credentials: 'include',
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body:
+      body === undefined || body instanceof FormData
+        ? (body as BodyInit | undefined)
+        : JSON.stringify(body),
   });
 
   if (response.status === 204) {
@@ -133,4 +139,24 @@ export const api = {
   get: <T>(path: string): Promise<T> => request<T>('GET', path),
   post: <T>(path: string, body?: unknown): Promise<T> => request<T>('POST', path, body),
   put: <T>(path: string, body?: unknown): Promise<T> => request<T>('PUT', path, body),
+  /** A multipart POST. Same session and CSRF handling as any other write. */
+  upload: <T>(path: string, body: FormData): Promise<T> => request<T>('POST', path, body),
 };
+
+/**
+ * Resolves a stored media path against the API's origin.
+ *
+ * `image_url` is opaque: a path on this API today, a bucket URL once object
+ * storage is configured. An absolute URL is returned untouched; a path is
+ * joined to wherever the API lives, which is the page's own origin behind the
+ * gateway.
+ */
+export function mediaUrl(imageUrl: string): string {
+  if (/^https?:\/\//i.test(imageUrl)) {
+    return imageUrl;
+  }
+
+  const base = adminEnv.apiBaseUrl.replace(/\/api\/v1\/?$/, '');
+
+  return base + imageUrl;
+}

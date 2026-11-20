@@ -7,7 +7,6 @@ import { money } from '@/lib/money';
 
 import { useAdminData } from '../AdminDataProvider';
 import {
-  FoodIcon,
   IconChevronDown,
   IconClock,
   IconHeart,
@@ -17,6 +16,7 @@ import {
   IconTrendUp,
 } from '../icons';
 import { Metric, OrdersTable, PageHeading } from '../primitives';
+import { ProductThumb } from '../ProductThumb';
 
 export function DashboardScreen() {
   const { orders, products, pendingCount, notifyAction } = useAdminData();
@@ -131,7 +131,7 @@ export function DashboardScreen() {
           {products.slice(0, 4).map((product, index) => (
             <div className="popular" key={product.id}>
               <div className="food-thumb">
-                <FoodIcon name={product.icon} />
+                <ProductThumb product={product} size={25} />
               </div>
               <div className="popular-info">
                 <strong>{product.name}</strong>

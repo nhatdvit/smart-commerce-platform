@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { money } from '@/lib/money';
 
 import { useAdminData } from '../AdminDataProvider';
-import { FoodIcon, IconCalendar, IconPlus } from '../icons';
+import { IconCalendar, IconPlus } from '../icons';
+import { ProductThumb } from '../ProductThumb';
 import { PageHeading } from '../primitives';
 
 export function MenuScreen() {
@@ -108,7 +109,7 @@ export function MenuScreen() {
           {visible.map((product) => (
             <article className="product-card" key={product.id}>
               <div className="food-thumb">
-                <FoodIcon name={product.icon} size={32} />
+                <ProductThumb product={product} size={32} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h3>{product.name}</h3>

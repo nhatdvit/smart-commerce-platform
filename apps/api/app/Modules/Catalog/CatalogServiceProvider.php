@@ -6,13 +6,16 @@ namespace App\Modules\Catalog;
 
 use App\Modules\Catalog\Application\Contract\ProvidesVariantSnapshots;
 use App\Modules\Catalog\Domain\Contract\CategoryRepository;
+use App\Modules\Catalog\Domain\Contract\ProductImageStorage;
 use App\Modules\Catalog\Domain\Contract\ProductRepository;
 use App\Modules\Catalog\Domain\Entity\Product;
 use App\Modules\Catalog\Infrastructure\Persistence\EloquentCategoryRepository;
 use App\Modules\Catalog\Infrastructure\Persistence\EloquentProductRepository;
 use App\Modules\Catalog\Infrastructure\Persistence\EloquentVariantSnapshotProvider;
+use App\Modules\Catalog\Infrastructure\Storage\DiskProductImageStorage;
 use App\Modules\Catalog\Presentation\Policy\ProductPolicy;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -32,6 +35,16 @@ final class CatalogServiceProvider extends ServiceProvider
         // The module's exported read model. Other modules bind to the
         // interface; nothing outside Catalog touches its tables.
         $this->app->singleton(ProvidesVariantSnapshots::class, EloquentVariantSnapshotProvider::class);
+
+        // Which disk holds product photography is a deployment decision, so
+        // it is resolved from configuration here and nowhere else: the API's
+        // own disk now, object storage when one is configured.
+        $this->app->singleton(
+            ProductImageStorage::class,
+            static fn (): DiskProductImageStorage => new DiskProductImageStorage(
+                Storage::disk((string) config('commerce.media.disk', 'local')),
+            ),
+        );
     }
 
     public function boot(): void
