@@ -317,6 +317,16 @@ When receiving an implementation task:
 
 Never claim a command/test/deploy succeeded unless it actually ran and passed. Do not silently change architecture, add new major infrastructure, or perform destructive DB operations. Request explicit approval for production deploys, destructive migrations, credential changes, and external payments.
 
+### Branching
+
+One feature, one branch, cut from `main`:
+
+1. **Before starting**, fetch and branch from an up-to-date `main` — never from another feature branch. `git fetch origin && git switch -c feat/SCP-<id>-<slug> origin/main`. Stacking features means reviewing one change forces reviewing the one underneath it, and a revert takes both.
+2. **Keep it synced**: merge `main` into the branch whenever `main` moves, and always before opening a pull request. `git fetch origin && git merge origin/main`. Merge rather than rebase, so a pushed branch never has to be force-pushed and review comments stay anchored to the commits they were written on.
+3. **Resolve conflicts on the branch**, never on `main`, and re-run the checks in step 6 above afterwards: a clean textual merge is not a passing build.
+4. **One feature per pull request.** An unrelated fix found along the way goes in its own commit with its own message, and in its own branch when it is more than a line or two.
+5. If the work genuinely needs a feature that is not in `main` yet, say so and ask before branching from the branch that holds it — that is the one case where the rule bends, and it should be a deliberate decision rather than a habit.
+
 ## 14. Immediate milestone: Phase 01 — Foundation
 
 Build only:
