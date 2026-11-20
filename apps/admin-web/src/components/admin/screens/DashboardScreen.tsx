@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
 
 import { BESTSELLER_COUNTS, REVENUE_CHART, WEEKDAY_LABELS } from '@/data/admin-demo';
 import { money } from '@/lib/money';
+import { DEFAULT_ORDER_QUERY } from '@/lib/orders-api';
 
 import { useAdminData } from '../AdminDataProvider';
 import {
@@ -19,7 +21,14 @@ import { Metric, OrdersTable, PageHeading } from '../primitives';
 import { ProductThumb } from '../ProductThumb';
 
 export function DashboardScreen() {
-  const { orders, products, pendingCount, notifyAction } = useAdminData();
+  const { orders, products, pendingCount, notifyAction, loadOrders } = useAdminData();
+
+  // This screen shows the orders that just came in, whatever the orders screen
+  // was last filtered to. Asking for the default list is how it says so; an
+  // identical request is not re-sent.
+  useEffect(() => {
+    loadOrders(DEFAULT_ORDER_QUERY);
+  }, [loadOrders]);
 
   return (
     <>
@@ -152,8 +161,9 @@ export function DashboardScreen() {
       </section>
 
       <p className="notice">
-        * Số liệu trên dashboard là dữ liệu minh họa trong bản HTML demo, chưa kết nối hệ thống bán
-        hàng thực tế.
+        * Danh sách đơn hàng, số đơn chờ xử lý và thực đơn là dữ liệu thật từ API. Doanh thu, biểu
+        đồ 7 ngày, tổng đơn hàng, tỷ lệ khách quay lại và lượt bán của từng món vẫn là số minh họa:
+        các số này thuộc module Báo cáo, chưa được triển khai.
       </p>
     </>
   );

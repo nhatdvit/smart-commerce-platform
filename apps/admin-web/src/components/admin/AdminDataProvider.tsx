@@ -13,11 +13,8 @@ import {
 
 import {
   INITIAL_COUPONS,
-  INITIAL_ORDERS,
   INITIAL_REWARDS,
-  nextOrderStatus,
   type DemoCoupon,
-  type DemoOrder,
   type DemoReward,
 } from '@/data/admin-demo';
 import { ApiError, api } from '@/lib/api-client';
@@ -30,6 +27,17 @@ import {
   type MenuProduct,
   type MenuSnapshot,
 } from '@/lib/menu-api';
+import {
+  DEFAULT_ORDER_QUERY,
+  ORDER_STATUS_LABELS,
+  loadOrders,
+  orderQueryKey,
+  transitionOrder,
+  type AdminOrder,
+  type OrderQuery,
+  type OrderStatus,
+  type OrderStatusCounts,
+} from '@/lib/orders-api';
 import type { ProductDraft } from '@/lib/product-form';
 
 export type AdminModal =
@@ -47,7 +55,9 @@ export type AdminModal =
 export type SessionState = 'checking' | 'signed-in' | 'signed-out';
 
 interface AdminContextValue {
-  readonly orders: readonly DemoOrder[];
+  readonly orders: readonly AdminOrder[];
+  /** Open orders per status, counted by the server across the whole store. */
+  readonly orderCounts: OrderStatusCounts;
   readonly products: readonly MenuProduct[];
   readonly coupons: readonly DemoCoupon[];
   readonly rewards: readonly DemoReward[];
@@ -60,6 +70,9 @@ interface AdminContextValue {
   readonly menuBusy: boolean;
   /** Set when the menu could not be loaded at all, so a screen can say so. */
   readonly menuError: string;
+  readonly ordersBusy: boolean;
+  readonly ordersError: string;
+  readonly hasMoreOrders: boolean;
   readonly openModal: (modal: AdminModal) => void;
   readonly closeModal: () => void;
   readonly setSidebarOpen: (open: boolean) => void;
@@ -68,7 +81,10 @@ interface AdminContextValue {
   readonly notifyAction: (action: string) => void;
   readonly signIn: (email: string, password: string) => Promise<boolean>;
   readonly signOut: () => void;
-  readonly advanceOrder: (orderId: string) => void;
+  /** Asks for the list a screen shows. Identical repeats are not re-fetched. */
+  readonly loadOrders: (query: OrderQuery) => void;
+  readonly loadMoreOrders: () => void;
+  readonly moveOrder: (orderId: string, toStatus: OrderStatus, reason?: string) => void;
   readonly createProduct: (draft: ProductDraft) => void;
   readonly updateProduct: (productId: string, draft: ProductDraft) => void;
   readonly deleteProduct: (productId: string) => void;
@@ -82,20 +98,25 @@ const AdminContext = createContext<AdminContextValue | null>(null);
 /**
  * Holds the dashboard's state for the whole admin shell.
  *
- * The menu is real: products, prices and portions come from the API and
- * survive a reload. Orders, coupons and rewards are still the design's sample
- * data, because those endpoints are designed but not built - each one leaves
- * this file as its module lands.
+ * The menu and the orders are real: both come from the API and survive a
+ * reload. Coupons and rewards are still the design's sample data, because
+ * those endpoints are designed but not built - each one leaves this file as
+ * its module lands.
  *
- * The four menu operations keep the shape the screens already called
- * (`createProduct`, `updateProduct`, `deleteProduct`, `saveStock`): they
- * return nothing and report through the toast, so a dialog stays unaware of
- * whether it is talking to memory or to PostgreSQL.
+ * Orders are listed per screen rather than once globally: each screen says
+ * what it wants to see through `loadOrders`, and an identical request is not
+ * repeated. One default page is loaded on mount anyway, because the sidebar
+ * badge counts waiting orders on every screen, not just on the orders one.
  */
 export function AdminDataProvider({ children }: { children: ReactNode }) {
-  const [orders, setOrders] = useState<readonly DemoOrder[]>(INITIAL_ORDERS);
   const [coupons, setCoupons] = useState<readonly DemoCoupon[]>(INITIAL_COUPONS);
   const [rewards, setRewards] = useState<readonly DemoReward[]>(INITIAL_REWARDS);
+
+  const [orders, setOrders] = useState<readonly AdminOrder[]>([]);
+  const [orderCounts, setOrderCounts] = useState<OrderStatusCounts>({});
+  const [orderCursor, setOrderCursor] = useState<string | null>(null);
+  const [ordersBusy, setOrdersBusy] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
 
   const [snapshot, setSnapshot] = useState<MenuSnapshot | null>(null);
   const [menuBusy, setMenuBusy] = useState(false);
@@ -106,6 +127,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [toastMessage, setToastMessage] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  /** The query currently on screen, for a refresh after a write. */
+  const orderQuery = useRef<OrderQuery>(DEFAULT_ORDER_QUERY);
+  /** What is already shown, so an identical request is not sent twice. */
+  const shownQuery = useRef<string | null>(null);
+  /**
+   * The newest list request. A debounced search box can have two in flight,
+   * and the slower one must not overwrite the newer answer.
+   */
+  const listTicket = useRef(0);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
@@ -147,9 +178,84 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Runs one list request.
+   *
+   * With a cursor it appends the next page; without one it replaces the list.
+   * The rows already on screen are left alone until the answer arrives, so
+   * changing a filter does not blank the table and then fill it again.
+   */
+  const runOrderLoad = useCallback(async (query: OrderQuery, cursor?: string): Promise<void> => {
+    const ticket = listTicket.current + 1;
+    listTicket.current = ticket;
+    setOrdersBusy(true);
+
+    try {
+      const page = await loadOrders(query, cursor);
+
+      // A newer request has been sent since; its answer is the current one.
+      if (ticket !== listTicket.current) {
+        return;
+      }
+
+      setOrders((current) => (cursor === undefined ? page.orders : [...current, ...page.orders]));
+      setOrderCounts(page.counts);
+      setOrderCursor(page.nextCursor);
+      setOrdersError('');
+      setSession('signed-in');
+    } catch (error) {
+      if (ticket !== listTicket.current) {
+        return;
+      }
+
+      if (error instanceof ApiError && error.status === 401) {
+        setSession('signed-out');
+        setOrders([]);
+        setOrderCounts({});
+        setOrdersError('');
+
+        return;
+      }
+
+      setOrdersError(error instanceof Error ? error.message : 'Không tải được danh sách đơn.');
+    } finally {
+      if (ticket === listTicket.current) {
+        setOrdersBusy(false);
+      }
+    }
+  }, []);
+
+  const requestOrders = useCallback(
+    (query: OrderQuery): void => {
+      const key = orderQueryKey(query);
+
+      // Already showing exactly this list: a screen re-mounting is not a
+      // reason to ask the server again.
+      if (key === shownQuery.current) {
+        return;
+      }
+
+      shownQuery.current = key;
+      orderQuery.current = query;
+      void runOrderLoad(query);
+    },
+    [runOrderLoad],
+  );
+
+  const loadMoreOrders = useCallback((): void => {
+    if (orderCursor === null) {
+      return;
+    }
+
+    void runOrderLoad(orderQuery.current, orderCursor);
+  }, [orderCursor, runOrderLoad]);
+
   useEffect(() => {
     void refreshMenu();
-  }, [refreshMenu]);
+    // The badge counts waiting orders on every screen, so one page is loaded
+    // up front; a screen that wants a different list asks for it.
+    requestOrders(DEFAULT_ORDER_QUERY);
+  }, [refreshMenu, requestOrders]);
 
   /**
    * Runs one menu write.
@@ -195,6 +301,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       try {
         await api.post('/auth/login', { email, password });
         await refreshMenu();
+        // The session is new, so nothing on screen belongs to it yet.
+        shownQuery.current = null;
+        requestOrders(DEFAULT_ORDER_QUERY);
 
         return true;
       } catch (error) {
@@ -205,7 +314,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [notify, refreshMenu],
+    [notify, refreshMenu, requestOrders],
   );
 
   const signOut = useCallback(() => {
@@ -215,29 +324,52 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         setSession('signed-out');
         setSnapshot(null);
+        setOrders([]);
+        setOrderCounts({});
+        shownQuery.current = null;
         setModal(null);
       });
   }, []);
 
-  const advanceOrder = useCallback(
-    (orderId: string) => {
-      // Decide from the rendered orders, not from inside the state updater:
-      // React runs the updater later, so a flag set in there is still false here.
-      const order = orders.find((candidate) => candidate.id === orderId);
-      const next = order === undefined ? undefined : nextOrderStatus(order.status);
-      if (next === undefined) {
-        return;
-      }
+  /**
+   * Moves one order to the status the operator chose.
+   *
+   * The target status is sent, not "next": the server validates it against the
+   * committed status under a row lock, so two staff members tapping at once
+   * get a conflict they can see rather than an order two steps along. A
+   * conflict reloads the list, because the screen was out of date and showing
+   * it again is the useful response.
+   */
+  const moveOrder = useCallback(
+    (orderId: string, toStatus: OrderStatus, reason?: string): void => {
+      setOrdersBusy(true);
 
-      setOrders((current) =>
-        current.map((candidate) =>
-          candidate.id === orderId ? { ...candidate, status: next } : candidate,
-        ),
-      );
-      notify(`Đã cập nhật trạng thái đơn ${orderId}`);
-      setModal(null);
+      void transitionOrder(orderId, toStatus, reason)
+        .then((updated) => {
+          setModal(null);
+          notify(`Đơn ${updated.code}: ${ORDER_STATUS_LABELS[updated.status]}`);
+          // Re-read rather than patch the row: the move can take the order out
+          // of the current filter, and it always changes the open counts.
+          void runOrderLoad(orderQuery.current);
+        })
+        .catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 401) {
+            setSession('signed-out');
+            notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+            return;
+          }
+
+          notify(error instanceof Error ? error.message : 'Không cập nhật được đơn hàng.');
+
+          if (error instanceof ApiError && error.status === 409) {
+            setModal(null);
+            void runOrderLoad(orderQuery.current);
+          }
+        })
+        .finally(() => setOrdersBusy(false));
     },
-    [orders, notify],
+    [notify, runOrderLoad],
   );
 
   /**
@@ -332,9 +464,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [notify],
   );
 
+  /**
+   * Orders waiting for someone to act: a transfer not yet verified, or an
+   * order the store has not acknowledged.
+   *
+   * Taken from the server's counts, not from the loaded page, so the badge is
+   * the real number even when the screen is showing one filtered page.
+   */
   const pendingCount = useMemo(
-    () => orders.filter((order) => order.status === 'waiting').length,
-    [orders],
+    () => (orderCounts.PENDING_PAYMENT ?? 0) + (orderCounts.PLACED ?? 0),
+    [orderCounts],
   );
 
   const products = useMemo<readonly MenuProduct[]>(() => snapshot?.products ?? [], [snapshot]);
@@ -342,6 +481,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AdminContextValue>(
     () => ({
       orders,
+      orderCounts,
       products,
       coupons,
       rewards,
@@ -352,6 +492,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       session,
       menuBusy,
       menuError,
+      ordersBusy,
+      ordersError,
+      hasMoreOrders: orderCursor !== null,
       openModal,
       closeModal,
       setSidebarOpen,
@@ -359,7 +502,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       notifyAction,
       signIn,
       signOut,
-      advanceOrder,
+      loadOrders: requestOrders,
+      loadMoreOrders,
+      moveOrder,
       createProduct,
       updateProduct,
       deleteProduct,
@@ -369,6 +514,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     }),
     [
       orders,
+      orderCounts,
       products,
       coupons,
       rewards,
@@ -379,13 +525,18 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       session,
       menuBusy,
       menuError,
+      ordersBusy,
+      ordersError,
+      orderCursor,
       openModal,
       closeModal,
       notify,
       notifyAction,
       signIn,
       signOut,
-      advanceOrder,
+      requestOrders,
+      loadMoreOrders,
+      moveOrder,
       createProduct,
       updateProduct,
       deleteProduct,

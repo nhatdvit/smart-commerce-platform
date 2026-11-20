@@ -80,6 +80,33 @@ into a dialog that is still open is indistinguishable from an orphan, and
 deleting it would break a save in progress. Run it with `--dry-run` to see what
 would go, and `--hours=` to change the grace period.
 
+## Orders and the operations queue
+
+`GET /api/v1/admin/orders` is a work queue, and three things about it are
+deliberate:
+
+- **Order status and payment status are two state machines.** `COMPLETED`
+  never implies `PAID`; an order can be handed over with its payment still
+  `PENDING`, which is exactly what an uncollected cash order is. The queue row
+  carries both, and a client must never derive one from the other.
+- **`status_counts` is the store's count, not the page's.** It covers the five
+  OPEN statuses only, so a queue badge shows the real number of waiting orders
+  rather than the number that happens to be on the first page. Counting every
+  order a store has ever served would grow without bound.
+- **`payment_status` as a filter is refused with 422, not ignored.** It is
+  designed, and it arrives with the payments screen. A filter that silently did
+  nothing would show a cashier "unpaid orders" that are in fact every order in
+  the shop.
+
+`POST /api/v1/admin/orders/{order}/status` takes the target status, not a
+"next" command: two staff members tapping at once would both mean something
+different by "next". The server validates the move against the committed status
+under a row lock, so the second tap is a `409 INVALID_STATE_TRANSITION` the
+operator can see, and every accepted move writes a history row with the actor
+and the reason. `PENDING_PAYMENT → PLACED` is a legal edge of the machine but
+is not accepted here — an order waiting for a transfer joins the queue when its
+payment is confirmed against the real bank credit.
+
 ## Money
 
 VND amounts are whole đồng, and every amount is an **object** carrying its own
@@ -317,10 +344,13 @@ is how to find every place a decision will land:
 grep -n 'x-provisional' docs/api/openapi.yaml
 ```
 
-Phase 01 implements `GET /api/v1/` and `GET /api/v1/me`, plus the `/health/live`
-and `/health/ready` probes that sit outside the versioned API. Everything else
-is designed and not yet built; `pnpm openapi:conformance` prints the exact
-remaining list.
+Built so far: the metadata and session endpoints, the `/health/live` and
+`/health/ready` probes that sit outside the versioned API, the admin catalog
+and menu endpoints behind the menu screen (including product photography), and
+the admin order endpoints behind the operations queue. Everything else is
+designed and not yet built; `pnpm openapi:conformance` prints the exact
+remaining list, and fails the build if something is implemented that nobody
+designed.
 
 ## Changing the contract
 

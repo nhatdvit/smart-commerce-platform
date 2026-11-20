@@ -954,10 +954,13 @@ paths:
       description: |
         Permission `order.read`, scoped to the resolved store.
 
-        The default sort is oldest-first among open orders, because this is a
-        work queue and the oldest unserved order is the most urgent. Filtering
-        by `status` is what turns it into a kitchen list, a pickup list, or a
-        day's history.
+        The default sort is oldest-first, because this is a work queue and the
+        oldest unserved order is the most urgent. Filtering by `status` is what
+        turns it into a kitchen list, a pickup list, or a day's history.
+
+        The response also carries `status_counts` for the whole store, so a
+        queue badge shows the real number of waiting orders rather than the
+        number that happens to be on the first page.
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -968,9 +971,24 @@ paths:
             type: array
             items:
               $ref: '#/components/schemas/OrderStatus'
+        - name: q
+          in: query
+          description: |
+            Partial, case-insensitive match on the order code, the contact name
+            or phone, or a line's product name — what staff actually type when
+            a customer says "the xôi order for Thảo".
+          schema:
+            type: string
+            maxLength: 120
         - name: payment_status
           in: query
-          description: Repeatable. Useful for finding unpaid cash orders.
+          description: |
+            Repeatable. Useful for finding unpaid cash orders.
+
+            **Not implemented yet, and refused with 422 rather than ignored.**
+            Reading payment state belongs to the payments screen's slice;
+            silently dropping this filter would show a cashier "unpaid orders"
+            that are in fact every order in the shop.
           schema:
             type: array
             items:
@@ -1047,12 +1065,20 @@ paths:
       tags: [Admin - Orders]
       summary: Move an order to the next status
       description: |
-        Permission `order.transition`; `KITCHEN_STAFF` additionally needs
-        `kitchen.operate` for the preparation states.
+        Permission `order.transition`. `kitchen.operate` alone is enough for
+        `PREPARING` and `READY` — what a cook does all morning, which must not
+        need a manager — but not for `COMPLETED` or `CANCELLED`: those touch the
+        money and the customer.
 
         Only transitions the state machine allows are accepted, and every one is
         recorded in `order_status_history` with the actor and the reason. An
-        invalid jump is a 409, never a quiet no-op.
+        invalid jump is a 409, never a quiet no-op. So is re-sending the status
+        the order already holds, which is what a stale screen sends.
+
+        `PENDING_PAYMENT → PLACED` is a legal edge of the machine but is NOT
+        accepted here: an order waiting for a transfer enters the queue when its
+        payment is confirmed against the real bank credit. Allowing it on this
+        endpoint would be a one-click way to serve an unpaid order.
 
         **Completing an order does not collect money.** Moving to `COMPLETED`
         leaves payment exactly as it was; an unpaid cash order stays unpaid
@@ -3410,7 +3436,14 @@ components:
         totals:
           $ref: '#/components/schemas/OrderTotals'
         payment:
-          $ref: '#/components/schemas/PaymentSummary'
+          oneOf:
+            - $ref: '#/components/schemas/PaymentSummary'
+            - type: 'null'
+          description: |
+            Null when the order has no payment row at all — a real anomaly left
+            by a half-finished checkout. Answered as null rather than invented,
+            so a screen can show it as such instead of being told the order is
+            unpaid cash.
         status_history:
           type: array
           items:
@@ -3425,6 +3458,22 @@ components:
           type: string
           format: date-time
 
+    OrderLinePreview:
+      type: object
+      description: |
+        Just enough of a line to recognise the order: "2 bánh mì pate trứng".
+        Names and quantities only — per-line money belongs to the detail
+        response, so a queue read cannot be used to scrape a price list.
+      required: [product_name, variant_name, quantity]
+      properties:
+        product_name:
+          type: string
+        variant_name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+
     OrderSummary:
       type: object
       description: List projection. Enough for a queue row without loading every line.
@@ -3437,15 +3486,32 @@ components:
         status:
           $ref: '#/components/schemas/OrderStatus'
         payment_status:
-          $ref: '#/components/schemas/PaymentStatus'
+          oneOf:
+            - $ref: '#/components/schemas/PaymentStatus'
+            - type: 'null'
+          description: Null when the order has no payment row; see `Order.payment`.
         payment_method:
-          $ref: '#/components/schemas/PaymentMethod'
+          oneOf:
+            - $ref: '#/components/schemas/PaymentMethod'
+            - type: 'null'
         fulfillment_type:
           $ref: '#/components/schemas/FulfillmentType'
         total:
           $ref: '#/components/schemas/Money'
         item_count:
           type: integer
+          description: Lines on the order.
+        unit_count:
+          type: integer
+          description: Units across every line — what the kitchen actually makes.
+        items:
+          type: array
+          description: |
+            A short preview of the lines, because the queue row says what was
+            ordered. Without it every row would need a detail request, which is
+            an N+1 built into the screen.
+          items:
+            $ref: '#/components/schemas/OrderLinePreview'
         contact_name:
           type: [string, 'null']
         scheduled_at:
@@ -3462,12 +3528,33 @@ components:
       allOf:
         - $ref: '#/components/schemas/PageMeta'
         - type: object
-          required: [items]
+          required: [items, status_counts]
           properties:
             items:
               type: array
               items:
                 $ref: '#/components/schemas/OrderSummary'
+            status_counts:
+              type: object
+              description: |
+                How many orders the store currently has in each OPEN status —
+                the five a staff member can still act on. Terminal statuses
+                (`COMPLETED`, `CANCELLED`, `EXPIRED`) are deliberately absent:
+                counting every order a store has ever served would grow without
+                bound and answer a question nobody asked.
+
+                It is the STORE's count, not the page's, so a queue badge can
+                show the real number of waiting orders rather than the number
+                that happens to be on the first page.
+              additionalProperties:
+                type: integer
+                minimum: 0
+              examples:
+                - PENDING_PAYMENT: 1
+                  PLACED: 3
+                  CONFIRMED: 0
+                  PREPARING: 2
+                  READY: 1
 
     OrderCreated:
       type: object

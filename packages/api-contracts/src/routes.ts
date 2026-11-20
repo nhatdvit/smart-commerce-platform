@@ -22,6 +22,9 @@ export const ROUTES = {
 
   admin: {
     orders: API_PREFIX + '/admin/orders',
+    order: (id: string) => API_PREFIX + '/admin/orders/' + id,
+    /** Validated status transition. The server owns the state machine. */
+    orderStatus: (id: string) => API_PREFIX + '/admin/orders/' + id + '/status',
     menu: (id: string) => API_PREFIX + '/admin/menus/' + id,
     payments: API_PREFIX + '/admin/payments',
     confirmPayment: (id: string) => API_PREFIX + '/admin/payments/' + id + '/confirm',

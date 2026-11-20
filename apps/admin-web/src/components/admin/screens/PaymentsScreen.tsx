@@ -1,13 +1,44 @@
 'use client';
 
+import { useEffect } from 'react';
+
 import { money } from '@/lib/money';
+import {
+  DEFAULT_ORDER_QUERY,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS_LABELS,
+  type AdminOrder,
+} from '@/lib/orders-api';
 
 import { useAdminData } from '../AdminDataProvider';
 import { IconClock, IconReceipt, IconTrendUp, IconWallet } from '../icons';
 import { Metric, PageHeading } from '../primitives';
 
+/**
+ * The payment's own status, never the order's.
+ *
+ * An order can be complete with its payment still pending - that is an
+ * uncollected cash order - so this cell reads the payment and nothing else
+ * (CLAUDE.md section 6).
+ */
+function PaymentCell({ order }: { order: AdminOrder }) {
+  if (order.paymentStatus === null) {
+    return <span className="status cancelled">Chưa ghi nhận</span>;
+  }
+
+  if (order.paymentStatus === 'PAID') {
+    return <span className="status ready">Đã thu</span>;
+  }
+
+  return <span className="status waiting">{PAYMENT_STATUS_LABELS[order.paymentStatus]}</span>;
+}
+
 export function PaymentsScreen() {
-  const { orders, openModal, notifyAction } = useAdminData();
+  const { orders, openModal, notifyAction, loadOrders } = useAdminData();
+
+  useEffect(() => {
+    loadOrders(DEFAULT_ORDER_QUERY);
+  }, [loadOrders]);
 
   return (
     <>
@@ -15,7 +46,7 @@ export function PaymentsScreen() {
         title="Thanh toán"
         description="Theo dõi tiền mặt và chuyển khoản VietQR của cửa hàng."
         actions={
-          <button type="button" className="btn" onClick={() => notifyAction('bank')}>
+          <button type="button" className="btn" onClick={() => notifyAction('tài khoản ngân hàng')}>
             <IconWallet size={15} /> Tài khoản ngân hàng
           </button>
         }
@@ -34,21 +65,21 @@ export function PaymentsScreen() {
           value="485.000đ"
           icon={<IconReceipt size={18} />}
           color="#fff3d9"
-          foot="Đã ghi nhận"
+          foot="Dữ liệu minh họa"
         />
         <Metric
           title="Chuyển khoản"
           value="800.000đ"
           icon={<IconWallet size={18} />}
           color="#e9f0ff"
-          foot="Đã xác nhận"
+          foot="Dữ liệu minh họa"
         />
         <Metric
           title="Chờ đối soát"
-          value="3 giao dịch"
+          value={`${orders.filter((order) => order.paymentStatus !== 'PAID').length} đơn`}
           icon={<IconClock size={18} />}
           color="#fff0e9"
-          foot="Xác nhận thủ công"
+          foot="Trong danh sách đang xem"
         />
       </div>
 
@@ -69,42 +100,52 @@ export function PaymentsScreen() {
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
-                <tr key={order.id}>
-                  <td>
-                    <strong>{order.id}</strong>
-                  </td>
-                  <td>{order.name}</td>
-                  <td>{order.payment}</td>
-                  <td>
-                    <strong>{money(order.total)}</strong>
-                  </td>
-                  <td>
-                    {order.status === 'done' ? (
-                      <span className="status ready">Đã thu</span>
-                    ) : (
-                      <span className="status waiting">Chờ xác nhận</span>
-                    )}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className="table-action"
-                      onClick={() => openModal({ kind: 'order', orderId: order.id })}
-                    >
-                      Xem đơn →
-                    </button>
+              {orders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="empty">
+                    Chưa có đơn hàng nào
                   </td>
                 </tr>
-              ))}
+              ) : (
+                orders.map((order) => (
+                  <tr key={order.id}>
+                    <td>
+                      <strong>{order.code}</strong>
+                    </td>
+                    <td>{order.contactName}</td>
+                    <td>
+                      {order.paymentMethod === null
+                        ? '—'
+                        : PAYMENT_METHOD_LABELS[order.paymentMethod]}
+                    </td>
+                    <td>
+                      <strong>{money(order.total)}</strong>
+                    </td>
+                    <td>
+                      <PaymentCell order={order} />
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="table-action"
+                        onClick={() => openModal({ kind: 'order', orderId: order.id })}
+                      >
+                        Xem đơn →
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </section>
 
       <p className="notice">
-        VietQR thực tế phải sinh ở Backend theo số tiền và mã tham chiếu từng đơn; giao diện này
-        chưa kết nối ngân hàng hoặc xác nhận tiền tự động.
+        Phương thức và trạng thái thanh toán ở trên là dữ liệu thật; các ô tổng tiền phía trên vẫn
+        là số minh họa. Việc sinh mã VietQR động và xác nhận đã nhận tiền thuộc lát cắt Thanh toán
+        chưa được triển khai: chỉ nhân viên được cấp quyền mới được đánh dấu đã thu, sau khi đối
+        chiếu khoản tiền thật trong ngân hàng.
       </p>
     </>
   );

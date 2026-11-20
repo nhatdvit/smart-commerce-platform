@@ -257,6 +257,265 @@
                 }
             }
         },
+        "/admin/orders": {
+            "get": {
+                "operationId": "admin.orders.index",
+                "description": "`status_counts` comes along because the screen that reads this is a work\nqueue: \"how many orders are waiting\" has to be the real number, not the\nnumber that happens to be on the first page. Open statuses only, which\nis what the partial index covers and what a queue is about.",
+                "summary": "A page of this store's orders, oldest first by default",
+                "tags": [
+                    "AdminOrder"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "status[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "PENDING_PAYMENT",
+                                    "PLACED",
+                                    "CONFIRMED",
+                                    "PREPARING",
+                                    "READY",
+                                    "COMPLETED",
+                                    "CANCELLED",
+                                    "EXPIRED"
+                                ]
+                            },
+                            "maxItems": 8
+                        }
+                    },
+                    {
+                        "name": "fulfillment_type",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "PICKUP",
+                                "DELIVERY"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "placed_from",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "placed_to",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "order_code",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 32
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 120
+                        }
+                    },
+                    {
+                        "name": "sort",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "oldest_first",
+                                "newest_first"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "payment_status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "has_more": {
+                                            "type": "boolean"
+                                        },
+                                        "status_counts": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "integer"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "items",
+                                        "next_cursor",
+                                        "has_more",
+                                        "status_counts"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/orders/{order}": {
+            "get": {
+                "operationId": "admin.orders.show",
+                "tags": [
+                    "AdminOrder"
+                ],
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`OrderResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OrderResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/admin/orders/{order}/status": {
+            "post": {
+                "operationId": "admin.orders.status",
+                "tags": [
+                    "AdminOrder"
+                ],
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TransitionOrderRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`OrderResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OrderResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/products": {
             "get": {
                 "operationId": "admin.products.index",
@@ -897,6 +1156,219 @@
                 ],
                 "title": "MenuResource"
             },
+            "OrderResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "order_code": {
+                        "type": "string"
+                    },
+                    "store_id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "PENDING_PAYMENT",
+                            "PLACED",
+                            "CONFIRMED",
+                            "PREPARING",
+                            "READY",
+                            "COMPLETED",
+                            "CANCELLED",
+                            "EXPIRED"
+                        ]
+                    },
+                    "fulfillment_type": {
+                        "type": "string",
+                        "enum": [
+                            "PICKUP",
+                            "DELIVERY"
+                        ]
+                    },
+                    "fulfillment_status": {
+                        "type": "null"
+                    },
+                    "scheduled_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "contact": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "phone": {
+                                "type": "string"
+                            },
+                            "email": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "phone",
+                            "email"
+                        ]
+                    },
+                    "delivery_address_line": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": []
+                    },
+                    "totals": {
+                        "type": "object",
+                        "properties": {
+                            "subtotal": {
+                                "type": "object",
+                                "properties": {
+                                    "amount": {
+                                        "type": "string"
+                                    },
+                                    "currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "amount",
+                                    "currency"
+                                ]
+                            },
+                            "discount": {
+                                "type": "object",
+                                "properties": {
+                                    "amount": {
+                                        "type": "string"
+                                    },
+                                    "currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "amount",
+                                    "currency"
+                                ]
+                            },
+                            "delivery_fee": {
+                                "type": "object",
+                                "properties": {
+                                    "amount": {
+                                        "type": "string"
+                                    },
+                                    "currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "amount",
+                                    "currency"
+                                ]
+                            },
+                            "tax": {
+                                "type": "object",
+                                "properties": {
+                                    "amount": {
+                                        "type": "string"
+                                    },
+                                    "currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "amount",
+                                    "currency"
+                                ]
+                            },
+                            "total": {
+                                "type": "object",
+                                "properties": {
+                                    "amount": {
+                                        "type": "string"
+                                    },
+                                    "currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "amount",
+                                    "currency"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "subtotal",
+                            "discount",
+                            "delivery_fee",
+                            "tax",
+                            "total"
+                        ]
+                    },
+                    "payment": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": []
+                    },
+                    "status_history": {
+                        "type": "array",
+                        "items": []
+                    },
+                    "placed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "order_code",
+                    "store_id",
+                    "status",
+                    "fulfillment_type",
+                    "fulfillment_status",
+                    "scheduled_at",
+                    "contact",
+                    "delivery_address_line",
+                    "note",
+                    "items",
+                    "totals",
+                    "payment",
+                    "status_history",
+                    "placed_at",
+                    "created_at"
+                ],
+                "title": "OrderResource"
+            },
             "ProductResource": {
                 "type": "object",
                 "properties": {
@@ -1313,6 +1785,36 @@
                     "variants"
                 ],
                 "title": "SaveProductRequest"
+            },
+            "TransitionOrderRequest": {
+                "type": "object",
+                "description": "Validates `TransitionOrderRequest`: where this order is going, and why.\n\nThe target status is explicit rather than a \"next\" command. Two staff\nmembers tapping at once would both mean something different by \"next\", and\nthe second tap would move the order one step further than anyone intended.\nSending the status the operator saw turns that race into a 409 they can see\n(CLAUDE.md section 6).\n\nWhether the move is legal at all is the state machine's answer, not this\none. A Form Request can only say the field is a known status.",
+                "properties": {
+                    "to_status": {
+                        "type": "string",
+                        "enum": [
+                            "PENDING_PAYMENT",
+                            "PLACED",
+                            "CONFIRMED",
+                            "PREPARING",
+                            "READY",
+                            "COMPLETED",
+                            "CANCELLED",
+                            "EXPIRED"
+                        ]
+                    },
+                    "reason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "to_status"
+                ],
+                "title": "TransitionOrderRequest"
             },
             "UpdateMenuItemAvailabilityRequest": {
                 "type": "object",

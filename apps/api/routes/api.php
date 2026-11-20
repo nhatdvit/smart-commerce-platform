@@ -7,24 +7,24 @@ use App\Modules\Catalog\Presentation\Http\Controller\ProductImageController;
 use App\Modules\Identity\Presentation\Http\Controller\SessionController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
+use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
  * Versioned business API. The api/v1 prefix is applied in bootstrap/app.php.
  *
- * Built so far: the metadata endpoints, the session endpoints and the admin
- * catalog and menu endpoints the operations dashboard's menu screen drives.
- * The rest of CLAUDE.md section 8 arrives with its module:
+ * Built so far: the metadata endpoints, the session endpoints, and the admin
+ * catalog, menu and order endpoints that drive the operations dashboard's menu
+ * and order screens. The rest of CLAUDE.md section 8 arrives with its module:
  *
  *   GET    /stores/{id}                        Store
  *   GET    /menus/today                        Menu
  *   GET    /products, /products/{id}           Catalog (public)
  *   POST   /carts, /carts/{id}/items           Cart
  *   POST   /orders                             Order   (Idempotency-Key required)
- *   GET    /orders/{id}, /orders/{id}/payment  Order, Payment
+ *   GET    /orders/{id}, /orders/{id}/payment  Order, Payment  (customer-facing)
  *   GET    /payment-methods                    Payment
- *   GET    /admin/orders                       Order
  *   GET    /admin/payments                     Payment
  *   POST   /admin/payments/{id}/confirm        Payment
  *   PUT    /admin/stores/{id}/bank-account     Payment
@@ -123,4 +123,26 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->middleware('store.can:menu.manage|kitchen.operate')
             ->whereUuid('menuItem')
             ->name('menu-items.availability');
+
+        /*
+         * The operations queue.
+         *
+         * The transition route admits either grant, because a cook has to be
+         * able to move an order to PREPARING and READY without a manager. Which
+         * moves a cook may actually make is decided by the policy, not by the
+         * route: `kitchen.operate` alone cannot complete or cancel an order.
+         */
+        Route::get('/orders', [AdminOrderController::class, 'index'])
+            ->middleware('store.can:order.read')
+            ->name('orders.index');
+
+        Route::get('/orders/{order}', [AdminOrderController::class, 'show'])
+            ->middleware('store.can:order.read')
+            ->whereUuid('order')
+            ->name('orders.show');
+
+        Route::post('/orders/{order}/status', [AdminOrderController::class, 'transition'])
+            ->middleware(['store.can:order.transition|kitchen.operate', 'throttle:commerce-write'])
+            ->whereUuid('order')
+            ->name('orders.status');
     });

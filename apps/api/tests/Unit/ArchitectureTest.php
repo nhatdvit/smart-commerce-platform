@@ -47,6 +47,22 @@ arch('the menu domain layer is framework-free')
         'Illuminate\Support\Facades',
     ]);
 
+arch('the order domain layer is framework-free')
+    ->expect('App\Modules\Order\Domain')
+    ->not->toUse([
+        'Illuminate\Database\Eloquent\Model',
+        'Illuminate\Http\Request',
+        'Illuminate\Support\Facades',
+    ]);
+
+arch('the payment domain layer is framework-free')
+    ->expect('App\Modules\Payment\Domain')
+    ->not->toUse([
+        'Illuminate\Database\Eloquent\Model',
+        'Illuminate\Http\Request',
+        'Illuminate\Support\Facades',
+    ]);
+
 /*
  * The one allowed direction between these two modules.
  *
@@ -66,6 +82,41 @@ arch('the menu module reaches the catalog only through its exported contract')
 arch('the catalog module does not depend on the menu module')
     ->expect('App\Modules\Catalog')
     ->not->toUse('App\Modules\Menu');
+
+/*
+ * The same one allowed direction between Order and Payment.
+ *
+ * Order reads how an order is being paid through Payment's exported contract
+ * and its DTO, never through the payments table. Payment knows nothing of the
+ * Order module at all: its rows reference an order id, which is a schema fact,
+ * not a code dependency - so settlement can grow its bank snapshot and
+ * reconciliation columns without the Order module noticing (sections 3 and 6).
+ */
+arch('the order module reaches payments only through their exported contract')
+    ->expect('App\Modules\Order')
+    ->not->toUse([
+        'App\Modules\Payment\Infrastructure',
+        'App\Modules\Payment\Presentation',
+    ]);
+
+arch('the payment module does not depend on the order module')
+    ->expect('App\Modules\Payment')
+    ->not->toUse('App\Modules\Order');
+
+/*
+ * Order reads other modules only through their application services.
+ *
+ * Staff names come from Identity's directory and menu prices are already
+ * snapshotted on the line, so the Order module has no reason to touch another
+ * module's tables - and the test says so rather than trusting a convention.
+ */
+arch('the order module does not read other modules persistence')
+    ->expect('App\Modules\Order')
+    ->not->toUse([
+        'App\Modules\Identity\Infrastructure',
+        'App\Modules\Menu\Infrastructure',
+        'App\Modules\Catalog\Infrastructure',
+    ]);
 
 arch('shared domain code is framework-free')
     ->expect('App\Shared\Domain')
@@ -94,10 +145,12 @@ arch('enums are final by nature and models are explicitly final')
     ->classes()
     ->toBeFinal();
 
-arch('catalog and menu models are final too')
+arch('catalog, menu, order and payment models are final too')
     ->expect([
         'App\Modules\Catalog\Infrastructure\Persistence\Model',
         'App\Modules\Menu\Infrastructure\Persistence\Model',
+        'App\Modules\Order\Infrastructure\Persistence\Model',
+        'App\Modules\Payment\Infrastructure\Persistence\Model',
     ])
     ->classes()
     ->toBeFinal();
@@ -111,5 +164,7 @@ arch('every module contract is an interface')
         'App\Modules\Catalog\Application\Contract',
         'App\Modules\Catalog\Domain\Contract',
         'App\Modules\Menu\Domain\Contract',
+        'App\Modules\Order\Domain\Contract',
+        'App\Modules\Payment\Application\Contract',
     ])
     ->toBeInterfaces();

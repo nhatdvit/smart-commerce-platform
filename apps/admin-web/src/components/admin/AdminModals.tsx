@@ -2,10 +2,21 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { ORDER_STATUS_LABELS, nextOrderStatus } from '@/data/admin-demo';
 import { mediaUrl } from '@/lib/api-client';
 import { ACCEPTED_IMAGE_TYPES, uploadProductImage } from '@/lib/image-upload';
 import { money } from '@/lib/money';
+import {
+  FULFILLMENT_LABELS,
+  ORDER_STATUS_LABELS,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS_LABELS,
+  canCancel,
+  dateTimeLabel,
+  forwardStatus,
+  loadOrderDetail,
+  timeLabel,
+  type AdminOrderDetail,
+} from '@/lib/orders-api';
 import {
   EMPTY_PRODUCT_FORM,
   FOOD_ICON_CHOICES,
@@ -19,6 +30,7 @@ import {
 
 import { useAdminData } from './AdminDataProvider';
 import { FoodIcon } from './icons';
+import { StatusBadge } from './primitives';
 
 interface ModalFrameProps {
   readonly title: string;
@@ -214,38 +226,225 @@ function ProductImageField({
   );
 }
 
+/**
+ * One order in full, and the moves a staff member can make from here.
+ *
+ * The detail is fetched rather than read from the queue row: the row carries
+ * what a glance needs, while this dialog shows the line prices, the payment
+ * and the recorded history - the answer to "who moved this order, and why".
+ *
+ * Which buttons appear mirrors the server's state machine, and the server
+ * still decides: it validates the move against the committed status under a
+ * row lock, so a stale dialog gets a conflict rather than a surprise.
+ */
 function OrderModal({ orderId }: { orderId: string }) {
-  const { orders, advanceOrder } = useAdminData();
-  const order = orders.find((candidate) => candidate.id === orderId);
-  if (order === undefined) {
-    return null;
+  const { moveOrder, ordersBusy } = useAdminData();
+  const [order, setOrder] = useState<AdminOrderDetail | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [askingReason, setAskingReason] = useState(false);
+  const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
+
+  useEffect(() => {
+    let current = true;
+
+    void loadOrderDetail(orderId)
+      .then((detail) => {
+        if (current) {
+          setOrder(detail);
+          setLoadError('');
+        }
+      })
+      .catch((error: unknown) => {
+        if (current) {
+          setLoadError(error instanceof Error ? error.message : 'Không tải được đơn hàng.');
+        }
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [orderId]);
+
+  if (loadError !== '') {
+    return (
+      <ModalFrame title="Đơn hàng">
+        <p role="alert">{loadError}</p>
+      </ModalFrame>
+    );
   }
-  const next = nextOrderStatus(order.status);
+
+  if (order === null) {
+    return (
+      <ModalFrame title="Đơn hàng">
+        <p>Đang tải chi tiết đơn...</p>
+      </ModalFrame>
+    );
+  }
+
+  const next = forwardStatus(order.status);
+
+  // The order is passed in rather than read from the closure: TypeScript does
+  // not carry the null check above into a function declaration, and an
+  // assertion here would be a worse answer than an argument.
+  function cancelOrder(target: AdminOrderDetail) {
+    // The same rule the server enforces: a cancellation is the move a customer
+    // will ask about, so it has to say why.
+    if (reason.trim() === '') {
+      setReasonError('Vui lòng nhập lý do hủy đơn.');
+
+      return;
+    }
+
+    moveOrder(target.id, 'CANCELLED', reason.trim());
+  }
 
   return (
     <ModalFrame
-      title={`Đơn hàng ${order.id}`}
+      title={`Đơn hàng ${order.code}`}
       actions={
-        next === undefined ? undefined : (
-          <button type="button" className="btn btn-primary" onClick={() => advanceOrder(order.id)}>
-            Chuyển sang: {ORDER_STATUS_LABELS[next]}
-          </button>
-        )
+        <>
+          {canCancel(order.status) && !askingReason ? (
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => setAskingReason(true)}
+              disabled={ordersBusy}
+            >
+              Hủy đơn
+            </button>
+          ) : null}
+          {askingReason ? (
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => cancelOrder(order)}
+              disabled={ordersBusy}
+            >
+              Xác nhận hủy
+            </button>
+          ) : null}
+          {next === undefined ? null : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => moveOrder(order.id, next)}
+              disabled={ordersBusy}
+            >
+              Chuyển sang: {ORDER_STATUS_LABELS[next]}
+            </button>
+          )}
+        </>
       }
     >
-      <p>
-        <b>Khách:</b> {order.name}
-        <br />
-        <b>Món:</b> {order.items}
-        <br />
-        <b>Giờ nhận:</b> {order.time}
-        <br />
-        <b>Thanh toán:</b> {order.payment}
-        <br />
-        <b>Tổng tiền:</b> {money(order.total)}
-        <br />
-        <b>Trạng thái:</b> {ORDER_STATUS_LABELS[order.status]}
-      </p>
+      <div className="order-detail">
+        <div className="order-detail-row">
+          <StatusBadge status={order.status} />
+          <span>{FULFILLMENT_LABELS[order.fulfillment]}</span>
+          <span>Giờ nhận {timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)}</span>
+        </div>
+
+        <dl className="order-facts">
+          <dt>Khách</dt>
+          <dd>
+            {order.contactName} · {order.contactPhone}
+          </dd>
+          {order.deliveryAddress === null ? null : (
+            <>
+              <dt>Giao tới</dt>
+              <dd>{order.deliveryAddress}</dd>
+            </>
+          )}
+          <dt>Thanh toán</dt>
+          <dd>
+            {order.paymentMethod === null
+              ? 'Chưa ghi nhận thanh toán'
+              : `${PAYMENT_METHOD_LABELS[order.paymentMethod]} · ${
+                  order.paymentStatus === null
+                    ? 'không rõ'
+                    : PAYMENT_STATUS_LABELS[order.paymentStatus]
+                }`}
+            {order.paidAt === null ? '' : ` · đã thu ${dateTimeLabel(order.paidAt)}`}
+            {order.paymentStatus === 'PENDING' && order.paymentExpiresAt !== null
+              ? ` · hết hạn ${dateTimeLabel(order.paymentExpiresAt)}`
+              : ''}
+          </dd>
+          {order.note === null ? null : (
+            <>
+              <dt>Ghi chú</dt>
+              <dd>{order.note}</dd>
+            </>
+          )}
+        </dl>
+
+        <table className="order-lines">
+          <tbody>
+            {order.lines.map((line) => (
+              <tr key={line.id}>
+                <td>
+                  {line.quantity} × {line.name}
+                  {line.note === null ? null : <em> ({line.note})</em>}
+                </td>
+                <td>{money(line.lineTotal)}</td>
+              </tr>
+            ))}
+            {order.discount === 0 ? null : (
+              <tr>
+                <td>Giảm giá</td>
+                <td>-{money(order.discount)}</td>
+              </tr>
+            )}
+            {order.deliveryFee === 0 ? null : (
+              <tr>
+                <td>Phí giao hàng</td>
+                <td>{money(order.deliveryFee)}</td>
+              </tr>
+            )}
+            <tr className="order-total">
+              <td>Tổng tiền</td>
+              <td>{money(order.total)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {order.status === 'PENDING_PAYMENT' ? (
+          <p className="notice">
+            Đơn chờ chuyển khoản chỉ vào hàng đợi khi nhân viên xác nhận đã nhận được tiền thật ở
+            màn hình Thanh toán. Ảnh chụp hay thao tác “tôi đã chuyển” không phải bằng chứng.
+          </p>
+        ) : null}
+
+        {askingReason ? (
+          <Field label="Lý do hủy đơn" error={reasonError === '' ? undefined : reasonError}>
+            <input
+              autoFocus
+              maxLength={255}
+              placeholder="VD: Khách đổi ý"
+              value={reason}
+              onChange={(event) => {
+                setReason(event.target.value);
+                setReasonError('');
+              }}
+            />
+          </Field>
+        ) : null}
+
+        {order.history.length === 0 ? null : (
+          <ol className="order-timeline">
+            {order.history.map((event, index) => (
+              <li key={`${event.to}-${index}`}>
+                <b>{ORDER_STATUS_LABELS[event.to]}</b>
+                <span>
+                  {dateTimeLabel(event.at)}
+                  {/* No actor means the system moved it - an expiry job, say. */}
+                  {event.actorName === null ? ' · hệ thống' : ` · ${event.actorName}`}
+                </span>
+                {event.reason === null ? null : <em>{event.reason}</em>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </ModalFrame>
   );
 }
