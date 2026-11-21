@@ -8,6 +8,7 @@ use App\Modules\Identity\Presentation\Http\Controller\SessionController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
 use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
+use App\Modules\Pricing\Presentation\Http\Controller\AdminCouponController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -156,4 +157,24 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->middleware(['store.can:order.transition|kitchen.operate', 'throttle:commerce-write'])
             ->whereUuid('order')
             ->name('orders.status');
+
+        /*
+         * Discount codes.
+         *
+         * A coupon is money the shop gives away, so reading and writing are
+         * separate grants and neither is a cashier's: promotion.manage sits
+         * with the owner and the manager (see RolePermissionSeeder).
+         */
+        Route::get('/coupons', [AdminCouponController::class, 'index'])
+            ->middleware('store.can:promotion.read')
+            ->name('coupons.index');
+
+        Route::post('/coupons', [AdminCouponController::class, 'store'])
+            ->middleware('store.can:promotion.manage')
+            ->name('coupons.store');
+
+        Route::put('/coupons/{coupon}', [AdminCouponController::class, 'update'])
+            ->middleware('store.can:promotion.manage')
+            ->whereUuid('coupon')
+            ->name('coupons.update');
     });

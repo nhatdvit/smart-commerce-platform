@@ -80,6 +80,190 @@
                 }
             }
         },
+        "/admin/coupons": {
+            "get": {
+                "operationId": "admin.coupons.index",
+                "tags": [
+                    "AdminCoupon"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "status[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "ACTIVE",
+                                    "PAUSED",
+                                    "ARCHIVED"
+                                ]
+                            },
+                            "maxItems": 3
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 120
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "has_more": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "items",
+                                        "next_cursor",
+                                        "has_more"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "admin.coupons.store",
+                "tags": [
+                    "AdminCoupon"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveCouponRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CouponResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CouponResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/coupons/{coupon}": {
+            "put": {
+                "operationId": "admin.coupons.update",
+                "tags": [
+                    "AdminCoupon"
+                ],
+                "parameters": [
+                    {
+                        "name": "coupon",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveCouponRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CouponResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CouponResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/menus": {
             "get": {
                 "operationId": "admin.menus.index",
@@ -927,6 +1111,143 @@
     },
     "components": {
         "schemas": {
+            "CouponResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "store_id": {
+                        "type": "string"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "discount_type": {
+                        "type": "string",
+                        "enum": [
+                            "PERCENTAGE",
+                            "FIXED_AMOUNT"
+                        ]
+                    },
+                    "discount_value": {
+                        "type": "integer"
+                    },
+                    "max_discount_amount": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "amount": {
+                                "type": "string"
+                            },
+                            "currency": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "amount",
+                            "currency"
+                        ]
+                    },
+                    "min_order_amount": {
+                        "type": "object",
+                        "properties": {
+                            "amount": {
+                                "type": "string"
+                            },
+                            "currency": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "amount",
+                            "currency"
+                        ]
+                    },
+                    "usage_limit": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "redeemed_count": {
+                        "type": "integer"
+                    },
+                    "remaining_uses": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "starts_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ends_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "ACTIVE",
+                            "PAUSED",
+                            "ARCHIVED"
+                        ]
+                    },
+                    "availability": {
+                        "type": "string",
+                        "enum": [
+                            "RUNNING",
+                            "EXHAUSTED",
+                            "EXPIRED",
+                            "SCHEDULED",
+                            "PAUSED",
+                            "ARCHIVED"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "store_id",
+                    "code",
+                    "description",
+                    "discount_type",
+                    "discount_value",
+                    "max_discount_amount",
+                    "min_order_amount",
+                    "usage_limit",
+                    "redeemed_count",
+                    "remaining_uses",
+                    "starts_at",
+                    "ends_at",
+                    "status",
+                    "availability",
+                    "created_at"
+                ],
+                "title": "CouponResource"
+            },
             "CurrentUserResource": {
                 "type": "object",
                 "properties": {
@@ -1660,6 +1981,95 @@
                     "schedules"
                 ],
                 "title": "ReplaceMenuRequest"
+            },
+            "SaveCouponRequest": {
+                "type": "object",
+                "description": "Validates a coupon, for both create and edit.\n\nShape only. Whether the numbers make sense together - a percentage inside\n1..100, a fixed amount no bigger than the order it requires, a ceiling only\non a percentage - is the domain's answer, because a seeder and a future\nimport have to be held to the same rules (CLAUDE.md section 3).\n\n`redeemed_count` is deliberately not accepted: how many times a code has\nbeen used is the system's record, not a form field.",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]+$",
+                        "minLength": 3,
+                        "maxLength": 32
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "discount_type": {
+                        "type": "string",
+                        "enum": [
+                            "PERCENTAGE",
+                            "FIXED_AMOUNT"
+                        ]
+                    },
+                    "discount_value": {
+                        "type": "integer",
+                        "description": "A percentage or an amount, decided by discount_type; the domain\njudges the pair.",
+                        "minimum": 1,
+                        "maximum": 100000000
+                    },
+                    "max_discount_amount": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 1,
+                        "maximum": 100000000
+                    },
+                    "min_order_amount": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0,
+                        "maximum": 100000000
+                    },
+                    "usage_limit": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 1,
+                        "maximum": 1000000
+                    },
+                    "starts_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "ends_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "ACTIVE",
+                            "PAUSED",
+                            "ARCHIVED"
+                        ]
+                    },
+                    "usage_limit_per_customer": {
+                        "type": "string",
+                        "description": "Designed for later: a limit per customer needs an identity to\ncount against, and guest checkout has no answer to that yet\n(CLAUDE.md section 15). Accepting it would promise a rule\nnothing enforces."
+                    }
+                },
+                "required": [
+                    "code",
+                    "discount_type",
+                    "discount_value",
+                    "status"
+                ],
+                "title": "SaveCouponRequest"
             },
             "SaveProductRequest": {
                 "type": "object",

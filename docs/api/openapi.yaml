@@ -105,6 +105,8 @@ tags:
     description: Menus, schedules, prices and sold-out state.
   - name: Admin - Inventory
     description: Daily portions and stock limits.
+  - name: Admin - Promotions
+    description: Discount codes a store hands out.
   - name: Admin - Store
     description: Store settings, receiving bank account and payment methods.
 
@@ -1899,6 +1901,134 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  # Discount codes. Defining them is one half of a promotion; applying one to a
+  # basket is the other, and it belongs to checkout, which is not built. Until
+  # then a code created here is a definition and nothing redeems it — the admin
+  # screen says so rather than showing a counter that can only ever read zero.
+  /admin/coupons:
+    get:
+      operationId: listAdminCoupons
+      tags: [Admin - Promotions]
+      summary: Discount codes of this store
+      x-provisional: true
+      description: |
+        Permission `promotion.read`, scoped to the resolved store. A cashier
+        holds it, to read a code out at the counter; creating one does not
+        belong to them.
+
+        `availability` is computed from the clock on every read rather than
+        stored: a code that ends at 10:00 is expired at 10:00 whether or not a
+        job has run. Clients render the label and never derive the state
+        themselves, or two screens would disagree about what "expired" means.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          description: Repeatable. Restrict to these operator statuses.
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/CouponStatus'
+        - name: q
+          in: query
+          description: Partial, case-insensitive match on the code or the description.
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        '200':
+          description: A page of codes, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CouponPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+    post:
+      operationId: createAdminCoupon
+      tags: [Admin - Promotions]
+      summary: Create a discount code
+      x-provisional: true
+      description: |
+        Permission `promotion.manage` — a discount is money the shop gives
+        away, so it sits with the owner and the manager.
+
+        The code is normalised to upper case and must be unique within the
+        store, archived codes included: reusing a retired code would attach new
+        orders to a campaign that ended.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponRequest'
+      responses:
+        '201':
+          description: The created code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Coupon'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /admin/coupons/{coupon}:
+    put:
+      operationId: updateAdminCoupon
+      tags: [Admin - Promotions]
+      summary: Edit a discount code
+      x-provisional: true
+      description: |
+        Permission `promotion.manage`. A code belonging to another store
+        answers 404, not 403.
+
+        **The `code` itself cannot change**, and a request that tries is
+        refused rather than ignored: the code is already on a sign by the door
+        and in customers' messages, and changing it silently would strand
+        everyone holding the old one. Retiring this coupon and creating another
+        says the same thing honestly.
+
+        `redeemed_count` is not accepted either — how many times a code has
+        been used is the system's record. A `usage_limit` below the
+        redemptions already counted is refused rather than clamped.
+      parameters:
+        - name: coupon
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponRequest'
+      responses:
+        '200':
+          description: The updated code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Coupon'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
 components:
 
   securitySchemes:
@@ -3050,6 +3180,164 @@ components:
           description: |
             Portions prepared for today. Raised when more are cooked; omitted it
             stays as it is. `available_quantity` may never exceed it.
+          x-provisional: true
+
+    DiscountType:
+      type: string
+      description: |
+        What the number on a coupon means. Two kinds, because they are the two
+        a shop writes on a sign: "giảm 10%" and "giảm 5.000đ".
+      enum: [PERCENTAGE, FIXED_AMOUNT]
+
+    CouponStatus:
+      type: string
+      description: |
+        What the operator decided. Intent only — whether a code works right
+        now also depends on its dates and its counter, which is
+        `CouponAvailability`.
+      enum: [ACTIVE, PAUSED, ARCHIVED]
+
+    CouponAvailability:
+      type: string
+      description: |
+        Whether the code works right now, and if not, why not. Derived on
+        every read, never stored. The reasons are kept apart because they are
+        different conversations with a customer: "that ended yesterday" is not
+        "we have run out of those".
+      enum: [RUNNING, SCHEDULED, EXPIRED, EXHAUSTED, PAUSED, ARCHIVED]
+
+    Coupon:
+      type: object
+      x-provisional: true
+      required:
+        [
+          id,
+          store_id,
+          code,
+          discount_type,
+          discount_value,
+          min_order_amount,
+          redeemed_count,
+          status,
+          availability,
+        ]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        store_id:
+          $ref: '#/components/schemas/Uuid'
+        code:
+          type: string
+          description: Upper-case A-Z, 0-9, hyphen or underscore. Unique within the store.
+          examples: ['SANG10']
+        description:
+          type: [string, 'null']
+        discount_type:
+          $ref: '#/components/schemas/DiscountType'
+        discount_value:
+          type: integer
+          description: |
+            Percent (1-100) or whole đồng, according to `discount_type`. One
+            number, because a coupon carries one.
+        max_discount_amount:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+          description: Ceiling for a percentage, so "10% off" cannot take an unbounded amount off a party order.
+        min_order_amount:
+          $ref: '#/components/schemas/Money'
+        usage_limit:
+          type: [integer, 'null']
+          description: Null means unlimited.
+        redeemed_count:
+          type: integer
+          description: |
+            Zero for every coupon until checkout starts counting redemptions.
+            Read it as "not counted yet", not as "nobody wanted it".
+        remaining_uses:
+          type: [integer, 'null']
+        starts_at:
+          type: [string, 'null']
+          format: date-time
+        ends_at:
+          type: [string, 'null']
+          format: date-time
+        status:
+          $ref: '#/components/schemas/CouponStatus'
+        availability:
+          $ref: '#/components/schemas/CouponAvailability'
+        created_at:
+          type: string
+          format: date-time
+
+    CouponPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Coupon'
+
+    CouponRequest:
+      type: object
+      required: [code, discount_type, discount_value, status]
+      additionalProperties: false
+      x-provisional: true
+      description: |
+        The same body creates and edits. On an edit the `code` must match the
+        stored one — it is sent so the client cannot pretend otherwise, and a
+        different value is a 422 rather than a silent rename.
+
+        `redeemed_count` is deliberately absent: it is the system's record.
+      properties:
+        code:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: Stored upper-case.
+        description:
+          type: [string, 'null']
+          maxLength: 255
+        discount_type:
+          $ref: '#/components/schemas/DiscountType'
+        discount_value:
+          type: integer
+          minimum: 1
+          description: |
+            A percentage must be 1-100. A fixed amount may not exceed
+            `min_order_amount` when one is set — otherwise the shop pays the
+            customer to order breakfast.
+        max_discount_amount:
+          type: [integer, 'null']
+          minimum: 1
+          description: Whole đồng, and only for a percentage; sending it with a fixed amount is a 422.
+        min_order_amount:
+          type: [integer, 'null']
+          minimum: 0
+          description: Whole đồng. Omitted or null means no minimum.
+        usage_limit:
+          type: [integer, 'null']
+          minimum: 1
+          description: Null means unlimited. Below the redemptions already counted is a 422.
+        starts_at:
+          type: [string, 'null']
+          format: date-time
+        ends_at:
+          type: [string, 'null']
+          format: date-time
+          description: Must be after `starts_at`.
+        status:
+          $ref: '#/components/schemas/CouponStatus'
+        usage_limit_per_customer:
+          type: [integer, 'null']
+          description: |
+            Designed, and refused with 422 until it can be enforced: counting
+            per customer needs an identity, and guest checkout has no answer
+            to that yet (CLAUDE.md §15).
           x-provisional: true
 
     SetDailyPortionsRequest:

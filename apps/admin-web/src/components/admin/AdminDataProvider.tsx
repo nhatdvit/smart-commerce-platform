@@ -11,13 +11,15 @@ import {
   type ReactNode,
 } from 'react';
 
-import {
-  INITIAL_COUPONS,
-  INITIAL_REWARDS,
-  type DemoCoupon,
-  type DemoReward,
-} from '@/data/admin-demo';
+import { INITIAL_REWARDS, type DemoReward } from '@/data/admin-demo';
 import { ApiError, api } from '@/lib/api-client';
+import {
+  createCoupon as createCouponRequest,
+  loadCoupons as loadCouponList,
+  updateCoupon as updateCouponRequest,
+  type Coupon,
+  type CouponDraft,
+} from '@/lib/coupons-api';
 import {
   archiveMenuProduct,
   createMenuProduct,
@@ -47,12 +49,12 @@ export type AdminModal =
   | { readonly kind: 'product'; readonly productId: string }
   | { readonly kind: 'stock'; readonly productId: string }
   | { readonly kind: 'daily-portions' }
-  | { readonly kind: 'add-coupon' }
+  /** Create when `couponId` is absent, edit when it is there. */
+  | { readonly kind: 'coupon-form'; readonly couponId?: string }
   | { readonly kind: 'add-reward' }
   | { readonly kind: 'loyalty-settings' }
   | { readonly kind: 'add-product' }
-  | { readonly kind: 'delete-product'; readonly productId: string }
-  | { readonly kind: 'coupon-detail'; readonly code: string };
+  | { readonly kind: 'delete-product'; readonly productId: string };
 
 /** Whether the dashboard has a session yet. */
 export type SessionState = 'checking' | 'signed-in' | 'signed-out';
@@ -62,7 +64,7 @@ interface AdminContextValue {
   /** Open orders per status, counted by the server across the whole store. */
   readonly orderCounts: OrderStatusCounts;
   readonly products: readonly MenuProduct[];
-  readonly coupons: readonly DemoCoupon[];
+  readonly coupons: readonly Coupon[];
   readonly rewards: readonly DemoReward[];
   readonly pendingCount: number;
   readonly modal: AdminModal | null;
@@ -78,6 +80,8 @@ interface AdminContextValue {
   readonly hasMoreOrders: boolean;
   /** Orders to call out as new; see markArrivals in this file. */
   readonly newOrderIds: ReadonlySet<string>;
+  readonly couponsBusy: boolean;
+  readonly couponsError: string;
   readonly openModal: (modal: AdminModal) => void;
   readonly closeModal: () => void;
   readonly setSidebarOpen: (open: boolean) => void;
@@ -98,7 +102,10 @@ interface AdminContextValue {
   readonly saveStock: (productId: string, stock: number) => void;
   /** The morning prep sheet: what was made today, for several dishes at once. */
   readonly savePortions: (lines: readonly PreparedPortions[]) => void;
-  readonly addCoupon: (code: string) => void;
+  /** Reads the store's discount codes. The promotions screen asks on mount. */
+  readonly loadCoupons: () => void;
+  readonly createCoupon: (draft: CouponDraft) => void;
+  readonly updateCoupon: (couponId: string, draft: CouponDraft) => void;
   readonly addReward: (name: string, points: number) => void;
 }
 
@@ -116,10 +123,10 @@ const ORDER_POLL_MS = 30_000;
 /**
  * Holds the dashboard's state for the whole admin shell.
  *
- * The menu and the orders are real: both come from the API and survive a
- * reload. Coupons and rewards are still the design's sample data, because
- * those endpoints are designed but not built - each one leaves this file as
- * its module lands.
+ * The menu, the orders and the discount codes are real: all three come from
+ * the API and survive a reload. Rewards are still the design's sample data,
+ * because the loyalty endpoints are designed and not built - that block
+ * leaves this file as its module lands.
  *
  * Orders are listed per screen rather than once globally: each screen says
  * what it wants to see through `loadOrders`, and an identical request is not
@@ -127,7 +134,11 @@ const ORDER_POLL_MS = 30_000;
  * badge counts waiting orders on every screen, not just on the orders one.
  */
 export function AdminDataProvider({ children }: { children: ReactNode }) {
-  const [coupons, setCoupons] = useState<readonly DemoCoupon[]>(INITIAL_COUPONS);
+  const [coupons, setCoupons] = useState<readonly Coupon[]>([]);
+  const [couponsBusy, setCouponsBusy] = useState(false);
+  const [couponsError, setCouponsError] = useState('');
+  /** Whether the list has been asked for yet, so a re-mount does not re-ask. */
+  const couponsLoaded = useRef(false);
   const [rewards, setRewards] = useState<readonly DemoReward[]>(INITIAL_REWARDS);
 
   const [orders, setOrders] = useState<readonly AdminOrder[]>([]);
@@ -480,6 +491,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         shownQuery.current = null;
         knownOrderIds.current = new Set();
         setNewOrderIds(new Set());
+        couponsLoaded.current = false;
         requestOrders(DEFAULT_ORDER_QUERY);
 
         return true;
@@ -503,9 +515,11 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         setSnapshot(null);
         setOrders([]);
         setOrderCounts({});
+        setCoupons([]);
         shownQuery.current = null;
         knownOrderIds.current = new Set();
         setNewOrderIds(new Set());
+        couponsLoaded.current = false;
         setModal(null);
       });
   }, []);
@@ -629,25 +643,94 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [notify, runMenuWrite],
   );
 
-  const addCoupon = useCallback(
-    (rawCode: string) => {
-      const code = rawCode
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9_-]/g, '');
-      if (code === '' || coupons.some((coupon) => coupon.code === code)) {
-        notify('Mã không hợp lệ hoặc đã tồn tại');
+  /** Re-reads the whole list, which is how a write refreshes the screen. */
+  const refreshCoupons = useCallback(async (): Promise<void> => {
+    setCouponsBusy(true);
+
+    try {
+      setCoupons(await loadCouponList());
+      setCouponsError('');
+      setSession('signed-in');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setSession('signed-out');
+        setCoupons([]);
+        setCouponsError('');
 
         return;
       }
-      setCoupons((current) => [
-        ...current,
-        { code, desc: 'Giảm 5.000đ · Đơn từ 50.000đ', used: 0, limit: 100 },
-      ]);
-      setModal(null);
-      notify(`Đã tạo mã demo ${code}`);
+
+      setCouponsError(error instanceof Error ? error.message : 'Không tải được danh sách mã.');
+    } finally {
+      setCouponsBusy(false);
+    }
+  }, []);
+
+  const requestCoupons = useCallback((): void => {
+    // A screen re-mounting is not a reason to ask again; a write refreshes
+    // the list itself.
+    if (couponsLoaded.current) {
+      return;
+    }
+
+    couponsLoaded.current = true;
+    void refreshCoupons();
+  }, [refreshCoupons]);
+
+  /**
+   * Runs one coupon write.
+   *
+   * Everything a write can go wrong with is handled in one place: a 422 shows
+   * the server's own message - it is the authority on what a valid discount
+   * is - and a lost session sends the operator back to the sign-in panel
+   * rather than silently dropping their edit.
+   */
+  const runCouponWrite = useCallback(
+    async (
+      operation: () => Promise<Coupon>,
+      success: (coupon: Coupon) => string,
+    ): Promise<void> => {
+      setCouponsBusy(true);
+
+      try {
+        const coupon = await operation();
+        setModal(null);
+        notify(success(coupon));
+        await refreshCoupons();
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+
+        notify(error instanceof Error ? error.message : 'Không lưu được mã ưu đãi.');
+      } finally {
+        setCouponsBusy(false);
+      }
     },
-    [coupons, notify],
+    [notify, refreshCoupons],
+  );
+
+  const createCoupon = useCallback(
+    (draft: CouponDraft) => {
+      void runCouponWrite(
+        () => createCouponRequest(draft),
+        (coupon) => `Đã tạo mã ${coupon.code}`,
+      );
+    },
+    [runCouponWrite],
+  );
+
+  const updateCoupon = useCallback(
+    (couponId: string, draft: CouponDraft) => {
+      void runCouponWrite(
+        () => updateCouponRequest(couponId, draft),
+        (coupon) => `Đã lưu mã ${coupon.code}`,
+      );
+    },
+    [runCouponWrite],
   );
 
   const addReward = useCallback(
@@ -697,6 +780,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       ordersError,
       hasMoreOrders: orderCursor !== null,
       newOrderIds,
+      couponsBusy,
+      couponsError,
       openModal,
       closeModal,
       setSidebarOpen,
@@ -713,7 +798,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       deleteProduct,
       saveStock,
       savePortions,
-      addCoupon,
+      loadCoupons: requestCoupons,
+      createCoupon,
+      updateCoupon,
       addReward,
     }),
     [
@@ -733,6 +820,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       ordersError,
       orderCursor,
       newOrderIds,
+      couponsBusy,
+      couponsError,
       openModal,
       closeModal,
       notify,
@@ -748,7 +837,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       deleteProduct,
       saveStock,
       savePortions,
-      addCoupon,
+      requestCoupons,
+      createCoupon,
+      updateCoupon,
       addReward,
     ],
   );
