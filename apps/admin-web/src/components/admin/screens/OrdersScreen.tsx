@@ -37,6 +37,8 @@ export function OrdersScreen() {
     hasMoreOrders,
     loadOrders,
     loadMoreOrders,
+    newOrderIds,
+    markOrdersSeen,
     notify,
   } = useAdminData();
 
@@ -64,6 +66,9 @@ export function OrdersScreen() {
   }, [loadOrders, statuses, search]);
 
   const openTotal = Object.values(orderCounts).reduce((total, count) => total + count, 0);
+  // Only the ones on screen: a highlight the operator cannot see is not a
+  // number worth showing.
+  const newOnScreen = orders.filter((order) => newOrderIds.has(order.id)).length;
 
   return (
     <>
@@ -122,13 +127,27 @@ export function OrdersScreen() {
             <h3>
               Danh sách đơn ({orders.length}
               {hasMoreOrders ? '+' : ''})
+              {newOnScreen === 0 ? null : <span className="new-pill">{newOnScreen} đơn mới</span>}
             </h3>
             <span className="panel-note" aria-live="polite">
               {ordersBusy
                 ? 'Đang tải...'
-                : `${openTotal} đơn đang mở · nhấn “Chi tiết” để cập nhật trạng thái`}
+                : `${openTotal} đơn đang mở · danh sách tự làm mới mỗi 30 giây`}
             </span>
           </div>
+
+          {newOnScreen === 0 ? null : (
+            <div className="new-banner" role="status">
+              <span>
+                {newOnScreen === 1
+                  ? 'Có 1 đơn mới chưa xử lý.'
+                  : `Có ${newOnScreen} đơn mới chưa xử lý.`}
+              </span>
+              <button type="button" className="table-action" onClick={() => markOrdersSeen()}>
+                Đánh dấu đã xem
+              </button>
+            </div>
+          )}
 
           <OrdersTable orders={orders} />
 

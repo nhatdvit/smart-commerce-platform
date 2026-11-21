@@ -76,6 +76,8 @@ interface AdminContextValue {
   readonly ordersBusy: boolean;
   readonly ordersError: string;
   readonly hasMoreOrders: boolean;
+  /** Orders to call out as new; see markArrivals in this file. */
+  readonly newOrderIds: ReadonlySet<string>;
   readonly openModal: (modal: AdminModal) => void;
   readonly closeModal: () => void;
   readonly setSidebarOpen: (open: boolean) => void;
@@ -88,6 +90,8 @@ interface AdminContextValue {
   readonly loadOrders: (query: OrderQuery) => void;
   readonly loadMoreOrders: () => void;
   readonly moveOrder: (orderId: string, toStatus: OrderStatus, reason?: string) => void;
+  /** Stops the highlight: one order, or all of them when no id is given. */
+  readonly markOrdersSeen: (orderId?: string) => void;
   readonly createProduct: (draft: ProductDraft) => void;
   readonly updateProduct: (productId: string, draft: ProductDraft) => void;
   readonly deleteProduct: (productId: string) => void;
@@ -99,6 +103,15 @@ interface AdminContextValue {
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
+
+/**
+ * How often the order list re-reads itself while the tab is in front.
+ *
+ * Half a minute: long enough that a shop's morning costs a couple of hundred
+ * cheap reads, short enough that nobody is standing at the counter wondering
+ * whether the screen is stuck.
+ */
+const ORDER_POLL_MS = 30_000;
 
 /**
  * Holds the dashboard's state for the whole admin shell.
@@ -122,6 +135,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [orderCursor, setOrderCursor] = useState<string | null>(null);
   const [ordersBusy, setOrdersBusy] = useState(false);
   const [ordersError, setOrdersError] = useState('');
+  /** Orders the operator has not acknowledged yet; the table calls them out. */
+  const [newOrderIds, setNewOrderIds] = useState<ReadonlySet<string>>(() => new Set());
 
   const [snapshot, setSnapshot] = useState<MenuSnapshot | null>(null);
   const [menuBusy, setMenuBusy] = useState(false);
@@ -142,6 +157,15 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
    * and the slower one must not overwrite the newer answer.
    */
   const listTicket = useRef(0);
+  /**
+   * Every order id this session has already shown.
+   *
+   * In memory on purpose: "new" means "since you opened this screen", and a
+   * reload is a new shift's worth of attention - on which everything still
+   * waiting is called out again. Nothing is written to the browser, so no
+   * stale flag can outlive the data it describes.
+   */
+  const knownOrderIds = useRef<Set<string>>(new Set());
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
@@ -159,7 +183,42 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   );
 
   const closeModal = useCallback(() => setModal(null), []);
-  const openModal = useCallback((next: AdminModal) => setModal(next), []);
+
+  /**
+   * Stops calling an order out as new.
+   *
+   * Without an id it clears every one, which is the "I have looked at the
+   * screen" button. The highlight is a prompt, not a record: nothing is
+   * stored, and the next arrival starts the prompt again.
+   */
+  const markOrdersSeen = useCallback((orderId?: string): void => {
+    setNewOrderIds((current) => {
+      if (orderId === undefined) {
+        return current.size === 0 ? current : new Set();
+      }
+
+      if (!current.has(orderId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      next.delete(orderId);
+
+      return next;
+    });
+  }, []);
+
+  const openModal = useCallback(
+    (next: AdminModal) => {
+      // Opening an order is looking at it, so it stops shouting.
+      if (next.kind === 'order') {
+        markOrdersSeen(next.orderId);
+      }
+
+      setModal(next);
+    },
+    [markOrdersSeen],
+  );
 
   /** Loads the menu, and decides from the answer whether there is a session. */
   const refreshMenu = useCallback(async (): Promise<void> => {
@@ -184,51 +243,126 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * Which orders the row list should call out, and why.
+   *
+   * On the first load it is everything nobody has acted on yet - an order
+   * waiting to be confirmed is new to whoever just opened the screen. After
+   * that it is whatever arrived since, which is the question a counter
+   * actually asks: "did something come in while I was making coffee?".
+   *
+   * Marked seen when the operator opens the order, moves it, or says so.
+   */
+  const markArrivals = useCallback(
+    (page: readonly AdminOrder[], firstLoad: boolean): void => {
+      const arrived = page.filter((order) => !knownOrderIds.current.has(order.id));
+
+      for (const order of page) {
+        knownOrderIds.current.add(order.id);
+      }
+
+      const toFlag = firstLoad
+        ? // Nothing has been seen yet, so "new" means "nobody has dealt with
+          // it": a confirmed order is somebody's business already.
+          arrived.filter((order) => order.status === 'PLACED' || order.status === 'PENDING_PAYMENT')
+        : arrived;
+
+      if (toFlag.length === 0) {
+        return;
+      }
+
+      setNewOrderIds((current) => {
+        const next = new Set(current);
+        for (const order of toFlag) {
+          next.add(order.id);
+        }
+
+        return next;
+      });
+
+      // Only an arrival deserves an interruption; the first load is just the
+      // screen opening, and a toast there would be noise.
+      if (!firstLoad) {
+        notify(
+          toFlag.length === 1
+            ? `Đơn mới: ${toFlag[0]?.code ?? ''}`
+            : `${toFlag.length} đơn mới vừa vào`,
+        );
+      }
+    },
+    [notify],
+  );
+
+  /**
    * Runs one list request.
    *
    * With a cursor it appends the next page; without one it replaces the list.
    * The rows already on screen are left alone until the answer arrives, so
    * changing a filter does not blank the table and then fill it again.
+   *
+   * `background` marks a refresh nobody asked for - the poll, or the re-read
+   * after a status change. Three things follow from that:
+   *
+   *   - arrivals are detected, because the QUERY has not changed. On a query
+   *     the operator changed, rows that were filtered out a moment ago are
+   *     not new orders; they were simply not being shown.
+   *   - the spinner stays quiet, so the note does not blink twice a minute
+   *     at someone who is reading the table.
+   *   - a failure is swallowed and retried on the next tick, rather than
+   *     replacing a working screen with an error panel because one request
+   *     out of a morning's worth timed out. A lost session is the exception:
+   *     that one has to be said.
    */
-  const runOrderLoad = useCallback(async (query: OrderQuery, cursor?: string): Promise<void> => {
-    const ticket = listTicket.current + 1;
-    listTicket.current = ticket;
-    setOrdersBusy(true);
+  const runOrderLoad = useCallback(
+    async (query: OrderQuery, cursor?: string, background = false): Promise<void> => {
+      const ticket = listTicket.current + 1;
+      listTicket.current = ticket;
 
-    try {
-      const page = await loadOrders(query, cursor);
-
-      // A newer request has been sent since; its answer is the current one.
-      if (ticket !== listTicket.current) {
-        return;
+      if (!background) {
+        setOrdersBusy(true);
       }
 
-      setOrders((current) => (cursor === undefined ? page.orders : [...current, ...page.orders]));
-      setOrderCounts(page.counts);
-      setOrderCursor(page.nextCursor);
-      setOrdersError('');
-      setSession('signed-in');
-    } catch (error) {
-      if (ticket !== listTicket.current) {
-        return;
-      }
+      try {
+        const page = await loadOrders(query, cursor);
 
-      if (error instanceof ApiError && error.status === 401) {
-        setSession('signed-out');
-        setOrders([]);
-        setOrderCounts({});
+        // A newer request has been sent since; its answer is the current one.
+        if (ticket !== listTicket.current) {
+          return;
+        }
+
+        if (cursor === undefined && (background || knownOrderIds.current.size === 0)) {
+          markArrivals(page.orders, knownOrderIds.current.size === 0);
+        }
+
+        setOrders((current) => (cursor === undefined ? page.orders : [...current, ...page.orders]));
+        setOrderCounts(page.counts);
+        setOrderCursor(page.nextCursor);
         setOrdersError('');
+        setSession('signed-in');
+      } catch (error) {
+        if (ticket !== listTicket.current) {
+          return;
+        }
 
-        return;
-      }
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          setOrders([]);
+          setOrderCounts({});
+          setOrdersError('');
 
-      setOrdersError(error instanceof Error ? error.message : 'Không tải được danh sách đơn.');
-    } finally {
-      if (ticket === listTicket.current) {
-        setOrdersBusy(false);
+          return;
+        }
+
+        if (!background) {
+          setOrdersError(error instanceof Error ? error.message : 'Không tải được danh sách đơn.');
+        }
+      } finally {
+        if (!background && ticket === listTicket.current) {
+          setOrdersBusy(false);
+        }
       }
-    }
-  }, []);
+    },
+    [markArrivals],
+  );
 
   const requestOrders = useCallback(
     (query: OrderQuery): void => {
@@ -261,6 +395,42 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     // up front; a screen that wants a different list asks for it.
     requestOrders(DEFAULT_ORDER_QUERY);
   }, [refreshMenu, requestOrders]);
+
+  /**
+   * Re-reads the list on a timer, so an order that arrives while the screen
+   * is open actually appears.
+   *
+   * Polling, not websockets: realtime is optional in MVP and Reverb brings a
+   * server, a channel and an authorization story with it (CLAUDE.md §16).
+   * One cheap read every half minute is the honest version of the same
+   * promise, and the screen says when it last looked.
+   *
+   * Nothing runs while the tab is hidden - a shop leaves this open all
+   * morning, and polling a background tab is someone else's battery. The tab
+   * coming back to the front reads immediately, because that is exactly the
+   * moment the list is most likely to be stale.
+   */
+  useEffect(() => {
+    if (session !== 'signed-in') {
+      return;
+    }
+
+    function refreshIfVisible(): void {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
+      void runOrderLoad(orderQuery.current, undefined, true);
+    }
+
+    const timer = setInterval(refreshIfVisible, ORDER_POLL_MS);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [session, runOrderLoad]);
 
   /**
    * Runs one menu write.
@@ -308,6 +478,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         await refreshMenu();
         // The session is new, so nothing on screen belongs to it yet.
         shownQuery.current = null;
+        knownOrderIds.current = new Set();
+        setNewOrderIds(new Set());
         requestOrders(DEFAULT_ORDER_QUERY);
 
         return true;
@@ -332,6 +504,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         setOrders([]);
         setOrderCounts({});
         shownQuery.current = null;
+        knownOrderIds.current = new Set();
+        setNewOrderIds(new Set());
         setModal(null);
       });
   }, []);
@@ -355,7 +529,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
           notify(`Đơn ${updated.code}: ${ORDER_STATUS_LABELS[updated.status]}`);
           // Re-read rather than patch the row: the move can take the order out
           // of the current filter, and it always changes the open counts.
-          void runOrderLoad(orderQuery.current);
+          void runOrderLoad(orderQuery.current, undefined, true);
         })
         .catch((error: unknown) => {
           if (error instanceof ApiError && error.status === 401) {
@@ -369,7 +543,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
           if (error instanceof ApiError && error.status === 409) {
             setModal(null);
-            void runOrderLoad(orderQuery.current);
+            void runOrderLoad(orderQuery.current, undefined, true);
           }
         })
         .finally(() => setOrdersBusy(false));
@@ -522,6 +696,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       ordersBusy,
       ordersError,
       hasMoreOrders: orderCursor !== null,
+      newOrderIds,
       openModal,
       closeModal,
       setSidebarOpen,
@@ -532,6 +707,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       loadOrders: requestOrders,
       loadMoreOrders,
       moveOrder,
+      markOrdersSeen,
       createProduct,
       updateProduct,
       deleteProduct,
@@ -556,6 +732,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       ordersBusy,
       ordersError,
       orderCursor,
+      newOrderIds,
       openModal,
       closeModal,
       notify,
@@ -565,6 +742,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       requestOrders,
       loadMoreOrders,
       moveOrder,
+      markOrdersSeen,
       createProduct,
       updateProduct,
       deleteProduct,
