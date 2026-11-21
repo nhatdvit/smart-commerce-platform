@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { mediaUrl } from '@/lib/api-client';
 import {
@@ -27,6 +27,7 @@ import {
   paymentStatusTone,
   type AdminPayment,
   type DiscrepancyType,
+  type KnownBankOption,
 } from '@/lib/payments-api';
 import {
   FULFILLMENT_LABELS,
@@ -1380,6 +1381,129 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
 }
 
 /** Where this store's bank transfers are received, and the VietQR it builds against. */
+/**
+ * A searchable bank picker: logo and name, filtered as the operator types.
+ *
+ * A native `<select>` cannot show a logo inside an option in any browser that
+ * matters here, and 28+ bank names is enough that scanning a plain list beats
+ * typing a BIN only if the list is actually searchable - so this is a small
+ * combobox rather than either of those on their own.
+ */
+function BankPicker({
+  banks,
+  logos,
+  value,
+  onChange,
+  disabled,
+}: {
+  readonly banks: readonly KnownBankOption[];
+  readonly logos: Readonly<Record<string, string>>;
+  readonly value: string;
+  readonly onChange: (bin: string) => void;
+  readonly disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = banks.find((bank) => bank.bin === value) ?? null;
+
+  // Closes on an outside click, the same as a native select's own dropdown.
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function onPointerDown(event: MouseEvent) {
+      if (containerRef.current !== null && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown);
+
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [open]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered =
+    normalizedQuery === ''
+      ? banks
+      : banks.filter(
+          (bank) =>
+            bank.name.toLowerCase().includes(normalizedQuery) || bank.bin.includes(normalizedQuery),
+        );
+
+  function pick(bank: KnownBankOption) {
+    onChange(bank.bin);
+    setOpen(false);
+    setQuery('');
+  }
+
+  return (
+    <div className="bank-picker" ref={containerRef}>
+      <button
+        type="button"
+        className="bank-picker-trigger"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {selected === null ? (
+          <span className="bank-picker-placeholder">— Chọn ngân hàng —</span>
+        ) : (
+          <>
+            {logos[selected.bin] === undefined ? (
+              <span className="bank-picker-logo-fallback" aria-hidden="true" />
+            ) : (
+              <img src={logos[selected.bin]} alt="" className="bank-picker-logo" />
+            )}
+            <span>{selected.name}</span>
+          </>
+        )}
+        <span className="bank-picker-caret" aria-hidden="true" />
+      </button>
+
+      {!open ? null : (
+        <div className="bank-picker-panel">
+          <input
+            autoFocus
+            type="text"
+            className="bank-picker-search"
+            placeholder="Tìm ngân hàng theo tên..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <ul className="bank-picker-list" role="listbox">
+            {filtered.length === 0 ? (
+              <li className="bank-picker-empty">Không tìm thấy ngân hàng phù hợp</li>
+            ) : (
+              filtered.map((bank) => (
+                <li key={bank.bin}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={bank.bin === value}
+                    className={bank.bin === value ? 'is-selected' : undefined}
+                    onClick={() => pick(bank)}
+                  >
+                    {logos[bank.bin] === undefined ? (
+                      <span className="bank-picker-logo-fallback" aria-hidden="true" />
+                    ) : (
+                      <img src={logos[bank.bin]} alt="" className="bank-picker-logo" />
+                    )}
+                    <span>{bank.name}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BankAccountFormModal() {
   const {
     bankAccount,
@@ -1387,8 +1511,10 @@ function BankAccountFormModal() {
     bankAccountError,
     bankAccountLoaded,
     knownBanks,
+    bankLogos,
     loadBankAccount,
     loadKnownBanks,
+    loadBankLogos,
     saveBankAccount,
   } = useAdminData();
   const [bankBin, setBankBin] = useState('');
@@ -1396,12 +1522,13 @@ function BankAccountFormModal() {
   const [accountName, setAccountName] = useState('');
   const [touched, setTouched] = useState(false);
 
-  // Asked once when the dialog opens; both are stable across re-renders
+  // Asked once when the dialog opens; all three are stable across re-renders
   // (useCallback in the provider), so this never re-fires on its own updates.
   useEffect(() => {
     loadBankAccount();
     loadKnownBanks();
-  }, [loadBankAccount, loadKnownBanks]);
+    loadBankLogos();
+  }, [loadBankAccount, loadKnownBanks, loadBankLogos]);
 
   useEffect(() => {
     if (bankAccount !== null && !touched) {
@@ -1455,21 +1582,16 @@ function BankAccountFormModal() {
                 : 'Theo danh sách NAPAS/VietQR. Không thấy ngân hàng cần tìm nghĩa là chưa hỗ trợ.'
             }
           >
-            <select
+            <BankPicker
+              banks={knownBanks}
+              logos={bankLogos}
               value={bankBin}
               disabled={knownBanks.length === 0}
-              onChange={(event) => {
+              onChange={(bin) => {
                 setTouched(true);
-                setBankBin(event.target.value);
+                setBankBin(bin);
               }}
-            >
-              <option value="">— Chọn ngân hàng —</option>
-              {knownBanks.map((bank) => (
-                <option key={bank.bin} value={bank.bin}>
-                  {bank.name}
-                </option>
-              ))}
-            </select>
+            />
           </Field>
           <Field label="Số tài khoản">
             <input

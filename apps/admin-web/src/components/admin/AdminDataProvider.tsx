@@ -13,6 +13,7 @@ import {
 
 import { INITIAL_REWARDS, type DemoReward } from '@/data/admin-demo';
 import { ApiError, api } from '@/lib/api-client';
+import { loadBankLogos as loadBankLogosRequest } from '@/lib/bank-logos';
 import {
   createCoupon as createCouponRequest,
   loadCoupons as loadCouponList,
@@ -114,6 +115,8 @@ interface AdminContextValue {
   readonly bankAccountError: string;
   readonly bankAccountLoaded: boolean;
   readonly knownBanks: readonly KnownBankOption[];
+  /** bin -> logo URL, purely decorative; see loadBankLogos in bank-logos.ts. */
+  readonly bankLogos: Readonly<Record<string, string>>;
   readonly paymentMethodOptions: readonly PaymentMethodOption[];
   readonly paymentMethodsBusy: boolean;
   readonly openModal: (modal: AdminModal) => void;
@@ -148,6 +151,7 @@ interface AdminContextValue {
   readonly flagPayment: (paymentId: string, input: FlagPaymentInput) => void;
   readonly loadBankAccount: () => void;
   readonly loadKnownBanks: () => void;
+  readonly loadBankLogos: () => void;
   readonly saveBankAccount: (draft: BankAccountDraft) => void;
   readonly loadPaymentMethodOptions: () => void;
   readonly setPaymentMethodEnabled: (method: PaymentMethod, enabled: boolean) => void;
@@ -211,6 +215,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   /** Static reference data: fetched once per session, not reloaded per dialog open. */
   const [knownBanks, setKnownBanks] = useState<readonly KnownBankOption[]>([]);
   const knownBanksLoaded = useRef(false);
+
+  const [bankLogos, setBankLogos] = useState<Readonly<Record<string, string>>>({});
+  const bankLogosLoaded = useRef(false);
 
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<readonly PaymentMethodOption[]>(
     [],
@@ -985,6 +992,21 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       });
   }, [notify]);
 
+  /**
+   * Logos for the bank picker, fetched straight from VietQR's own public
+   * directory in the browser (see bank-logos.ts). Purely decorative, so a
+   * failure here is never surfaced - the picker works from `knownBanks`
+   * either way, just without a picture next to each name.
+   */
+  const loadBankLogos = useCallback(() => {
+    if (bankLogosLoaded.current) {
+      return;
+    }
+
+    bankLogosLoaded.current = true;
+    void loadBankLogosRequest().then((logos) => setBankLogos(logos));
+  }, []);
+
   const saveBankAccount = useCallback(
     (draft: BankAccountDraft) => {
       setBankAccountBusy(true);
@@ -1106,6 +1128,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       bankAccountError,
       bankAccountLoaded,
       knownBanks,
+      bankLogos,
       paymentMethodOptions,
       paymentMethodsBusy,
       openModal,
@@ -1134,6 +1157,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       flagPayment,
       loadBankAccount,
       loadKnownBanks,
+      loadBankLogos,
       saveBankAccount,
       loadPaymentMethodOptions,
       setPaymentMethodEnabled,
@@ -1166,6 +1190,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       bankAccountError,
       bankAccountLoaded,
       knownBanks,
+      bankLogos,
       paymentMethodOptions,
       paymentMethodsBusy,
       openModal,
@@ -1193,6 +1218,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       flagPayment,
       loadBankAccount,
       loadKnownBanks,
+      loadBankLogos,
       saveBankAccount,
       loadPaymentMethodOptions,
       setPaymentMethodEnabled,
