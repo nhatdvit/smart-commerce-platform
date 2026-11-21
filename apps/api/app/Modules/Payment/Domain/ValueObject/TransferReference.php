@@ -45,6 +45,17 @@ final readonly class TransferReference
         $body = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $orderCode) ?? '');
         $disambiguator = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $disambiguator) ?? '');
 
+        // The order code already starts with this same prefix in every
+        // deployment this platform has (`commerce.order.code_prefix` and
+        // `commerce.bank_transfer.reference_prefix` are configured to agree) -
+        // without stripping it, "SCP-20261121-0042" would produce
+        // "SCPSCP202611210042". A prefix that does not actually appear at the
+        // start costs nothing to leave in place, so this only ever removes
+        // what is genuinely there to remove.
+        if ($prefix !== '' && str_starts_with($body, $prefix)) {
+            $body = substr($body, strlen($prefix));
+        }
+
         $candidate = $prefix.$body.$disambiguator;
 
         // Longer than the column allows: keep the prefix and the disambiguator

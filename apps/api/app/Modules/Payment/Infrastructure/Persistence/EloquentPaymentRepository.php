@@ -92,7 +92,12 @@ final class EloquentPaymentRepository implements PaymentRepository
             $query->where('id', '<', $after);
         }
 
-        $rows = $query->orderByDesc('id')->limit($limit + 1)->get();
+        // A list row never eager-loads the discrepancies relation itself (it
+        // would cost a query per page just to show a flag), so toEntity()
+        // cannot tell "has none" from "never checked" through relationLoaded()
+        // the way the detail read does. withExists() answers that in the same
+        // query instead, as a plain boolean column.
+        $rows = $query->withExists('discrepancies')->orderByDesc('id')->limit($limit + 1)->get();
 
         $hasMore = $rows->count() > $limit;
         $page = $hasMore ? $rows->take($limit) : $rows;
@@ -232,7 +237,11 @@ final class EloquentPaymentRepository implements PaymentRepository
                 $row->confirmed_at,
                 $row->expires_at,
                 $row->created_at,
-                $row->relationLoaded('discrepancies') && $row->discrepancies->isNotEmpty(),
+                // withExists() on the list query sets this as a plain
+                // attribute rather than a loaded relation; a caller that
+                // skipped it too (e.g. findForUpdate(), which never needs the
+                // flag) falls back to relationLoaded() the same as before.
+                $row->discrepancies_exists ?? ($row->relationLoaded('discrepancies') && $row->discrepancies->isNotEmpty()),
             );
         }
 

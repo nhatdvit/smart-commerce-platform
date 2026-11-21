@@ -3,7 +3,7 @@
     "info": {
         "title": "Smart Commerce Platform",
         "version": "1.0.0",
-        "description": "Customer storefront and operations API for the Smart Commerce Platform.\n\n**Money.** Amounts are whole Vietnamese đồng transported as decimal\nstrings (`\"45000\"`), because JSON numbers cannot hold a 64-bit integer\nsafely in every client. Never parse them into a float.\n\n**Errors.** Every failure returns the same envelope with a stable\nmachine-readable `code`; branch on that, never on `message`.\n\n**Store scope.** Admin operations require both the role permission and\nan active membership of the target store. Store context comes from the\nroute or the host, never from a query parameter.\n\n**Payments.** MVP settles in `CASH` or `BANK_TRANSFER` only. A generated\nVietQR is not a confirmation of payment: authorized staff confirm the\nactual bank credit."
+        "description": "Customer storefront and operations API for the Smart Commerce Platform.\n\n**Money.** Amounts are whole Vietnamese \u0111\u1ed3ng transported as decimal\nstrings (`\"45000\"`), because JSON numbers cannot hold a 64-bit integer\nsafely in every client. Never parse them into a float.\n\n**Errors.** Every failure returns the same envelope with a stable\nmachine-readable `code`; branch on that, never on `message`.\n\n**Store scope.** Admin operations require both the role permission and\nan active membership of the target store. Store context comes from the\nroute or the host, never from a query parameter.\n\n**Payments.** MVP settles in `CASH` or `BANK_TRANSFER` only. A generated\nVietQR is not a confirmation of payment: authorized staff confirm the\nactual bank credit."
     },
     "servers": [
         {
@@ -65,7 +65,7 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "id": []
+                                        "id": {}
                                     },
                                     "required": [
                                         "id"
@@ -145,7 +145,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -282,7 +282,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": "null"
@@ -420,7 +420,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         }
                                     },
                                     "required": [
@@ -625,7 +625,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -750,6 +750,266 @@
                 }
             }
         },
+        "/admin/payments": {
+            "get": {
+                "operationId": "admin.payments.index",
+                "tags": [
+                    "AdminPayment"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "status[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "PENDING",
+                                    "PROCESSING",
+                                    "PAID",
+                                    "FAILED",
+                                    "PARTIALLY_REFUNDED",
+                                    "REFUNDED"
+                                ]
+                            },
+                            "maxItems": 6
+                        }
+                    },
+                    {
+                        "name": "method",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "CASH",
+                                "BANK_TRANSFER",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "needs_attention",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "boolean",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "transfer_reference",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 32
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {}
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "has_more": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "items",
+                                        "next_cursor",
+                                        "has_more"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/payments/{payment}": {
+            "get": {
+                "operationId": "admin.payments.show",
+                "tags": [
+                    "AdminPayment"
+                ],
+                "parameters": [
+                    {
+                        "name": "payment",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`AdminPaymentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminPaymentResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/admin/payments/{payment}/confirm": {
+            "post": {
+                "operationId": "admin.payments.confirm",
+                "tags": [
+                    "AdminPayment"
+                ],
+                "parameters": [
+                    {
+                        "name": "payment",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConfirmPaymentRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`AdminPaymentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminPaymentResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/payments/{payment}/flag": {
+            "post": {
+                "operationId": "admin.payments.flag",
+                "tags": [
+                    "AdminPayment"
+                ],
+                "parameters": [
+                    {
+                        "name": "payment",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/FlagPaymentRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`AdminPaymentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminPaymentResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/products": {
             "get": {
                 "operationId": "admin.products.index",
@@ -816,7 +1076,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -919,6 +1179,235 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ProductResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/store": {
+            "get": {
+                "operationId": "admin.store.show",
+                "tags": [
+                    "AdminStoreContext"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "slug": {
+                                            "type": "string"
+                                        },
+                                        "timezone": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name",
+                                        "slug",
+                                        "timezone"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/admin/stores/{store}/bank-account": {
+            "get": {
+                "operationId": "admin.stores.bank-account.show",
+                "tags": [
+                    "AdminStorePaymentSettings"
+                ],
+                "parameters": [
+                    {
+                        "name": "store",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`StoreBankAccountResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreBankAccountResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "admin.stores.bank-account.update",
+                "tags": [
+                    "AdminStorePaymentSettings"
+                ],
+                "parameters": [
+                    {
+                        "name": "store",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateBankAccountRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`StoreBankAccountResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StoreBankAccountResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/stores/{store}/payment-methods": {
+            "get": {
+                "operationId": "admin.stores.payment-methods.show",
+                "description": "Same permission as the write: a store's own method configuration is not\na day-to-day operational read, the same reasoning as the bank-account\npair above.",
+                "summary": "The current switches, for the toggle form to open against",
+                "tags": [
+                    "AdminStorePaymentSettings"
+                ],
+                "parameters": [
+                    {
+                        "name": "store",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    },
+                                    "required": [
+                                        "items"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "admin.stores.payment-methods.update",
+                "tags": [
+                    "AdminStorePaymentSettings"
+                ],
+                "parameters": [
+                    {
+                        "name": "store",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdatePaymentMethodsRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    },
+                                    "required": [
+                                        "items"
+                                    ]
                                 }
                             }
                         }
@@ -1097,7 +1586,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "array",
-                                    "items": []
+                                    "items": {}
                                 }
                             }
                         }
@@ -1111,6 +1600,183 @@
     },
     "components": {
         "schemas": {
+            "AdminPaymentResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "order_id": {
+                        "type": "string"
+                    },
+                    "order_code": {
+                        "type": "string"
+                    },
+                    "store_id": {
+                        "type": "string"
+                    },
+                    "method": {
+                        "type": "string",
+                        "enum": [
+                            "CASH",
+                            "BANK_TRANSFER"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "PENDING",
+                            "PROCESSING",
+                            "PAID",
+                            "FAILED",
+                            "PARTIALLY_REFUNDED",
+                            "REFUNDED"
+                        ]
+                    },
+                    "amount": {
+                        "type": "object",
+                        "properties": {
+                            "amount": {
+                                "type": "string"
+                            },
+                            "currency": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "amount",
+                            "currency"
+                        ]
+                    },
+                    "confirmed_amount": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "amount": {
+                                "type": "string"
+                            },
+                            "currency": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "amount",
+                            "currency"
+                        ]
+                    },
+                    "transfer_reference": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "bank_transaction_reference": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "bank_account_masked": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "confirmed_by": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "confirmed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "needs_attention": {
+                        "type": "boolean"
+                    },
+                    "discrepancies": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {}
+                    }
+                },
+                "required": [
+                    "id",
+                    "order_id",
+                    "order_code",
+                    "store_id",
+                    "method",
+                    "status",
+                    "amount",
+                    "confirmed_amount",
+                    "transfer_reference",
+                    "bank_transaction_reference",
+                    "bank_account_masked",
+                    "confirmed_by",
+                    "confirmed_at",
+                    "expires_at",
+                    "needs_attention",
+                    "discrepancies",
+                    "events"
+                ],
+                "title": "AdminPaymentResource"
+            },
+            "ConfirmPaymentRequest": {
+                "type": "object",
+                "description": "Validates `ConfirmPaymentRequest`.\n\n`amount` is sent explicitly rather than assumed from the order total, so\nconfirming the wrong figure takes a deliberate act and leaves a record of\nit (CLAUDE.md section 6) - this Form Request only checks it is a shape of\nwhole \u0111\u1ed3ng; whether it MATCHES what is owed is the domain entity's decision.",
+                "properties": {
+                    "amount": {
+                        "type": "string",
+                        "pattern": "^[0-9]+$",
+                        "maxLength": 100000000
+                    },
+                    "bank_transaction_reference": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 120
+                    },
+                    "observed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "accept_discrepancy": {
+                        "type": "boolean"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    }
+                },
+                "required": [
+                    "amount"
+                ],
+                "title": "ConfirmPaymentRequest"
+            },
             "CouponResource": {
                 "type": "object",
                 "properties": {
@@ -1271,11 +1937,11 @@
                     },
                     "roles": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "store_memberships": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     }
                 },
                 "required": [
@@ -1287,6 +1953,41 @@
                     "store_memberships"
                 ],
                 "title": "CurrentUserResource"
+            },
+            "FlagPaymentRequest": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "UNDERPAID",
+                            "OVERPAID",
+                            "MISSING_REFERENCE",
+                            "UNKNOWN_REFERENCE",
+                            "DUPLICATE_TRANSFER",
+                            "LATE_TRANSFER",
+                            "CANCELLED_ORDER_PAID"
+                        ]
+                    },
+                    "observed_amount": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "pattern": "^[0-9]+$"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    }
+                },
+                "required": [
+                    "type"
+                ],
+                "title": "FlagPaymentRequest"
             },
             "LoginRequest": {
                 "type": "object",
@@ -1513,7 +2214,7 @@
                     },
                     "items": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     }
                 },
                 "required": [
@@ -1607,7 +2308,7 @@
                     },
                     "items": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "totals": {
                         "type": "object",
@@ -1701,11 +2402,11 @@
                             "array",
                             "null"
                         ],
-                        "items": []
+                        "items": {}
                     },
                     "status_history": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "placed_at": {
                         "type": [
@@ -1856,7 +2557,7 @@
                     },
                     "variants": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "modifier_groups": {
                         "type": "array",
@@ -2248,7 +2949,7 @@
             },
             "SetDailyPortionsRequest": {
                 "type": "object",
-                "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty bánh mì has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
+                "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty b\u00e1nh m\u00ec has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
                 "properties": {
                     "items": {
                         "type": "array",
@@ -2280,6 +2981,59 @@
                 ],
                 "title": "SetDailyPortionsRequest"
             },
+            "StoreBankAccountResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "bank_bin": {
+                        "type": "string"
+                    },
+                    "bank_name": {
+                        "type": "string"
+                    },
+                    "account_number_masked": {
+                        "type": "string"
+                    },
+                    "account_name": {
+                        "type": "string"
+                    },
+                    "is_default": {
+                        "type": "boolean"
+                    },
+                    "is_active": {
+                        "type": "boolean"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_by": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "bank_bin",
+                    "bank_name",
+                    "account_number_masked",
+                    "account_name",
+                    "is_default",
+                    "is_active",
+                    "updated_at",
+                    "updated_by"
+                ],
+                "title": "StoreBankAccountResource"
+            },
             "TransitionOrderRequest": {
                 "type": "object",
                 "description": "Validates `TransitionOrderRequest`: where this order is going, and why.\n\nThe target status is explicit rather than a \"next\" command. Two staff\nmembers tapping at once would both mean something different by \"next\", and\nthe second tap would move the order one step further than anyone intended.\nSending the status the operator saw turns that race into a 409 they can see\n(CLAUDE.md section 6).\n\nWhether the move is legal at all is the state machine's answer, not this\none. A Form Request can only say the field is a known status.",
@@ -2310,6 +3064,32 @@
                 ],
                 "title": "TransitionOrderRequest"
             },
+            "UpdateBankAccountRequest": {
+                "type": "object",
+                "properties": {
+                    "bank_bin": {
+                        "type": "string",
+                        "pattern": "^[0-9]{6}$"
+                    },
+                    "account_number": {
+                        "type": "string",
+                        "pattern": "^[0-9]{6,20}$"
+                    },
+                    "account_name": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "is_default": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "bank_bin",
+                    "account_number",
+                    "account_name"
+                ],
+                "title": "UpdateBankAccountRequest"
+            },
             "UpdateMenuItemAvailabilityRequest": {
                 "type": "object",
                 "description": "Validates `UpdateMenuItemAvailabilityRequest`.\n\nThe sold-out switch is required; the portion counts are optional, and\n\"omitted\" is kept distinct from \"set to null\" so flipping the switch cannot\nwipe the kitchen's numbers.",
@@ -2338,6 +3118,40 @@
                     "is_available"
                 ],
                 "title": "UpdateMenuItemAvailabilityRequest"
+            },
+            "UpdatePaymentMethodsRequest": {
+                "type": "object",
+                "properties": {
+                    "methods": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "method": {
+                                    "type": "string",
+                                    "enum": [
+                                        "CASH",
+                                        "BANK_TRANSFER"
+                                    ]
+                                },
+                                "enabled": {
+                                    "type": "boolean"
+                                }
+                            },
+                            "required": [
+                                "method",
+                                "enabled"
+                            ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 2,
+                        "uniqueItems": true
+                    }
+                },
+                "required": [
+                    "methods"
+                ],
+                "title": "UpdatePaymentMethodsRequest"
             },
             "UploadProductImageRequest": {
                 "type": "object",

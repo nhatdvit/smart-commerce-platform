@@ -60,7 +60,7 @@ function orderInStore(
         ->quantity($quantity)
         ->create(['product_name' => $dish, 'unit_price_amount' => $unitPrice]);
 
-    $payment = Payment::factory()->on($order->id, $storeId, $total);
+    $payment = Payment::factory()->on($order->id, $storeId, $order->order_code, $total);
 
     // A transfer carries the window a customer has to pay in; cash does not,
     // and the database refuses one that does.

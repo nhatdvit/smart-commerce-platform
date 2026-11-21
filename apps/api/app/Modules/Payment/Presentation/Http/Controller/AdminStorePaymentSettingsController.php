@@ -67,6 +67,27 @@ final class AdminStorePaymentSettingsController extends Controller
         return (new StoreBankAccountResource($account))->response();
     }
 
+    /**
+     * The current switches, for the toggle form to open against.
+     *
+     * Same permission as the write: a store's own method configuration is not
+     * a day-to-day operational read, the same reasoning as the bank-account
+     * pair above.
+     */
+    public function showPaymentMethods(StoreContext $storeContext): JsonResponse
+    {
+        Gate::authorize('updateMethods', Payment::class);
+
+        $storeId = $storeContext->require()->id;
+
+        return new JsonResponse([
+            'items' => $this->renderMethods(
+                $this->paymentMethods->forStore($storeId),
+                $this->bankAccounts->findDefaultInStore($storeId) !== null,
+            ),
+        ]);
+    }
+
     public function updatePaymentMethods(
         UpdatePaymentMethodsRequest $request,
         StoreContext $storeContext,
@@ -82,24 +103,34 @@ final class AdminStorePaymentSettingsController extends Controller
             $this->actorId($request),
         );
 
-        $hasBankAccount = $this->bankAccounts->findDefaultInStore($storeId) !== null;
-
         return new JsonResponse([
-            'items' => array_values(array_map(
-                static fn (PaymentMethod $method): array => [
-                    'method' => $method->value,
-                    'enabled' => $enabled[$method->value] ?? false,
-                    'label' => $method->label(),
-                    'description' => null,
-                    'unavailable_reason' => $method === PaymentMethod::BankTransfer
-                        && ! ($enabled[$method->value] ?? false)
-                        && ! $hasBankAccount
-                        ? 'Cần cấu hình tài khoản ngân hàng trước khi bật chuyển khoản.'
-                        : null,
-                ],
-                PaymentMethod::cases(),
-            )),
+            'items' => $this->renderMethods(
+                $enabled,
+                $this->bankAccounts->findDefaultInStore($storeId) !== null,
+            ),
         ]);
+    }
+
+    /**
+     * @param  array<string, bool>  $enabled
+     * @return list<array{method: string, enabled: bool, label: string, description: null, unavailable_reason: string|null}>
+     */
+    private function renderMethods(array $enabled, bool $hasBankAccount): array
+    {
+        return array_values(array_map(
+            static fn (PaymentMethod $method): array => [
+                'method' => $method->value,
+                'enabled' => $enabled[$method->value] ?? false,
+                'label' => $method->label(),
+                'description' => null,
+                'unavailable_reason' => $method === PaymentMethod::BankTransfer
+                    && ! ($enabled[$method->value] ?? false)
+                    && ! $hasBankAccount
+                    ? 'Cần cấu hình tài khoản ngân hàng trước khi bật chuyển khoản.'
+                    : null,
+            ],
+            PaymentMethod::cases(),
+        ));
     }
 
     private function actorId(UpdateBankAccountRequest|UpdatePaymentMethodsRequest $request): string

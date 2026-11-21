@@ -1298,6 +1298,41 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /admin/store:
+    get:
+      operationId: getAdminStoreContext
+      tags: [Admin - Store]
+      summary: Which store this session is scoped to
+      description: |
+        No permission beyond authentication: a store's name and slug are not
+        sensitive, and every admin screen already discloses which store it is
+        scoped to simply by what it shows.
+
+        Exists so the dashboard can build the two endpoints below, which are
+        the one place CLAUDE.md §8's own example puts `{store}` in the path —
+        every other admin route resolves its store silently by host or
+        default, and the client never otherwise needs the id.
+      responses:
+        '200':
+          description: The store this request resolved to.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name, slug, timezone]
+                properties:
+                  id:
+                    $ref: '#/components/schemas/Uuid'
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  timezone:
+                    type: string
+                    examples: ['Asia/Ho_Chi_Minh']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
   /admin/stores/{store}/bank-account:
     get:
       operationId: getStoreBankAccount
@@ -1369,6 +1404,32 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
 
   /admin/stores/{store}/payment-methods:
+    get:
+      operationId: getStorePaymentMethods
+      tags: [Admin - Store]
+      summary: The current switches, for the toggle form to open against
+      description: |
+        Permission `store.update` — the same reasoning as the write below: a
+        store's own method configuration is not a day-to-day operational read.
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '200':
+          description: The store's methods as they are now.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentMethodOption'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
     put:
       operationId: updateStorePaymentMethods
       tags: [Admin - Store]

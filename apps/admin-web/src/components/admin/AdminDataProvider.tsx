@@ -43,6 +43,24 @@ import {
   type OrderStatusCounts,
 } from '@/lib/orders-api';
 import type { ProductDraft } from '@/lib/product-form';
+import {
+  confirmPayment as confirmPaymentRequest,
+  flagPayment as flagPaymentRequest,
+  loadBankAccount as loadBankAccountRequest,
+  loadPaymentMethodOptions as loadPaymentMethodOptionsRequest,
+  loadPayments as loadPaymentsRequest,
+  setPaymentMethodEnabled as setPaymentMethodEnabledRequest,
+  updateBankAccount as updateBankAccountRequest,
+  type AdminPayment,
+  type BankAccountDraft,
+  type ConfirmPaymentInput,
+  type FlagPaymentInput,
+  type PaymentListQuery,
+  type PaymentMethod,
+  type PaymentMethodOption,
+  type StoreBankAccount,
+} from '@/lib/payments-api';
+import { loadStoreContext } from '@/lib/store-api';
 
 export type AdminModal =
   | { readonly kind: 'order'; readonly orderId: string }
@@ -54,7 +72,10 @@ export type AdminModal =
   | { readonly kind: 'add-reward' }
   | { readonly kind: 'loyalty-settings' }
   | { readonly kind: 'add-product' }
-  | { readonly kind: 'delete-product'; readonly productId: string };
+  | { readonly kind: 'delete-product'; readonly productId: string }
+  | { readonly kind: 'payment'; readonly paymentId: string }
+  | { readonly kind: 'bank-account-form' }
+  | { readonly kind: 'payment-methods' };
 
 /** Whether the dashboard has a session yet. */
 export type SessionState = 'checking' | 'signed-in' | 'signed-out';
@@ -82,6 +103,16 @@ interface AdminContextValue {
   readonly newOrderIds: ReadonlySet<string>;
   readonly couponsBusy: boolean;
   readonly couponsError: string;
+  readonly payments: readonly AdminPayment[];
+  readonly paymentsBusy: boolean;
+  readonly paymentsError: string;
+  readonly hasMorePayments: boolean;
+  readonly bankAccount: StoreBankAccount | null;
+  readonly bankAccountBusy: boolean;
+  readonly bankAccountError: string;
+  readonly bankAccountLoaded: boolean;
+  readonly paymentMethodOptions: readonly PaymentMethodOption[];
+  readonly paymentMethodsBusy: boolean;
   readonly openModal: (modal: AdminModal) => void;
   readonly closeModal: () => void;
   readonly setSidebarOpen: (open: boolean) => void;
@@ -107,6 +138,15 @@ interface AdminContextValue {
   readonly createCoupon: (draft: CouponDraft) => void;
   readonly updateCoupon: (couponId: string, draft: CouponDraft) => void;
   readonly addReward: (name: string, points: number) => void;
+  /** Asks for the reconciliation queue. The payments screen asks on mount. */
+  readonly loadPayments: (query: PaymentListQuery) => void;
+  readonly loadMorePayments: () => void;
+  readonly confirmPayment: (paymentId: string, input: ConfirmPaymentInput) => void;
+  readonly flagPayment: (paymentId: string, input: FlagPaymentInput) => void;
+  readonly loadBankAccount: () => void;
+  readonly saveBankAccount: (draft: BankAccountDraft) => void;
+  readonly loadPaymentMethodOptions: () => void;
+  readonly setPaymentMethodEnabled: (method: PaymentMethod, enabled: boolean) => void;
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
@@ -140,6 +180,34 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   /** Whether the list has been asked for yet, so a re-mount does not re-ask. */
   const couponsLoaded = useRef(false);
   const [rewards, setRewards] = useState<readonly DemoReward[]>(INITIAL_REWARDS);
+
+  const [payments, setPayments] = useState<readonly AdminPayment[]>([]);
+  const [paymentsBusy, setPaymentsBusy] = useState(false);
+  const [paymentsError, setPaymentsError] = useState('');
+  const [paymentsCursor, setPaymentsCursor] = useState<string | null>(null);
+  /** The filters currently on screen, for a refresh after a confirm or flag. */
+  const paymentsQuery = useRef<PaymentListQuery>({ needsAttention: true });
+
+  /**
+   * This session's store id, resolved once and cached.
+   *
+   * Every other admin read resolves its store silently on the server; only
+   * the bank-account and payment-method endpoints carry `{store}` in the
+   * path (CLAUDE.md section 8's own example), so this is the one lookup the
+   * screen never has to think about - it is internal to the actions below.
+   */
+  const storeIdRef = useRef<string | null>(null);
+  const storeIdRequest = useRef<Promise<string> | null>(null);
+
+  const [bankAccount, setBankAccount] = useState<StoreBankAccount | null>(null);
+  const [bankAccountBusy, setBankAccountBusy] = useState(false);
+  const [bankAccountError, setBankAccountError] = useState('');
+  const [bankAccountLoaded, setBankAccountLoaded] = useState(false);
+
+  const [paymentMethodOptions, setPaymentMethodOptions] = useState<readonly PaymentMethodOption[]>(
+    [],
+  );
+  const [paymentMethodsBusy, setPaymentMethodsBusy] = useState(false);
 
   const [orders, setOrders] = useState<readonly AdminOrder[]>([]);
   const [orderCounts, setOrderCounts] = useState<OrderStatusCounts>({});
@@ -748,6 +816,221 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [notify],
   );
 
+  /** This session's store id, fetched once and shared by every call in flight. */
+  const resolveStoreId = useCallback(async (): Promise<string> => {
+    if (storeIdRef.current !== null) {
+      return storeIdRef.current;
+    }
+
+    storeIdRequest.current ??= loadStoreContext()
+      .then((store) => {
+        storeIdRef.current = store.id;
+
+        return store.id;
+      })
+      .finally(() => {
+        storeIdRequest.current = null;
+      });
+
+    return storeIdRequest.current;
+  }, []);
+
+  const runPaymentsLoad = useCallback(
+    async (query: PaymentListQuery, cursor?: string, append = false): Promise<void> => {
+      setPaymentsBusy(true);
+
+      try {
+        const page = await loadPaymentsRequest(cursor === undefined ? query : { ...query, cursor });
+        setPayments((current) => (append ? [...current, ...page.items] : page.items));
+        setPaymentsCursor(page.nextCursor);
+        setPaymentsError('');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+
+        setPaymentsError(
+          error instanceof Error ? error.message : 'Không tải được danh sách thanh toán.',
+        );
+      } finally {
+        setPaymentsBusy(false);
+      }
+    },
+    [notify],
+  );
+
+  const loadPayments = useCallback(
+    (query: PaymentListQuery) => {
+      paymentsQuery.current = query;
+      void runPaymentsLoad(query);
+    },
+    [runPaymentsLoad],
+  );
+
+  const loadMorePayments = useCallback(() => {
+    if (paymentsCursor === null) {
+      return;
+    }
+
+    void runPaymentsLoad(paymentsQuery.current, paymentsCursor, true);
+  }, [paymentsCursor, runPaymentsLoad]);
+
+  /**
+   * Runs one payment write (confirm or flag) and refreshes the queue on
+   * success, the same shape as `runCouponWrite` above.
+   */
+  const runPaymentWrite = useCallback(
+    async (operation: () => Promise<AdminPayment>, success: (payment: AdminPayment) => string) => {
+      setPaymentsBusy(true);
+
+      try {
+        const payment = await operation();
+        setModal(null);
+        notify(success(payment));
+        await runPaymentsLoad(paymentsQuery.current);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+
+        notify(error instanceof Error ? error.message : 'Không lưu được thanh toán.');
+      } finally {
+        setPaymentsBusy(false);
+      }
+    },
+    [notify, runPaymentsLoad],
+  );
+
+  const confirmPayment = useCallback(
+    (paymentId: string, input: ConfirmPaymentInput) => {
+      void runPaymentWrite(
+        () => confirmPaymentRequest(paymentId, input),
+        (payment) => `Đã xác nhận đơn ${payment.orderCode}`,
+      );
+    },
+    [runPaymentWrite],
+  );
+
+  const flagPayment = useCallback(
+    (paymentId: string, input: FlagPaymentInput) => {
+      void runPaymentWrite(
+        () => flagPaymentRequest(paymentId, input),
+        (payment) => `Đã ghi nhận ngoại lệ cho đơn ${payment.orderCode}`,
+      );
+    },
+    [runPaymentWrite],
+  );
+
+  const loadBankAccount = useCallback(() => {
+    setBankAccountBusy(true);
+
+    void resolveStoreId()
+      .then((storeId) => loadBankAccountRequest(storeId))
+      .then((account) => {
+        setBankAccount(account);
+        setBankAccountError('');
+        setBankAccountLoaded(true);
+      })
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+
+        setBankAccountError(
+          error instanceof Error ? error.message : 'Không tải được tài khoản ngân hàng.',
+        );
+        setBankAccountLoaded(true);
+      })
+      .finally(() => setBankAccountBusy(false));
+  }, [notify, resolveStoreId]);
+
+  const saveBankAccount = useCallback(
+    (draft: BankAccountDraft) => {
+      setBankAccountBusy(true);
+
+      void resolveStoreId()
+        .then((storeId) => updateBankAccountRequest(storeId, draft))
+        .then((account) => {
+          setBankAccount(account);
+          setModal(null);
+          notify('Đã lưu tài khoản nhận chuyển khoản');
+        })
+        .catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 401) {
+            setSession('signed-out');
+            notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+            return;
+          }
+
+          notify(error instanceof Error ? error.message : 'Không lưu được tài khoản ngân hàng.');
+        })
+        .finally(() => setBankAccountBusy(false));
+    },
+    [notify, resolveStoreId],
+  );
+
+  const loadPaymentMethodOptions = useCallback(() => {
+    setPaymentMethodsBusy(true);
+
+    void resolveStoreId()
+      .then((storeId) => loadPaymentMethodOptionsRequest(storeId))
+      .then((options) => setPaymentMethodOptions(options))
+      .catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+
+        notify(
+          error instanceof Error
+            ? error.message
+            : 'Không tải được cấu hình phương thức thanh toán.',
+        );
+      })
+      .finally(() => setPaymentMethodsBusy(false));
+  }, [notify, resolveStoreId]);
+
+  const setPaymentMethodEnabled = useCallback(
+    (method: PaymentMethod, enabled: boolean) => {
+      setPaymentMethodsBusy(true);
+
+      void resolveStoreId()
+        .then((storeId) => setPaymentMethodEnabledRequest(storeId, method, enabled))
+        .then((options) => {
+          setPaymentMethodOptions(options);
+          notify(enabled ? 'Đã bật phương thức thanh toán' : 'Đã tắt phương thức thanh toán');
+        })
+        .catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 401) {
+            setSession('signed-out');
+            notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+            return;
+          }
+
+          notify(
+            error instanceof Error
+              ? error.message
+              : 'Không lưu được cấu hình phương thức thanh toán.',
+          );
+        })
+        .finally(() => setPaymentMethodsBusy(false));
+    },
+    [notify, resolveStoreId],
+  );
+
   /**
    * Orders waiting for someone to act: a transfer not yet verified, or an
    * order the store has not acknowledged.
@@ -782,6 +1065,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       newOrderIds,
       couponsBusy,
       couponsError,
+      payments,
+      paymentsBusy,
+      paymentsError,
+      hasMorePayments: paymentsCursor !== null,
+      bankAccount,
+      bankAccountBusy,
+      bankAccountError,
+      bankAccountLoaded,
+      paymentMethodOptions,
+      paymentMethodsBusy,
       openModal,
       closeModal,
       setSidebarOpen,
@@ -802,6 +1095,14 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       createCoupon,
       updateCoupon,
       addReward,
+      loadPayments,
+      loadMorePayments,
+      confirmPayment,
+      flagPayment,
+      loadBankAccount,
+      saveBankAccount,
+      loadPaymentMethodOptions,
+      setPaymentMethodEnabled,
     }),
     [
       orders,
@@ -822,6 +1123,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       newOrderIds,
       couponsBusy,
       couponsError,
+      payments,
+      paymentsBusy,
+      paymentsError,
+      paymentsCursor,
+      bankAccount,
+      bankAccountBusy,
+      bankAccountError,
+      bankAccountLoaded,
+      paymentMethodOptions,
+      paymentMethodsBusy,
       openModal,
       closeModal,
       notify,
@@ -841,6 +1152,14 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       createCoupon,
       updateCoupon,
       addReward,
+      loadPayments,
+      loadMorePayments,
+      confirmPayment,
+      flagPayment,
+      loadBankAccount,
+      saveBankAccount,
+      loadPaymentMethodOptions,
+      setPaymentMethodEnabled,
     ],
   );
 

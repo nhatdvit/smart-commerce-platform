@@ -11,6 +11,7 @@ use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
 use App\Modules\Payment\Presentation\Http\Controller\AdminPaymentController;
 use App\Modules\Payment\Presentation\Http\Controller\AdminStorePaymentSettingsController;
 use App\Modules\Pricing\Presentation\Http\Controller\AdminCouponController;
+use App\Modules\Store\Presentation\Http\Controller\AdminStoreContextController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -85,6 +86,13 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
     ->prefix('admin')
     ->name('api.admin.')
     ->group(static function (): void {
+        // Which store this session is scoped to - no permission beyond
+        // authentication, since every screen already discloses it just by
+        // what it shows. Lets the dashboard build the two payment-settings
+        // URLs below without an operator ever typing a store id.
+        Route::get('/store', [AdminStoreContextController::class, 'show'])
+            ->name('store.show');
+
         // Before /products/{product}, or the literal path would be read as a
         // product id - and refused, since that id is not a UUID.
         Route::post('/products/images', [ProductImageController::class, 'store'])
@@ -219,6 +227,10 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
         Route::put('/stores/{store}/bank-account', [AdminStorePaymentSettingsController::class, 'updateBankAccount'])
             ->middleware('store.can:payment.bank-account.manage')
             ->name('stores.bank-account.update');
+
+        Route::get('/stores/{store}/payment-methods', [AdminStorePaymentSettingsController::class, 'showPaymentMethods'])
+            ->middleware('store.can:store.update')
+            ->name('stores.payment-methods.show');
 
         Route::put('/stores/{store}/payment-methods', [AdminStorePaymentSettingsController::class, 'updatePaymentMethods'])
             ->middleware('store.can:store.update')
