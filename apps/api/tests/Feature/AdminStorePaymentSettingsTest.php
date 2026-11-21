@@ -86,6 +86,30 @@ it('replaces the previous default rather than keeping two', function (): void {
         ->toBe('970415');
 });
 
+it('lists the known VietQR banks for the form picker, sorted by name', function (): void {
+    [, $owner] = storeWithStaff('STORE_OWNER');
+
+    $response = $this->actingAs($owner, 'sanctum')
+        ->getJson('/api/v1/admin/known-banks')
+        ->assertOk();
+
+    $items = $response->json('items');
+    expect($items)->not->toBeEmpty()
+        ->and(collect($items)->firstWhere('bin', '970436')['name'])->toBe('Vietcombank');
+
+    $names = collect($items)->pluck('name')->all();
+    expect($names)->toBe(collect($names)->sort()->values()->all());
+});
+
+it('refuses a store manager reading the bank directory, same as the bank-account form it serves', function (): void {
+    [, $manager] = storeWithStaff('STORE_MANAGER');
+
+    $this->actingAs($manager, 'sanctum')
+        ->getJson('/api/v1/admin/known-banks')
+        ->assertForbidden()
+        ->assertJsonPath('code', 'STORE_SCOPE_DENIED');
+});
+
 it('refuses a bank identifier outside the known VietQR participant list', function (): void {
     [$store, $owner] = storeWithStaff('STORE_OWNER');
 
@@ -251,6 +275,7 @@ it('refuses an unauthenticated caller', function (): void {
     $store = Store::factory()->create();
 
     $this->getJson("/api/v1/admin/stores/{$store->id}/bank-account")->assertUnauthorized();
+    $this->getJson('/api/v1/admin/known-banks')->assertUnauthorized();
     $this->getJson("/api/v1/admin/stores/{$store->id}/payment-methods")->assertUnauthorized();
     $this->putJson("/api/v1/admin/stores/{$store->id}/payment-methods", ['methods' => []])
         ->assertUnauthorized();

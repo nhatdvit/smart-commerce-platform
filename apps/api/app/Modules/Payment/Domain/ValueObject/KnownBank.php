@@ -73,4 +73,24 @@ final readonly class KnownBank
     {
         return ctype_digit($bin) ? (self::DIRECTORY[(int) $bin] ?? null) : null;
     }
+
+    /**
+     * The whole directory, for a picker rather than a free-typed field - an
+     * operator choosing a bank by name cannot mistype a BIN that happens to
+     * belong to a different, real bank (CLAUDE.md section 6).
+     *
+     * @return list<array{bin: string, name: string}>
+     */
+    public static function all(): array
+    {
+        $entries = array_map(
+            static fn (int $bin, string $name): array => ['bin' => (string) $bin, 'name' => $name],
+            array_keys(self::DIRECTORY),
+            array_values(self::DIRECTORY),
+        );
+
+        usort($entries, static fn (array $a, array $b): int => $a['name'] <=> $b['name']);
+
+        return $entries;
+    }
 }

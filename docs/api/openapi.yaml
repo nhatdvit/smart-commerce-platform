@@ -1333,6 +1333,46 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthenticated'
 
+  /admin/known-banks:
+    get:
+      operationId: getAdminKnownBanks
+      tags: [Admin - Store]
+      summary: The known VietQR bank directory, for a picker
+      description: |
+        Permission `payment.bank-account.manage` - gated the same as the
+        bank-account form, since it exists only to serve it. An operator
+        chooses a bank by name here rather than typing a BIN: a mistyped
+        digit that happens to be a different real bank's identifier is
+        exactly the mistake CLAUDE.md section 6 warns a typo here can cause.
+
+        Not store-scoped data itself - every store sees the same directory -
+        but still resolved through a store so the permission check has
+        something to check it against.
+      responses:
+        '200':
+          description: Every bank this deployment recognises, sorted by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [bin, name]
+                      properties:
+                        bin:
+                          type: string
+                          pattern: '^[0-9]{6}$'
+                        name:
+                          type: string
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+
   /admin/stores/{store}/bank-account:
     get:
       operationId: getStoreBankAccount

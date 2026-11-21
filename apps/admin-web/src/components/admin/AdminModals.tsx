@@ -1386,7 +1386,9 @@ function BankAccountFormModal() {
     bankAccountBusy,
     bankAccountError,
     bankAccountLoaded,
+    knownBanks,
     loadBankAccount,
+    loadKnownBanks,
     saveBankAccount,
   } = useAdminData();
   const [bankBin, setBankBin] = useState('');
@@ -1394,11 +1396,12 @@ function BankAccountFormModal() {
   const [accountName, setAccountName] = useState('');
   const [touched, setTouched] = useState(false);
 
-  // Asked once when the dialog opens; loadBankAccount is stable across
-  // re-renders (useCallback in the provider), so this never re-fires.
+  // Asked once when the dialog opens; both are stable across re-renders
+  // (useCallback in the provider), so this never re-fires on its own updates.
   useEffect(() => {
     loadBankAccount();
-  }, [loadBankAccount]);
+    loadKnownBanks();
+  }, [loadBankAccount, loadKnownBanks]);
 
   useEffect(() => {
     if (bankAccount !== null && !touched) {
@@ -1445,18 +1448,28 @@ function BankAccountFormModal() {
           )}
           {bankAccountError === '' ? null : <p role="alert">{bankAccountError}</p>}
           <Field
-            label="Mã ngân hàng (BIN)"
-            hint="6 chữ số theo danh sách NAPAS/VietQR. VD: 970436 (Vietcombank)."
+            label="Ngân hàng"
+            hint={
+              knownBanks.length === 0
+                ? 'Đang tải danh sách ngân hàng...'
+                : 'Theo danh sách NAPAS/VietQR. Không thấy ngân hàng cần tìm nghĩa là chưa hỗ trợ.'
+            }
           >
-            <input
-              maxLength={6}
-              placeholder="970436"
+            <select
               value={bankBin}
+              disabled={knownBanks.length === 0}
               onChange={(event) => {
                 setTouched(true);
-                setBankBin(event.target.value.replace(/[^0-9]/g, ''));
+                setBankBin(event.target.value);
               }}
-            />
+            >
+              <option value="">— Chọn ngân hàng —</option>
+              {knownBanks.map((bank) => (
+                <option key={bank.bin} value={bank.bin}>
+                  {bank.name}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Số tài khoản">
             <input

@@ -10,6 +10,7 @@ use App\Modules\Payment\Domain\Contract\BankAccountRepository;
 use App\Modules\Payment\Domain\Contract\PaymentMethodRepository;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Domain\Enum\PaymentMethod;
+use App\Modules\Payment\Domain\ValueObject\KnownBank;
 use App\Modules\Payment\Presentation\Http\Request\UpdateBankAccountRequest;
 use App\Modules\Payment\Presentation\Http\Request\UpdatePaymentMethodsRequest;
 use App\Modules\Payment\Presentation\Http\Resource\StoreBankAccountResource;
@@ -34,6 +35,18 @@ final class AdminStorePaymentSettingsController extends Controller
         private readonly BankAccountRepository $bankAccounts,
         private readonly PaymentMethodRepository $paymentMethods,
     ) {}
+
+    /**
+     * The known VietQR bank directory, for a picker rather than a free-typed
+     * BIN - an operator choosing "Vietcombank" from a list cannot transpose a
+     * digit into a different, real bank's identifier (CLAUDE.md section 6).
+     */
+    public function showKnownBanks(): JsonResponse
+    {
+        Gate::authorize('manageBankAccount', Payment::class);
+
+        return new JsonResponse(['items' => KnownBank::all()]);
+    }
 
     public function showBankAccount(StoreContext $storeContext): JsonResponse
     {

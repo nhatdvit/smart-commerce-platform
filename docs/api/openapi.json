@@ -814,10 +814,22 @@
                     {
                         "name": "needs_attention",
                         "in": "query",
+                        "description": "Laravel's own `boolean` rule only accepts 0/1/\"0\"/\"1\" - not the\n\"true\"/\"false\" strings a query string naturally carries (every\nbrowser `URLSearchParams` call produces exactly that). Accepting\nboth is what makes the documented `type: boolean` query\nparameter actually usable from a query string.",
                         "schema": {
                             "type": [
-                                "boolean",
+                                "string",
                                 "null"
+                            ],
+                            "enum": [
+                                "0",
+                                "1",
+                                "true",
+                                "false",
+                                "0",
+                                "1",
+                                "1",
+                                "",
+                                null
                             ]
                         }
                     },
@@ -1231,6 +1243,42 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/admin/known-banks": {
+            "get": {
+                "operationId": "admin.known-banks.show",
+                "summary": "The known VietQR bank directory, for a picker rather than a free-typed\nBIN - an operator choosing \"Vietcombank\" from a list cannot transpose a\ndigit into a different, real bank's identifier (CLAUDE.md section 6)",
+                "tags": [
+                    "AdminStorePaymentSettings"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    },
+                                    "required": [
+                                        "items"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"

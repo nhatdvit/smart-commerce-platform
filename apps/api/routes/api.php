@@ -213,6 +213,13 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->whereUuid('payment')
             ->name('payments.flag');
 
+        // Static reference data for the bank-account form's picker - not
+        // store-scoped data itself, gated the same as that form because it
+        // exists only to serve it.
+        Route::get('/known-banks', [AdminStorePaymentSettingsController::class, 'showKnownBanks'])
+            ->middleware('store.can:payment.bank-account.manage')
+            ->name('known-banks.show');
+
         /*
          * Store-level payment configuration. `{store}` is an explicit route
          * parameter here (every other admin route above resolves its store

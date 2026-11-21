@@ -47,6 +47,7 @@ import {
   confirmPayment as confirmPaymentRequest,
   flagPayment as flagPaymentRequest,
   loadBankAccount as loadBankAccountRequest,
+  loadKnownBanks as loadKnownBanksRequest,
   loadPaymentMethodOptions as loadPaymentMethodOptionsRequest,
   loadPayments as loadPaymentsRequest,
   setPaymentMethodEnabled as setPaymentMethodEnabledRequest,
@@ -55,6 +56,7 @@ import {
   type BankAccountDraft,
   type ConfirmPaymentInput,
   type FlagPaymentInput,
+  type KnownBankOption,
   type PaymentListQuery,
   type PaymentMethod,
   type PaymentMethodOption,
@@ -111,6 +113,7 @@ interface AdminContextValue {
   readonly bankAccountBusy: boolean;
   readonly bankAccountError: string;
   readonly bankAccountLoaded: boolean;
+  readonly knownBanks: readonly KnownBankOption[];
   readonly paymentMethodOptions: readonly PaymentMethodOption[];
   readonly paymentMethodsBusy: boolean;
   readonly openModal: (modal: AdminModal) => void;
@@ -144,6 +147,7 @@ interface AdminContextValue {
   readonly confirmPayment: (paymentId: string, input: ConfirmPaymentInput) => void;
   readonly flagPayment: (paymentId: string, input: FlagPaymentInput) => void;
   readonly loadBankAccount: () => void;
+  readonly loadKnownBanks: () => void;
   readonly saveBankAccount: (draft: BankAccountDraft) => void;
   readonly loadPaymentMethodOptions: () => void;
   readonly setPaymentMethodEnabled: (method: PaymentMethod, enabled: boolean) => void;
@@ -203,6 +207,10 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [bankAccountBusy, setBankAccountBusy] = useState(false);
   const [bankAccountError, setBankAccountError] = useState('');
   const [bankAccountLoaded, setBankAccountLoaded] = useState(false);
+
+  /** Static reference data: fetched once per session, not reloaded per dialog open. */
+  const [knownBanks, setKnownBanks] = useState<readonly KnownBankOption[]>([]);
+  const knownBanksLoaded = useRef(false);
 
   const [paymentMethodOptions, setPaymentMethodOptions] = useState<readonly PaymentMethodOption[]>(
     [],
@@ -953,6 +961,30 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       .finally(() => setBankAccountBusy(false));
   }, [notify, resolveStoreId]);
 
+  /** The bank directory is the same for every store, so this asks once. */
+  const loadKnownBanks = useCallback(() => {
+    if (knownBanksLoaded.current) {
+      return;
+    }
+
+    knownBanksLoaded.current = true;
+
+    void loadKnownBanksRequest()
+      .then((banks) => setKnownBanks(banks))
+      .catch((error: unknown) => {
+        knownBanksLoaded.current = false;
+
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+
+        notify(error instanceof Error ? error.message : 'Không tải được danh sách ngân hàng.');
+      });
+  }, [notify]);
+
   const saveBankAccount = useCallback(
     (draft: BankAccountDraft) => {
       setBankAccountBusy(true);
@@ -1073,6 +1105,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       bankAccountBusy,
       bankAccountError,
       bankAccountLoaded,
+      knownBanks,
       paymentMethodOptions,
       paymentMethodsBusy,
       openModal,
@@ -1100,6 +1133,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       confirmPayment,
       flagPayment,
       loadBankAccount,
+      loadKnownBanks,
       saveBankAccount,
       loadPaymentMethodOptions,
       setPaymentMethodEnabled,
@@ -1131,6 +1165,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       bankAccountBusy,
       bankAccountError,
       bankAccountLoaded,
+      knownBanks,
       paymentMethodOptions,
       paymentMethodsBusy,
       openModal,
@@ -1157,6 +1192,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       confirmPayment,
       flagPayment,
       loadBankAccount,
+      loadKnownBanks,
       saveBankAccount,
       loadPaymentMethodOptions,
       setPaymentMethodEnabled,

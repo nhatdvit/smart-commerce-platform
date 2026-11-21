@@ -376,6 +376,25 @@ function toBankAccount(account: ApiStoreBankAccount): StoreBankAccount {
   };
 }
 
+/** One entry in the known VietQR bank directory, for a picker. */
+export interface KnownBankOption {
+  readonly bin: string;
+  readonly name: string;
+}
+
+interface ApiKnownBankPage {
+  readonly items: readonly KnownBankOption[];
+}
+
+/**
+ * Every bank this deployment recognises, for a `<select>` rather than a
+ * free-typed BIN - an operator who picks "Vietcombank" by name cannot
+ * transpose a digit into a different, real bank's identifier.
+ */
+export async function loadKnownBanks(): Promise<readonly KnownBankOption[]> {
+  return (await api.get<ApiKnownBankPage>('/admin/known-banks')).items;
+}
+
 /** Null when this store has not configured one yet (a 404 is not an error here). */
 export async function loadBankAccount(storeId: string): Promise<StoreBankAccount | null> {
   try {
