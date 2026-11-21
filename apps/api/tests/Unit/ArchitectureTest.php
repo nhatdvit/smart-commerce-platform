@@ -168,3 +168,47 @@ arch('every module contract is an interface')
         'App\Modules\Payment\Application\Contract',
     ])
     ->toBeInterfaces();
+
+/*
+ * Pricing owns discount codes, and owns them alone.
+ *
+ * Nothing depends on this module yet - checkout will, through an exported
+ * contract when it lands - and it depends on nothing but Identity's
+ * permission check and the shared kernel. Saying so now is what keeps the
+ * seam clean while it is still cheap (CLAUDE.md sections 3 and 5).
+ */
+arch('the pricing domain layer is framework-free')
+    ->expect('App\Modules\Pricing\Domain')
+    ->not->toUse([
+        'Illuminate\Database\Eloquent\Model',
+        'Illuminate\Http\Request',
+        'Illuminate\Support\Facades',
+    ]);
+
+arch('the pricing module does not read other modules persistence')
+    ->expect('App\Modules\Pricing')
+    ->not->toUse([
+        'App\Modules\Identity\Infrastructure',
+        'App\Modules\Catalog\Infrastructure',
+        'App\Modules\Menu\Infrastructure',
+        'App\Modules\Order\Infrastructure',
+        'App\Modules\Payment\Infrastructure',
+    ]);
+
+arch('no module depends on pricing yet, and none should until it exports one')
+    ->expect([
+        'App\Modules\Catalog',
+        'App\Modules\Menu',
+        'App\Modules\Order',
+        'App\Modules\Payment',
+    ])
+    ->not->toUse('App\Modules\Pricing');
+
+arch('pricing models are final and its contracts are interfaces')
+    ->expect('App\Modules\Pricing\Infrastructure\Persistence\Model')
+    ->classes()
+    ->toBeFinal();
+
+arch('the pricing contract is an interface')
+    ->expect('App\Modules\Pricing\Domain\Contract')
+    ->toBeInterfaces();

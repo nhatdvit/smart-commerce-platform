@@ -39,6 +39,8 @@ final class RolePermissionSeeder extends Seeder
         ['code' => 'payment.read', 'description' => 'View payments and the reconciliation queue'],
         ['code' => 'payment.confirm', 'description' => 'Mark a payment PAID after verifying receipt'],
         ['code' => 'payment.bank-account.manage', 'description' => 'Change the store receiving bank account'],
+        ['code' => 'promotion.read', 'description' => 'View discount codes and their usage'],
+        ['code' => 'promotion.manage', 'description' => 'Create, edit and retire discount codes'],
         ['code' => 'report.read', 'description' => 'View sales and operational reports'],
         ['code' => 'audit.read', 'description' => 'Read the audit log'],
     ];
@@ -96,6 +98,8 @@ final class RolePermissionSeeder extends Seeder
      *
      * STORE_MANAGER deliberately lacks payment.bank-account.manage: changing
      * where money lands is an owner-level action (CLAUDE.md §6).
+     * CASHIER reads discount codes to apply one at the counter but cannot
+     * create them: inventing a discount is deciding to give money away.
      * KITCHEN_STAFF sees no payment or pricing data at all.
      *
      * @return list<array{code: string, name: string, scope: string, description: string, permissions: list<string>}>
@@ -137,6 +141,10 @@ final class RolePermissionSeeder extends Seeder
                     'kitchen.operate',
                     'payment.read',
                     'payment.confirm',
+                    // Discounts are money given away, which a manager may
+                    // decide; a cashier may not (see the CASHIER grants).
+                    'promotion.read',
+                    'promotion.manage',
                     'report.read',
                 ],
             ],
@@ -152,6 +160,9 @@ final class RolePermissionSeeder extends Seeder
                     'order.transition',
                     'payment.read',
                     'payment.confirm',
+                    // Reads codes to apply one at the counter, but cannot
+                    // invent a discount: that is the manager's decision.
+                    'promotion.read',
                 ],
             ],
             [
