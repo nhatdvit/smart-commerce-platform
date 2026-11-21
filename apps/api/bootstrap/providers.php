@@ -7,6 +7,7 @@ use App\Modules\Identity\IdentityServiceProvider;
 use App\Modules\Menu\MenuServiceProvider;
 use App\Modules\Order\OrderServiceProvider;
 use App\Modules\Payment\PaymentServiceProvider;
+use App\Modules\Pricing\PricingServiceProvider;
 use App\Modules\Store\StoreServiceProvider;
 use App\Providers\AppServiceProvider;
 
@@ -15,7 +16,7 @@ use App\Providers\AppServiceProvider;
  * set of active modules is one readable list and load order is deterministic
  * (CLAUDE.md section 4).
  *
- * Remaining modules from CLAUDE.md section 5 - Inventory, Cart, Pricing,
+ * Remaining modules from CLAUDE.md section 5 - Inventory, Cart,
  * Fulfillment, Kitchen, Customer, Notification, Reporting, Audit - are added
  * here as each milestone implements them. They are deliberately not
  * pre-registered as empty scaffolds.
@@ -32,4 +33,5 @@ return [
     MenuServiceProvider::class,
     PaymentServiceProvider::class,
     OrderServiceProvider::class,
+    PricingServiceProvider::class,
 ];

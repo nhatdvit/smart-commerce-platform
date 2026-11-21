@@ -499,3 +499,16 @@ nav button > span {
   padding: 9px 10px;
   text-align: right;
 }
+
+/* ------------------------------------------------------- Long form dialog --
+ * A dialog with more than a handful of fields is taller than a laptop
+ * viewport, and the modal itself does not scroll — so the fields scroll and
+ * the action buttons stay put. Without this the save button sits below the
+ * fold and cannot be pressed at all.
+ */
+.form-scroll {
+  max-height: 58vh;
+  overflow-y: auto;
+  /* Room for the focus ring on the right-hand inputs. */
+  padding-right: 2px;
+}

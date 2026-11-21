@@ -3,6 +3,18 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { mediaUrl } from '@/lib/api-client';
+import {
+  COUPON_STATUSES,
+  DISCOUNT_TYPES,
+  EMPTY_COUPON_FORM,
+  MAX_COUPON_CODE_LENGTH,
+  MAX_COUPON_DESCRIPTION_LENGTH,
+  couponFormValues,
+  validateCouponForm,
+  type CouponFieldErrors,
+  type CouponFormValues,
+} from '@/lib/coupon-form';
+import { COUPON_STATUS_LABELS, DISCOUNT_TYPE_LABELS, describeUsage } from '@/lib/coupons-api';
 import { ACCEPTED_IMAGE_TYPES, uploadProductImage } from '@/lib/image-upload';
 import type { PreparedPortions } from '@/lib/menu-api';
 import { money } from '@/lib/money';
@@ -764,29 +776,230 @@ function DailyPortionsModal() {
   );
 }
 
-function AddCouponModal() {
-  const { addCoupon } = useAdminData();
-  const [code, setCode] = useState('');
+/**
+ * Create and edit are the same dialog: `couponId` absent means create.
+ *
+ * The code field is read-only on an edit, and says why. A code is already on
+ * a sign by the door and in customers' messages; the server refuses a rename
+ * for that reason, and a form that let one be typed would only produce a 422
+ * the operator could not act on.
+ *
+ * The client checks shape - a number is a number, a percentage is 1..100 -
+ * and the server checks the rest. It owns the rules that cost money, such as
+ * a fixed discount larger than the order it requires, and it is the authority
+ * on all of them.
+ */
+function CouponFormModal({ couponId }: { readonly couponId?: string }) {
+  const { coupons, createCoupon, updateCoupon, couponsBusy } = useAdminData();
+  const editing = coupons.find((candidate) => candidate.id === couponId);
+
+  const [values, setValues] = useState<CouponFormValues>(() =>
+    editing === undefined ? EMPTY_COUPON_FORM : couponFormValues(editing),
+  );
+  const [errors, setErrors] = useState<CouponFieldErrors>({});
+
+  // An id that matches nothing: the code was removed under the open dialog.
+  if (couponId !== undefined && editing === undefined) {
+    return null;
+  }
+
+  function set<K extends keyof CouponFormValues>(key: K, value: CouponFormValues[K]) {
+    setValues((current) => ({ ...current, [key]: value }));
+    setErrors((current) => {
+      if (current[key] === undefined) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[key];
+
+      return next;
+    });
+  }
+
+  function submit() {
+    const result = validateCouponForm(values);
+
+    if (!result.ok) {
+      setErrors(result.errors);
+
+      return;
+    }
+
+    if (couponId === undefined) {
+      createCoupon(result.draft);
+    } else {
+      updateCoupon(couponId, result.draft);
+    }
+  }
+
+  const isPercentage = values.discountType === 'PERCENTAGE';
 
   return (
     <ModalFrame
-      title="Tạo mã ưu đãi"
+      title={couponId === undefined ? 'Tạo mã ưu đãi' : `Mã ${values.code}`}
+      onSubmit={submit}
       actions={
-        <button type="button" className="btn btn-primary" onClick={() => addCoupon(code)}>
-          Tạo mã
+        <button type="submit" className="btn btn-primary" disabled={couponsBusy}>
+          {couponId === undefined ? 'Tạo mã' : 'Lưu thay đổi'}
         </button>
       }
     >
-      <label className="form-field">
-        <span>Mã ưu đãi</span>
-        <input
-          maxLength={20}
-          placeholder="VD: SANGMOI"
-          value={code}
-          onChange={(event) => setCode(event.target.value)}
-        />
-      </label>
-      <p>Mẫu demo sẽ tạo mã giảm 5.000đ cho đơn từ 50.000đ.</p>
+      {/*
+       * The fields scroll, the buttons do not: this form is taller than a
+       * laptop viewport, and a save button below the fold is a save button
+       * nobody can press.
+       */}
+      <div className="form-scroll">
+        <Field
+          label="Mã ưu đãi"
+          error={errors.code}
+          hint={
+            couponId === undefined
+              ? 'Chữ in hoa, số, gạch ngang hoặc gạch dưới. Khách sẽ đọc mã này.'
+              : 'Mã đã phát ra ngoài nên không đổi được. Muốn đổi thì lưu trữ mã này và tạo mã mới.'
+          }
+        >
+          <input
+            autoFocus={couponId === undefined}
+            readOnly={couponId !== undefined}
+            maxLength={MAX_COUPON_CODE_LENGTH}
+            placeholder="VD: SANGMOI"
+            aria-invalid={errors.code !== undefined}
+            value={values.code}
+            onChange={(event) => set('code', event.target.value.toUpperCase())}
+          />
+        </Field>
+
+        <Field label="Mô tả ngắn" error={errors.description}>
+          <input
+            maxLength={MAX_COUPON_DESCRIPTION_LENGTH}
+            placeholder="VD: Giảm 10% cho đơn sáng"
+            value={values.description}
+            onChange={(event) => set('description', event.target.value)}
+          />
+        </Field>
+
+        <Field label="Kiểu giảm">
+          <select
+            value={values.discountType}
+            onChange={(event) =>
+              set(
+                'discountType',
+                // Narrowed through the known list rather than cast.
+                DISCOUNT_TYPES.find((type) => type === event.target.value) ?? values.discountType,
+              )
+            }
+          >
+            {DISCOUNT_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {DISCOUNT_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <div className="form-row">
+          <Field
+            label={isPercentage ? 'Phần trăm giảm (%)' : 'Số tiền giảm (VND)'}
+            error={errors.discountValue}
+          >
+            <input
+              type="number"
+              min={1}
+              max={isPercentage ? 100 : undefined}
+              placeholder={isPercentage ? '10' : '5000'}
+              aria-invalid={errors.discountValue !== undefined}
+              value={values.discountValue}
+              onChange={(event) => set('discountValue', event.target.value)}
+            />
+          </Field>
+          {isPercentage ? (
+            <Field
+              label="Giảm tối đa (VND)"
+              error={errors.maxDiscount}
+              hint="Để trống là không giới hạn."
+            >
+              <input
+                type="number"
+                min={1}
+                placeholder="20000"
+                aria-invalid={errors.maxDiscount !== undefined}
+                value={values.maxDiscount}
+                onChange={(event) => set('maxDiscount', event.target.value)}
+              />
+            </Field>
+          ) : null}
+        </div>
+
+        <div className="form-row">
+          <Field
+            label="Đơn tối thiểu (VND)"
+            error={errors.minOrder}
+            hint="Để trống là không yêu cầu."
+          >
+            <input
+              type="number"
+              min={0}
+              placeholder="50000"
+              aria-invalid={errors.minOrder !== undefined}
+              value={values.minOrder}
+              onChange={(event) => set('minOrder', event.target.value)}
+            />
+          </Field>
+          <Field label="Giới hạn lượt" error={errors.usageLimit} hint="Để trống là không giới hạn.">
+            <input
+              type="number"
+              min={1}
+              placeholder="100"
+              aria-invalid={errors.usageLimit !== undefined}
+              value={values.usageLimit}
+              onChange={(event) => set('usageLimit', event.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div className="form-row">
+          <Field label="Bắt đầu" error={errors.startsOn} hint="Để trống là chạy ngay.">
+            <input
+              type="date"
+              value={values.startsOn}
+              onChange={(event) => set('startsOn', event.target.value)}
+            />
+          </Field>
+          <Field label="Kết thúc" error={errors.endsOn} hint="Ngày cuối cùng còn dùng được.">
+            <input
+              type="date"
+              value={values.endsOn}
+              onChange={(event) => set('endsOn', event.target.value)}
+            />
+          </Field>
+        </div>
+
+        <Field label="Trạng thái">
+          <select
+            value={values.status}
+            onChange={(event) =>
+              set(
+                'status',
+                COUPON_STATUSES.find((status) => status === event.target.value) ?? values.status,
+              )
+            }
+          >
+            {COUPON_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {COUPON_STATUS_LABELS[status]}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {editing === undefined ? null : (
+          <p className="notice">
+            Đã dùng {describeUsage(editing)}. Số lượt là ghi nhận của hệ thống, không sửa tay được -
+            và sẽ chỉ tăng khi khách đặt hàng kèm mã, tức là khi có luồng thanh toán của khách.
+          </p>
+        )}
+      </div>
     </ModalFrame>
   );
 }
@@ -870,28 +1083,6 @@ function LoyaltySettingsModal() {
   );
 }
 
-function CouponDetailModal({ code }: { code: string }) {
-  const { coupons } = useAdminData();
-  const coupon = coupons.find((candidate) => candidate.code === code);
-  if (coupon === undefined) {
-    return null;
-  }
-
-  return (
-    <ModalFrame title={`Mã ${coupon.code}`}>
-      <p>
-        {coupon.desc}
-        <br />
-        Đã dùng {coupon.used}/{coupon.limit} lượt.
-      </p>
-      <p>
-        Cấu hình mức giảm, giá trị đơn tối thiểu, thời hạn và giới hạn số lượt sẽ được kết nối API
-        trong giai đoạn triển khai.
-      </p>
-    </ModalFrame>
-  );
-}
-
 /** Modal host: one dialog at a time, backdrop click and Escape both close it. */
 export function AdminModals() {
   const { modal, closeModal } = useAdminData();
@@ -935,10 +1126,11 @@ export function AdminModals() {
       ) : null}
       {modal.kind === 'stock' ? <StockModal productId={modal.productId} /> : null}
       {modal.kind === 'daily-portions' ? <DailyPortionsModal /> : null}
-      {modal.kind === 'add-coupon' ? <AddCouponModal /> : null}
+      {modal.kind === 'coupon-form' ? (
+        <CouponFormModal key={modal.couponId ?? 'new'} couponId={modal.couponId} />
+      ) : null}
       {modal.kind === 'add-reward' ? <AddRewardModal /> : null}
       {modal.kind === 'loyalty-settings' ? <LoyaltySettingsModal /> : null}
-      {modal.kind === 'coupon-detail' ? <CouponDetailModal code={modal.code} /> : null}
       {modal.kind === 'add-product' ? <ProductFormModal /> : null}
     </div>
   );
