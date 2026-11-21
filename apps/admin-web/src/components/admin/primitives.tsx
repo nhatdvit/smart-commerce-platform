@@ -119,7 +119,7 @@ function PaymentHint({ order }: { order: AdminOrder }) {
 
 /** The order list, shared by the dashboard and the orders screen. */
 export function OrdersTable({ orders }: { orders: readonly AdminOrder[] }) {
-  const { openModal } = useAdminData();
+  const { openModal, newOrderIds } = useAdminData();
 
   return (
     <div className="table-wrap">
@@ -142,41 +142,56 @@ export function OrdersTable({ orders }: { orders: readonly AdminOrder[] }) {
               </td>
             </tr>
           ) : (
-            orders.map((order) => (
-              <tr key={order.id}>
-                <td>
-                  <strong>{order.code}</strong>
-                </td>
-                <td>
-                  <strong>{order.contactName}</strong>
-                  <br />
-                  <span className="cell-sub">{itemsSummary(order.items)}</span>
-                </td>
-                {/*
-                 * The time the customer is coming for it, which is what the
-                 * counter works to. An order with no requested time falls back
-                 * to when it was placed.
-                 */}
-                <td>{timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)}</td>
-                <td>
-                  <strong>{money(order.total)}</strong>
-                  <br />
-                  <PaymentHint order={order} />
-                </td>
-                <td>
-                  <StatusBadge status={order.status} />
-                </td>
-                <td>
-                  <button
-                    type="button"
-                    className="table-action"
-                    onClick={() => openModal({ kind: 'order', orderId: order.id })}
-                  >
-                    Chi tiết →
-                  </button>
-                </td>
-              </tr>
-            ))
+            orders.map((order) => {
+              const isNew = newOrderIds.has(order.id);
+
+              return (
+                /*
+                 * A new order is announced in three ways at once, because a
+                 * counter is a noisy place to read a screen: the row is
+                 * tinted, it carries a word, and it is announced to a screen
+                 * reader. Colour alone would be the one that fails.
+                 */
+                <tr key={order.id} className={isNew ? 'is-new' : undefined}>
+                  <td>
+                    <strong>{order.code}</strong>
+                    {isNew ? (
+                      <span className="new-pill" role="status">
+                        Mới
+                      </span>
+                    ) : null}
+                  </td>
+                  <td>
+                    <strong>{order.contactName}</strong>
+                    <br />
+                    <span className="cell-sub">{itemsSummary(order.items)}</span>
+                  </td>
+                  {/*
+                   * The time the customer is coming for it, which is what the
+                   * counter works to. An order with no requested time falls
+                   * back to when it was placed.
+                   */}
+                  <td>{timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)}</td>
+                  <td>
+                    <strong>{money(order.total)}</strong>
+                    <br />
+                    <PaymentHint order={order} />
+                  </td>
+                  <td>
+                    <StatusBadge status={order.status} />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="table-action"
+                      onClick={() => openModal({ kind: 'order', orderId: order.id })}
+                    >
+                      Chi tiết →
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>

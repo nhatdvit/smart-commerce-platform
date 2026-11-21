@@ -500,6 +500,71 @@ nav button > span {
   text-align: right;
 }
 
+/* --------------------------------------------------------- New order cue --
+ * An order that arrived while nobody was looking has to win attention from
+ * across a counter. Three signals, not one: a tinted row, the word "Mới", and
+ * a short flash when it appears. Colour alone fails the person who cannot see
+ * this particular yellow, and a flash alone fails anyone who blinked.
+ */
+.data-table tr.is-new td {
+  background: #fffaf0;
+}
+
+.data-table tr.is-new td:first-child {
+  box-shadow: inset 3px 0 0 var(--yellow);
+}
+
+.new-pill {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--yellow);
+  color: #6b4a04;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+}
+
+.new-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 11px 14px;
+  border: 1px solid #f3dfa8;
+  border-radius: 11px;
+  background: #fffaf0;
+  font-size: 12px;
+  color: #8a6400;
+}
+
+/* The flash plays once as the row appears, then the tint carries the message. */
+.data-table tr.is-new {
+  animation: new-order-flash 1.1s ease-out 2;
+}
+
+@keyframes new-order-flash {
+  0% {
+    background: #ffe9ad;
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+/*
+ * Someone who asked their system to stop moving things gets the tint and the
+ * label, and no flashing at all.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .data-table tr.is-new {
+    animation: none;
+  }
+}
+
 /* ------------------------------------------------------- Long form dialog --
  * A dialog with more than a handful of fields is taller than a laptop
  * viewport, and the modal itself does not scroll — so the fields scroll and
