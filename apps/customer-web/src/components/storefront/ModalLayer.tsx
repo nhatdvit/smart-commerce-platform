@@ -6,7 +6,15 @@ import type { CurrentCustomer, LoyaltyStanding } from '@/lib/auth-api';
 import type { MenuProductCard } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 
-import { FoodIcon, IconCheckCircle, IconGift, IconUser, type FoodIconName } from './icons';
+import {
+  FoodIcon,
+  IconCheckCircle,
+  IconGift,
+  IconLogout,
+  IconShield,
+  IconUser,
+  type FoodIconName,
+} from './icons';
 import type { CartTotals, ModalView } from './use-storefront';
 
 /**
@@ -314,13 +322,21 @@ function ProfileForm({
   const [name, setName] = useState(customer.name);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const nameChanged = name.trim() !== customer.name && name.trim() !== '';
+  const initial = (customer.name.trim()[0] ?? '?').toLocaleUpperCase('vi');
 
   return (
     <>
-      <div className="form-row">
-        <label htmlFor="profilePhone">Số điện thoại</label>
-        <input id="profilePhone" value={customer.phone ?? ''} disabled />
+      <div className="profile-identity">
+        <span className="profile-avatar" aria-hidden="true">
+          {initial}
+        </span>
+        <div>
+          <strong>{customer.name}</strong>
+          <small>{customer.phone}</small>
+        </div>
       </div>
+
       <div className="form-row">
         <label htmlFor="profileName">Họ và tên</label>
         <input
@@ -334,50 +350,58 @@ function ProfileForm({
       <button
         className="btn btn-yellow"
         type="button"
-        disabled={profileBusy || name.trim() === ''}
+        disabled={profileBusy || !nameChanged}
         onClick={() => onUpdateName(name.trim())}
       >
         Lưu thay đổi →
       </button>
 
-      <h4 className="modal-subheading">Đổi mật khẩu</h4>
-      <div className="form-row">
-        <label htmlFor="profileCurrentPassword">Mật khẩu hiện tại</label>
-        <input
-          id="profileCurrentPassword"
-          type="password"
-          maxLength={255}
-          value={currentPassword}
-          onChange={(event) => setCurrentPassword(event.target.value)}
-        />
+      <div className="profile-section">
+        <h4 className="modal-subheading">
+          <IconShield size={15} /> Đổi mật khẩu
+        </h4>
+        <div className="form-row">
+          <label htmlFor="profileCurrentPassword">Mật khẩu hiện tại</label>
+          <input
+            id="profileCurrentPassword"
+            type="password"
+            maxLength={255}
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+          />
+        </div>
+        <div className="form-row">
+          <label htmlFor="profileNewPassword">Mật khẩu mới</label>
+          <input
+            id="profileNewPassword"
+            type="password"
+            maxLength={255}
+            placeholder="Tối thiểu 8 ký tự"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+        </div>
+        {passwordError === '' ? null : <p className="notice">{passwordError}</p>}
+        <button
+          type="button"
+          className="btn btn-outline btn-centered"
+          disabled={passwordBusy || currentPassword === '' || newPassword === ''}
+          onClick={() => {
+            onChangePassword(currentPassword, newPassword);
+            setCurrentPassword('');
+            setNewPassword('');
+          }}
+        >
+          Đổi mật khẩu
+        </button>
       </div>
-      <div className="form-row">
-        <label htmlFor="profileNewPassword">Mật khẩu mới</label>
-        <input
-          id="profileNewPassword"
-          type="password"
-          maxLength={255}
-          placeholder="Tối thiểu 8 ký tự"
-          value={newPassword}
-          onChange={(event) => setNewPassword(event.target.value)}
-        />
-      </div>
-      {passwordError === '' ? null : <p className="notice">{passwordError}</p>}
+
       <button
         type="button"
-        disabled={passwordBusy || currentPassword === '' || newPassword === ''}
-        onClick={() => {
-          onChangePassword(currentPassword, newPassword);
-          setCurrentPassword('');
-          setNewPassword('');
-        }}
+        className="btn btn-danger-outline btn-centered logout-button"
+        onClick={onLogout}
       >
-        Đổi mật khẩu
-      </button>
-
-      <hr className="modal-divider" />
-      <button type="button" className="text-danger" onClick={onLogout}>
-        Đăng xuất
+        <IconLogout size={17} /> Đăng xuất
       </button>
     </>
   );
