@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Identity\Infrastructure\Persistence\Model\User;
 use App\Modules\Loyalty\Domain\Enum\EntryType;
 use App\Modules\Loyalty\Infrastructure\Persistence\Model\LedgerEntryModel;
 use App\Modules\Loyalty\Infrastructure\Persistence\Model\LoyaltySettingsModel;
@@ -30,7 +31,10 @@ function paidPayment(string $storeId, string $phone, int $amount): Payment
         ->create(['contact_phone' => $phone]);
 
     /** @var Payment $payment */
-    $payment = Payment::factory()->on($order->id, $storeId, $amount)->paid()->create();
+    $payment = Payment::factory()
+        ->on($order->id, $storeId, $order->order_code, $amount)
+        ->paid(User::factory()->create()->id)
+        ->create();
 
     return $payment;
 }
@@ -76,7 +80,7 @@ it('never awards a pending or failed payment', function (): void {
     $store = Store::factory()->create(['status' => StoreStatus::Active]);
     /** @var Order $order */
     $order = Order::factory()->inStore($store->id)->totalling(50_000)->create();
-    $pending = Payment::factory()->on($order->id, $store->id, 50_000)->create();
+    $pending = Payment::factory()->on($order->id, $store->id, $order->order_code, 50_000)->create();
 
     $this->artisan('loyalty:sync-earned-points')->assertExitCode(0);
 

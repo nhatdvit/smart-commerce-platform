@@ -11,7 +11,10 @@ use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
 use App\Modules\Order\Presentation\Http\Controller\AdminCustomerController;
 use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
+use App\Modules\Payment\Presentation\Http\Controller\AdminPaymentController;
+use App\Modules\Payment\Presentation\Http\Controller\AdminStorePaymentSettingsController;
 use App\Modules\Pricing\Presentation\Http\Controller\AdminCouponController;
+use App\Modules\Store\Presentation\Http\Controller\AdminStoreContextController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -19,8 +22,9 @@ use Illuminate\Support\Facades\Route;
  * Versioned business API. The api/v1 prefix is applied in bootstrap/app.php.
  *
  * Built so far: the metadata endpoints, the session endpoints, and the admin
- * catalog, menu and order endpoints that drive the operations dashboard's menu
- * and order screens. The rest of CLAUDE.md section 8 arrives with its module:
+ * catalog, menu, order, discount-code and payment endpoints that drive the
+ * operations dashboard. The rest of CLAUDE.md section 8 arrives with its
+ * module:
  *
  *   GET    /stores/{id}                        Store
  *   GET    /menus/today                        Menu
@@ -28,10 +32,7 @@ use Illuminate\Support\Facades\Route;
  *   POST   /carts, /carts/{id}/items           Cart
  *   POST   /orders                             Order   (Idempotency-Key required)
  *   GET    /orders/{id}, /orders/{id}/payment  Order, Payment  (customer-facing)
- *   GET    /payment-methods                    Payment
- *   GET    /admin/payments                     Payment
- *   POST   /admin/payments/{id}/confirm        Payment
- *   PUT    /admin/stores/{id}/bank-account     Payment
+ *   GET    /payment-methods                    Payment (customer-facing)
  *
  * Admin routes are store-scoped. The convention, enforced by middleware, is:
  *
@@ -88,6 +89,13 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
     ->prefix('admin')
     ->name('api.admin.')
     ->group(static function (): void {
+        // Which store this session is scoped to - no permission beyond
+        // authentication, since every screen already discloses it just by
+        // what it shows. Lets the dashboard build the two payment-settings
+        // URLs below without an operator ever typing a store id.
+        Route::get('/store', [AdminStoreContextController::class, 'show'])
+            ->name('store.show');
+
         // Before /products/{product}, or the literal path would be read as a
         // product id - and refused, since that id is not a UUID.
         Route::post('/products/images', [ProductImageController::class, 'store'])
@@ -189,6 +197,68 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->middleware('store.can:promotion.manage')
             ->whereUuid('coupon')
             ->name('coupons.update');
+
+        /*
+         * The reconciliation queue: manual verification of cash and bank
+         * transfers, exactly as CLAUDE.md section 6 fixes the MVP settlement
+         * flow. Confirming is the only way a payment becomes PAID, so it is
+         * both idempotent (a retried request replays its first outcome, never
+         * a second confirmation) and rate-limited the same as every other
+         * write that settles money.
+         */
+        Route::get('/payments', [AdminPaymentController::class, 'index'])
+            ->middleware('store.can:payment.read')
+            ->name('payments.index');
+
+        Route::get('/payments/{payment}', [AdminPaymentController::class, 'show'])
+            ->middleware('store.can:payment.read')
+            ->whereUuid('payment')
+            ->name('payments.show');
+
+        Route::post('/payments/{payment}/confirm', [AdminPaymentController::class, 'confirm'])
+            ->middleware(['store.can:payment.confirm', 'idempotent:payment.confirm', 'throttle:commerce-write'])
+            ->whereUuid('payment')
+            ->name('payments.confirm');
+
+        Route::post('/payments/{payment}/flag', [AdminPaymentController::class, 'flag'])
+            ->middleware(['store.can:payment.confirm', 'throttle:commerce-write'])
+            ->whereUuid('payment')
+            ->name('payments.flag');
+
+        Route::post('/payments/{payment}/regenerate-qr', [AdminPaymentController::class, 'regenerateQr'])
+            ->middleware(['store.can:payment.confirm', 'throttle:commerce-write'])
+            ->whereUuid('payment')
+            ->name('payments.regenerate-qr');
+
+        // Static reference data for the bank-account form's picker - not
+        // store-scoped data itself, gated the same as that form because it
+        // exists only to serve it.
+        Route::get('/known-banks', [AdminStorePaymentSettingsController::class, 'showKnownBanks'])
+            ->middleware('store.can:payment.bank-account.manage')
+            ->name('known-banks.show');
+
+        /*
+         * Store-level payment configuration. `{store}` is an explicit route
+         * parameter here (every other admin route above resolves its store
+         * from the host or the single-store default) because these settings
+         * are the one place CLAUDE.md's own example names a store id in the
+         * path - see the file header note.
+         */
+        Route::get('/stores/{store}/bank-account', [AdminStorePaymentSettingsController::class, 'showBankAccount'])
+            ->middleware('store.can:payment.bank-account.manage')
+            ->name('stores.bank-account.show');
+
+        Route::put('/stores/{store}/bank-account', [AdminStorePaymentSettingsController::class, 'updateBankAccount'])
+            ->middleware('store.can:payment.bank-account.manage')
+            ->name('stores.bank-account.update');
+
+        Route::get('/stores/{store}/payment-methods', [AdminStorePaymentSettingsController::class, 'showPaymentMethods'])
+            ->middleware('store.can:store.update')
+            ->name('stores.payment-methods.show');
+
+        Route::put('/stores/{store}/payment-methods', [AdminStorePaymentSettingsController::class, 'updatePaymentMethods'])
+            ->middleware('store.can:store.update')
+            ->name('stores.payment-methods.update');
 
         /*
          * Loyalty: points earned on paid orders, spent on rewards.

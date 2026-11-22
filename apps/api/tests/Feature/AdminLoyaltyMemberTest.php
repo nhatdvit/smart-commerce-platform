@@ -47,7 +47,10 @@ function earnFor(
         ->totalling($points * 10_000)
         ->create(['contact_phone' => $phone, 'contact_name' => $name]);
 
-    $payment = Payment::factory()->on($order->id, $storeId, $points * 10_000)->paid()->create();
+    $payment = Payment::factory()
+        ->on($order->id, $storeId, $order->order_code, $points * 10_000)
+        ->paid(User::factory()->create()->id)
+        ->create();
 
     $entry = LedgerEntryModel::query()->create([
         'store_id' => $storeId,

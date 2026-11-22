@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import QRCode from 'qrcode';
 
 import { mediaUrl } from '@/lib/api-client';
 import {
@@ -18,6 +19,18 @@ import { COUPON_STATUS_LABELS, DISCOUNT_TYPE_LABELS, describeUsage } from '@/lib
 import { ACCEPTED_IMAGE_TYPES, uploadProductImage } from '@/lib/image-upload';
 import type { PreparedPortions } from '@/lib/menu-api';
 import { money } from '@/lib/money';
+import {
+  DISCREPANCY_TYPES,
+  DISCREPANCY_TYPE_LABELS,
+  PAYMENT_METHOD_LABELS as SETTLEMENT_METHOD_LABELS,
+  PAYMENT_STATUS_LABELS as SETTLEMENT_STATUS_LABELS,
+  loadPayment,
+  paymentStatusTone,
+  regeneratePaymentQr,
+  type AdminPayment,
+  type DiscrepancyType,
+  type KnownBankOption,
+} from '@/lib/payments-api';
 import {
   FULFILLMENT_LABELS,
   ORDER_STATUS_LABELS,
@@ -1329,6 +1342,647 @@ function LoyaltyMemberModal({ phone, name }: { readonly phone: string; readonly 
   );
 }
 
+/** "20/11/2026 08:40" from an ISO instant, or a dash when there is none. */
+function dateTime(iso: string | null): string {
+  if (iso === null) {
+    return '—';
+  }
+
+  const at = new Date(iso);
+
+  return Number.isNaN(at.getTime())
+    ? '—'
+    : at.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+/**
+ * The actual scannable VietQR, rendered client-side from the raw EMVCo
+ * string the server already validated - never proof of anything itself,
+ * just a convenience so staff can show it on a screen without a second app.
+ */
+function PaymentQrImage({ payload }: { readonly payload: string }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    setDataUrl(null);
+
+    void QRCode.toDataURL(payload, { margin: 1, width: 200 })
+      .then((url) => {
+        if (current) {
+          setDataUrl(url);
+        }
+      })
+      .catch(() => {
+        // Decorative: a failed render just means no image, not an error the
+        // operator needs to see - the reference and masked account below are
+        // what they actually verify a transfer against.
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [payload]);
+
+  if (dataUrl === null) {
+    return null;
+  }
+
+  return <img src={dataUrl} alt="Mã QR chuyển khoản" className="payment-qr" />;
+}
+
+/**
+ * One payment: its reconciliation facts, then the two things staff can do
+ * about it.
+ *
+ * Confirming is the one way a payment becomes `PAID` (CLAUDE.md section 6):
+ * there is deliberately no button here for "customer says they paid", only a
+ * form that asks the operator to say what they themselves saw. Flagging never
+ * touches the status - a discrepancy is a note on the queue, not a verdict.
+ */
+function PaymentModal({ paymentId }: { readonly paymentId: string }) {
+  const { confirmPayment, flagPayment, paymentsBusy, notify } = useAdminData();
+  const [payment, setPayment] = useState<AdminPayment | null>(null);
+  const [loadError, setLoadError] = useState('');
+
+  const [confirmAmount, setConfirmAmount] = useState('');
+  const [bankReference, setBankReference] = useState('');
+  const [confirmNote, setConfirmNote] = useState('');
+  const [acceptDiscrepancy, setAcceptDiscrepancy] = useState(false);
+
+  const [flagging, setFlagging] = useState(false);
+  const [flagType, setFlagType] = useState<DiscrepancyType>('UNKNOWN_REFERENCE');
+  const [flagAmount, setFlagAmount] = useState('');
+  const [flagNote, setFlagNote] = useState('');
+
+  const [regenerating, setRegenerating] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+
+    void loadPayment(paymentId)
+      .then((detail) => {
+        if (current) {
+          setPayment(detail);
+          setConfirmAmount(String(detail.amount));
+          setLoadError('');
+        }
+      })
+      .catch((error: unknown) => {
+        if (current) {
+          setLoadError(error instanceof Error ? error.message : 'Không tải được thanh toán.');
+        }
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [paymentId]);
+
+  if (loadError !== '') {
+    return (
+      <ModalFrame title="Thanh toán">
+        <p role="alert">{loadError}</p>
+      </ModalFrame>
+    );
+  }
+
+  if (payment === null) {
+    return (
+      <ModalFrame title="Thanh toán">
+        <p>Đang tải chi tiết...</p>
+      </ModalFrame>
+    );
+  }
+
+  const settled =
+    payment.status === 'PAID' ||
+    payment.status === 'PARTIALLY_REFUNDED' ||
+    payment.status === 'REFUNDED';
+  const mismatched = confirmAmount.trim() !== '' && Number(confirmAmount) !== payment.amount;
+
+  // Taken as an argument rather than read from the closure: TypeScript does
+  // not carry the null check above into a function declaration, the same
+  // reasoning as OrderModal's cancelOrder.
+  function submitConfirm(target: AdminPayment) {
+    const amount = Number(confirmAmount);
+    if (!Number.isInteger(amount) || amount < 0) {
+      return;
+    }
+
+    confirmPayment(target.id, {
+      amount,
+      bankTransactionReference: bankReference.trim() === '' ? null : bankReference.trim(),
+      acceptDiscrepancy,
+      note: confirmNote.trim() === '' ? null : confirmNote.trim(),
+    });
+  }
+
+  function submitFlag(target: AdminPayment) {
+    flagPayment(target.id, {
+      type: flagType,
+      observedAmount: flagAmount.trim() === '' ? null : Number(flagAmount),
+      note: flagNote.trim() === '' ? null : flagNote.trim(),
+    });
+  }
+
+  // Not routed through the provider's confirm/flag writes: those close the
+  // modal on success, and the point here is the opposite - staying open so
+  // the fresh QR is immediately visible to show a customer.
+  function submitRegenerate(target: AdminPayment) {
+    setRegenerating(true);
+    void regeneratePaymentQr(target.id)
+      .then((updated) => {
+        setPayment(updated);
+        notify(`Đã tạo mã QR mới cho đơn ${updated.orderCode}`);
+      })
+      .catch((error: unknown) => {
+        notify(error instanceof Error ? error.message : 'Không tạo lại được mã QR.');
+      })
+      .finally(() => setRegenerating(false));
+  }
+
+  return (
+    <ModalFrame title={`Thanh toán đơn ${payment.orderCode}`}>
+      <div className="order-detail">
+        <div className="order-detail-row">
+          <span className={`status ${paymentStatusTone(payment.status)}`}>
+            {SETTLEMENT_STATUS_LABELS[payment.status]}
+          </span>
+          <span>{SETTLEMENT_METHOD_LABELS[payment.method]}</span>
+          {payment.needsAttention ? <span className="status waiting">Cần xử lý</span> : null}
+        </div>
+
+        <dl className="order-facts">
+          <dt>Số tiền cần thu</dt>
+          <dd>{money(payment.amount)}</dd>
+          {payment.confirmedAmount === null ? null : (
+            <>
+              <dt>Số tiền đã xác nhận</dt>
+              <dd>{money(payment.confirmedAmount)}</dd>
+            </>
+          )}
+          {payment.transferReference === null ? null : (
+            <>
+              <dt>Mã tham chiếu</dt>
+              <dd>{payment.transferReference}</dd>
+            </>
+          )}
+          {payment.bankAccountMasked === null ? null : (
+            <>
+              <dt>Tài khoản nhận</dt>
+              <dd>{payment.bankAccountMasked}</dd>
+            </>
+          )}
+          {payment.bankTransactionReference === null ? null : (
+            <>
+              <dt>Mã giao dịch ngân hàng</dt>
+              <dd>{payment.bankTransactionReference}</dd>
+            </>
+          )}
+          {payment.confirmedBy === null ? null : (
+            <>
+              <dt>Người xác nhận</dt>
+              <dd>
+                {payment.confirmedBy}
+                {payment.confirmedAt === null ? '' : ` · ${dateTime(payment.confirmedAt)}`}
+              </dd>
+            </>
+          )}
+          {payment.expiresAt === null || payment.status !== 'PENDING' ? null : (
+            <>
+              <dt>Hết hạn chuyển khoản</dt>
+              <dd>{dateTime(payment.expiresAt)}</dd>
+            </>
+          )}
+        </dl>
+
+        {payment.method !== 'BANK_TRANSFER' ? null : (
+          <div className="payment-qr-block">
+            {payment.qrPayload === null ? null : <PaymentQrImage payload={payment.qrPayload} />}
+            {settled ? null : (
+              <button
+                type="button"
+                className="btn"
+                disabled={regenerating}
+                onClick={() => submitRegenerate(payment)}
+              >
+                {payment.qrPayload === null ? 'Tạo mã QR' : 'Tạo lại mã QR'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {payment.discrepancies.length === 0 ? null : (
+          <>
+            <h3>Ngoại lệ đã ghi nhận</h3>
+            <ol className="order-timeline">
+              {payment.discrepancies.map((discrepancy, index) => (
+                <li key={`${discrepancy.type}-${index}`}>
+                  <b>{DISCREPANCY_TYPE_LABELS[discrepancy.type]}</b>
+                  <span>
+                    {dateTime(discrepancy.recordedAt)}
+                    {discrepancy.recordedBy === null ? '' : ` · ${discrepancy.recordedBy}`}
+                  </span>
+                  {discrepancy.observedAmount === null ? null : (
+                    <em>Số tiền thực tế: {money(discrepancy.observedAmount)}</em>
+                  )}
+                  {discrepancy.note === null ? null : <em>{discrepancy.note}</em>}
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
+
+        {settled ? null : (
+          <>
+            <h3>Xác nhận đã nhận tiền</h3>
+            <p className="notice">
+              Chỉ xác nhận sau khi đã thấy tiền mặt hoặc khoản chuyển khoản thật trong ngân hàng. Mã
+              QR hiển thị hoặc khách báo "đã chuyển" không phải là bằng chứng.
+            </p>
+            <div className="form-row">
+              <Field label="Số tiền đã nhận (VND)">
+                <input
+                  type="number"
+                  min={0}
+                  value={confirmAmount}
+                  onChange={(event) => setConfirmAmount(event.target.value)}
+                />
+              </Field>
+              <Field label="Mã giao dịch ngân hàng" hint="Nếu là chuyển khoản.">
+                <input
+                  maxLength={120}
+                  value={bankReference}
+                  onChange={(event) => setBankReference(event.target.value)}
+                />
+              </Field>
+            </div>
+            {!mismatched ? null : (
+              <label className="form-field">
+                <input
+                  type="checkbox"
+                  checked={acceptDiscrepancy}
+                  onChange={(event) => setAcceptDiscrepancy(event.target.checked)}
+                />{' '}
+                Số tiền khác với số cần thu ({money(payment.amount)}). Xác nhận đây là cố ý
+                (thiếu/thừa tiền sẽ được ghi nhận là ngoại lệ).
+              </label>
+            )}
+            <Field label="Ghi chú" hint="Không bắt buộc.">
+              <input value={confirmNote} onChange={(event) => setConfirmNote(event.target.value)} />
+            </Field>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={paymentsBusy || (mismatched && !acceptDiscrepancy)}
+              onClick={() => submitConfirm(payment)}
+            >
+              Xác nhận đã nhận tiền
+            </button>
+          </>
+        )}
+
+        {!flagging ? (
+          <button type="button" className="btn" onClick={() => setFlagging(true)}>
+            Ghi nhận ngoại lệ khác
+          </button>
+        ) : (
+          <>
+            <h3>Ghi nhận ngoại lệ</h3>
+            <p className="notice">
+              Dùng khi không nên đánh dấu đã thu hoặc thất bại: mã không khớp đơn nào, chuyển khoản
+              trùng lặp, hoặc tiền về sau khi đơn đã hủy. Không tự đổi trạng thái thanh toán.
+            </p>
+            <Field label="Loại ngoại lệ">
+              <select
+                value={flagType}
+                onChange={(event) =>
+                  setFlagType(
+                    DISCREPANCY_TYPES.find((type) => type === event.target.value) ?? flagType,
+                  )
+                }
+              >
+                {DISCREPANCY_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {DISCREPANCY_TYPE_LABELS[type]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="form-row">
+              <Field label="Số tiền thực tế (VND)" hint="Để trống nếu không áp dụng.">
+                <input
+                  type="number"
+                  min={0}
+                  value={flagAmount}
+                  onChange={(event) => setFlagAmount(event.target.value)}
+                />
+              </Field>
+              <Field label="Ghi chú">
+                <input value={flagNote} onChange={(event) => setFlagNote(event.target.value)} />
+              </Field>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={paymentsBusy}
+              onClick={() => submitFlag(payment)}
+            >
+              Ghi nhận ngoại lệ
+            </button>
+          </>
+        )}
+      </div>
+    </ModalFrame>
+  );
+}
+
+/** Where this store's bank transfers are received, and the VietQR it builds against. */
+/**
+ * A searchable bank picker: logo and name, filtered as the operator types.
+ *
+ * A native `<select>` cannot show a logo inside an option in any browser that
+ * matters here, and 28+ bank names is enough that scanning a plain list beats
+ * typing a BIN only if the list is actually searchable - so this is a small
+ * combobox rather than either of those on their own.
+ */
+function BankPicker({
+  banks,
+  logos,
+  value,
+  onChange,
+  disabled,
+}: {
+  readonly banks: readonly KnownBankOption[];
+  readonly logos: Readonly<Record<string, string>>;
+  readonly value: string;
+  readonly onChange: (bin: string) => void;
+  readonly disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = banks.find((bank) => bank.bin === value) ?? null;
+
+  // Closes on an outside click, the same as a native select's own dropdown.
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function onPointerDown(event: MouseEvent) {
+      if (containerRef.current !== null && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', onPointerDown);
+
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [open]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered =
+    normalizedQuery === ''
+      ? banks
+      : banks.filter(
+          (bank) =>
+            bank.name.toLowerCase().includes(normalizedQuery) || bank.bin.includes(normalizedQuery),
+        );
+
+  function pick(bank: KnownBankOption) {
+    onChange(bank.bin);
+    setOpen(false);
+    setQuery('');
+  }
+
+  return (
+    <div className="bank-picker" ref={containerRef}>
+      <button
+        type="button"
+        className="bank-picker-trigger"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {selected === null ? (
+          <span className="bank-picker-placeholder">— Chọn ngân hàng —</span>
+        ) : (
+          <>
+            {logos[selected.bin] === undefined ? (
+              <span className="bank-picker-logo-fallback" aria-hidden="true" />
+            ) : (
+              <img src={logos[selected.bin]} alt="" className="bank-picker-logo" />
+            )}
+            <span>{selected.name}</span>
+          </>
+        )}
+        <span className="bank-picker-caret" aria-hidden="true" />
+      </button>
+
+      {!open ? null : (
+        <div className="bank-picker-panel">
+          <input
+            autoFocus
+            type="text"
+            className="bank-picker-search"
+            placeholder="Tìm ngân hàng theo tên..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <ul className="bank-picker-list" role="listbox">
+            {filtered.length === 0 ? (
+              <li className="bank-picker-empty">Không tìm thấy ngân hàng phù hợp</li>
+            ) : (
+              filtered.map((bank) => (
+                <li key={bank.bin}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={bank.bin === value}
+                    className={bank.bin === value ? 'is-selected' : undefined}
+                    onClick={() => pick(bank)}
+                  >
+                    {logos[bank.bin] === undefined ? (
+                      <span className="bank-picker-logo-fallback" aria-hidden="true" />
+                    ) : (
+                      <img src={logos[bank.bin]} alt="" className="bank-picker-logo" />
+                    )}
+                    <span>{bank.name}</span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BankAccountFormModal() {
+  const {
+    bankAccount,
+    bankAccountBusy,
+    bankAccountError,
+    bankAccountLoaded,
+    knownBanks,
+    bankLogos,
+    loadBankAccount,
+    loadKnownBanks,
+    loadBankLogos,
+    saveBankAccount,
+  } = useAdminData();
+  const [bankBin, setBankBin] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [touched, setTouched] = useState(false);
+
+  // Asked once when the dialog opens; all three are stable across re-renders
+  // (useCallback in the provider), so this never re-fires on its own updates.
+  useEffect(() => {
+    loadBankAccount();
+    loadKnownBanks();
+    loadBankLogos();
+  }, [loadBankAccount, loadKnownBanks, loadBankLogos]);
+
+  useEffect(() => {
+    if (bankAccount !== null && !touched) {
+      setBankBin(bankAccount.bankBin);
+    }
+  }, [bankAccount, touched]);
+
+  return (
+    <ModalFrame
+      title="Tài khoản nhận chuyển khoản"
+      actions={
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={
+            bankAccountBusy ||
+            bankBin.trim() === '' ||
+            accountNumber.trim() === '' ||
+            accountName.trim() === ''
+          }
+          onClick={() =>
+            saveBankAccount({
+              bankBin: bankBin.trim(),
+              accountNumber: accountNumber.trim(),
+              accountName: accountName.trim(),
+            })
+          }
+        >
+          Lưu tài khoản
+        </button>
+      }
+    >
+      {!bankAccountLoaded ? (
+        <p>Đang tải...</p>
+      ) : (
+        <>
+          {bankAccount === null ? (
+            <p className="notice">Cửa hàng chưa cấu hình tài khoản nhận chuyển khoản.</p>
+          ) : (
+            <p className="notice">
+              Hiện tại: {bankAccount.bankName} · {bankAccount.accountNumberMasked} ·{' '}
+              {bankAccount.accountName}
+            </p>
+          )}
+          {bankAccountError === '' ? null : <p role="alert">{bankAccountError}</p>}
+          <Field
+            label="Ngân hàng"
+            hint={
+              knownBanks.length === 0
+                ? 'Đang tải danh sách ngân hàng...'
+                : 'Theo danh sách NAPAS/VietQR. Không thấy ngân hàng cần tìm nghĩa là chưa hỗ trợ.'
+            }
+          >
+            <BankPicker
+              banks={knownBanks}
+              logos={bankLogos}
+              value={bankBin}
+              disabled={knownBanks.length === 0}
+              onChange={(bin) => {
+                setTouched(true);
+                setBankBin(bin);
+              }}
+            />
+          </Field>
+          <Field label="Số tài khoản">
+            <input
+              placeholder="0071000123456"
+              value={accountNumber}
+              onChange={(event) => setAccountNumber(event.target.value.replace(/[^0-9]/g, ''))}
+            />
+          </Field>
+          <Field label="Tên chủ tài khoản" hint="Đúng như đăng ký tại ngân hàng.">
+            <input
+              maxLength={160}
+              value={accountName}
+              onChange={(event) => setAccountName(event.target.value.toUpperCase())}
+            />
+          </Field>
+          <p className="notice">
+            Đổi tài khoản không ảnh hưởng các đơn đã tạo mã QR trước đó - thông tin trên các đơn đó
+            được giữ nguyên như lúc tạo.
+          </p>
+        </>
+      )}
+    </ModalFrame>
+  );
+}
+
+/** Enable or disable CASH and BANK_TRANSFER - the two fixed MVP methods. */
+function PaymentMethodsModal() {
+  const {
+    paymentMethodOptions,
+    paymentMethodsBusy,
+    loadPaymentMethodOptions,
+    setPaymentMethodEnabled,
+  } = useAdminData();
+
+  useEffect(() => {
+    loadPaymentMethodOptions();
+  }, [loadPaymentMethodOptions]);
+
+  return (
+    <ModalFrame title="Phương thức thanh toán">
+      {paymentMethodOptions.length === 0 ? (
+        <p>Đang tải...</p>
+      ) : (
+        <>
+          <p className="notice">
+            Cửa hàng phải luôn bật ít nhất một phương thức. Chuyển khoản cần cấu hình tài khoản nhận
+            trước khi bật được.
+          </p>
+          {paymentMethodOptions.map((option) => (
+            <div className="settings-row" key={option.method}>
+              <div>
+                <strong>{option.label}</strong>
+                {option.unavailableReason === null ? null : (
+                  <small>{option.unavailableReason}</small>
+                )}
+              </div>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={option.enabled}
+                  disabled={paymentMethodsBusy}
+                  onChange={(event) => setPaymentMethodEnabled(option.method, event.target.checked)}
+                />
+                <span />
+              </label>
+            </div>
+          ))}
+        </>
+      )}
+    </ModalFrame>
+  );
+}
+
 /** Modal host: one dialog at a time, backdrop click and Escape both close it. */
 export function AdminModals() {
   const { modal, closeModal } = useAdminData();
@@ -1383,6 +2037,11 @@ export function AdminModals() {
         <LoyaltyMemberModal key={modal.phone} phone={modal.phone} name={modal.name} />
       ) : null}
       {modal.kind === 'add-product' ? <ProductFormModal /> : null}
+      {modal.kind === 'payment' ? (
+        <PaymentModal key={modal.paymentId} paymentId={modal.paymentId} />
+      ) : null}
+      {modal.kind === 'bank-account-form' ? <BankAccountFormModal /> : null}
+      {modal.kind === 'payment-methods' ? <PaymentMethodsModal /> : null}
     </div>
   );
 }

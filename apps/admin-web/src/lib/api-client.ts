@@ -90,14 +90,19 @@ async function ensureCsrfCookie(): Promise<void> {
   await csrfRequest;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  extraHeaders?: Readonly<Record<string, string>>,
+): Promise<T> {
   const mutating = MUTATING.has(method);
 
   if (mutating) {
     await ensureCsrfCookie();
   }
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
 
   // FormData sets its own Content-Type, including the multipart boundary the
   // server needs to parse the body. Setting one here would overwrite it with a
@@ -137,11 +142,24 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   get: <T>(path: string): Promise<T> => request<T>('GET', path),
-  post: <T>(path: string, body?: unknown): Promise<T> => request<T>('POST', path, body),
-  put: <T>(path: string, body?: unknown): Promise<T> => request<T>('PUT', path, body),
+  post: <T>(path: string, body?: unknown, headers?: Readonly<Record<string, string>>): Promise<T> =>
+    request<T>('POST', path, body, headers),
+  put: <T>(path: string, body?: unknown, headers?: Readonly<Record<string, string>>): Promise<T> =>
+    request<T>('PUT', path, body, headers),
   /** A multipart POST. Same session and CSRF handling as any other write. */
   upload: <T>(path: string, body: FormData): Promise<T> => request<T>('POST', path, body),
 };
+
+/**
+ * A fresh key for one write that must not run twice (CLAUDE.md section 6's
+ * idempotency requirement). A new one per attempt, including a retry after a
+ * genuine failure - only a double-click or a dropped response replaying the
+ * same request should ever reuse one, and that replay happens inside a single
+ * call's own retry, never across two calls to this function.
+ */
+export function newIdempotencyKey(): string {
+  return crypto.randomUUID();
+}
 
 /**
  * Resolves a stored media path against the API's origin.

@@ -54,8 +54,8 @@ function orderForCustomer(
         $order->forceFill(['created_at' => $createdAt])->save();
     }
 
-    $payment = Payment::factory()->on($order->id, $storeId, $total);
-    ($paid ? $payment->paid() : $payment)->create();
+    $payment = Payment::factory()->on($order->id, $storeId, $order->order_code, $total);
+    ($paid ? $payment->paid(User::factory()->create()->id) : $payment)->create();
 
     return $order;
 }

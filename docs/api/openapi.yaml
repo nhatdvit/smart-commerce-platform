@@ -1354,6 +1354,120 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /admin/payments/{payment}/regenerate-qr:
+    post:
+      operationId: regenerateAdminPaymentQr
+      tags: [Admin - Payments]
+      summary: Replace the VietQR on a payment still awaiting its transfer
+      description: |
+        Permission `payment.confirm` - the same ability as confirming, since
+        it is the same staff and neither one moves money by itself.
+
+        For an expired window or a lost QR. Generates a fresh transfer
+        reference and a fresh deadline (the store's configured
+        `bank_transfer.expiry_minutes`, counted from now) and attaches them to
+        the payment, the same way the first QR was built. Refuses a payment
+        that is not `BANK_TRANSFER`, or one already settled -
+        `PAYMENT_ALREADY_CONFIRMED` - since there is nothing left to pay
+        against. The replaced reference is audited with the actor and the
+        previous value.
+      parameters:
+        - $ref: '#/components/parameters/PaymentPath'
+      responses:
+        '200':
+          description: The payment, with its new transfer_reference, qr_payload and expires_at.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPayment'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Not a bank-transfer payment, or one already settled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /admin/store:
+    get:
+      operationId: getAdminStoreContext
+      tags: [Admin - Store]
+      summary: Which store this session is scoped to
+      description: |
+        No permission beyond authentication: a store's name and slug are not
+        sensitive, and every admin screen already discloses which store it is
+        scoped to simply by what it shows.
+
+        Exists so the dashboard can build the two endpoints below, which are
+        the one place CLAUDE.md §8's own example puts `{store}` in the path —
+        every other admin route resolves its store silently by host or
+        default, and the client never otherwise needs the id.
+      responses:
+        '200':
+          description: The store this request resolved to.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name, slug, timezone]
+                properties:
+                  id:
+                    $ref: '#/components/schemas/Uuid'
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  timezone:
+                    type: string
+                    examples: ['Asia/Ho_Chi_Minh']
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /admin/known-banks:
+    get:
+      operationId: getAdminKnownBanks
+      tags: [Admin - Store]
+      summary: The known VietQR bank directory, for a picker
+      description: |
+        Permission `payment.bank-account.manage` - gated the same as the
+        bank-account form, since it exists only to serve it. An operator
+        chooses a bank by name here rather than typing a BIN: a mistyped
+        digit that happens to be a different real bank's identifier is
+        exactly the mistake CLAUDE.md section 6 warns a typo here can cause.
+
+        Not store-scoped data itself - every store sees the same directory -
+        but still resolved through a store so the permission check has
+        something to check it against.
+      responses:
+        '200':
+          description: Every bank this deployment recognises, sorted by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [bin, name]
+                      properties:
+                        bin:
+                          type: string
+                          pattern: '^[0-9]{6}$'
+                        name:
+                          type: string
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+
   /admin/stores/{store}/bank-account:
     get:
       operationId: getStoreBankAccount
@@ -1425,6 +1539,32 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
 
   /admin/stores/{store}/payment-methods:
+    get:
+      operationId: getStorePaymentMethods
+      tags: [Admin - Store]
+      summary: The current switches, for the toggle form to open against
+      description: |
+        Permission `store.update` — the same reasoning as the write below: a
+        store's own method configuration is not a day-to-day operational read.
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '200':
+          description: The store's methods as they are now.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentMethodOption'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
     put:
       operationId: updateStorePaymentMethods
       tags: [Admin - Store]
@@ -4654,6 +4794,14 @@ components:
           description: What staff recorded as actually received.
         transfer_reference:
           type: [string, 'null']
+        qr_payload:
+          type: [string, 'null']
+          description: |
+            The raw EMVCo/VietQR string, for the admin screen to render its own
+            scannable code from - e.g. to show a customer standing at the
+            counter. Never proof of anything itself; staff read
+            bank_account_masked and transfer_reference, not this, to verify a
+            transfer by hand.
         bank_transaction_reference:
           type: [string, 'null']
           description: The bank's own reference, as typed from a statement.

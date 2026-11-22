@@ -40,14 +40,23 @@ final readonly class TransitionOrder
         private RecordsDomainEvents $events,
     ) {}
 
+    /**
+     * @param  bool  $paymentConfirmed  True only from
+     *                                  {@see \App\Modules\Order\Application\Listener\AdvanceOrderOnPaymentConfirmed},
+     *                                  reacting to `payment.confirmed` - it is the one caller allowed to place
+     *                                  an order still awaiting a transfer. Never set this from an HTTP
+     *                                  controller; that by-hand path is exactly what
+     *                                  {@see assertSettlementIsNotDoneByHand()} exists to refuse.
+     */
     public function handle(
         string $storeId,
         string $orderId,
         OrderStatus $to,
         ?string $reason = null,
         ?string $actorId = null,
+        bool $paymentConfirmed = false,
     ): Order {
-        return DB::transaction(function () use ($storeId, $orderId, $to, $reason, $actorId): Order {
+        return DB::transaction(function () use ($storeId, $orderId, $to, $reason, $actorId, $paymentConfirmed): Order {
             // Locked for the rest of the transaction: two staff members
             // advancing the same order at the same moment is ordinary in a
             // busy shop, and without this both would read PREPARING and both
@@ -66,7 +75,10 @@ final readonly class TransitionOrder
             // more useful answer than "say why you are cancelling it".
             $moved = $order->transitionTo($to);
 
-            $this->assertSettlementIsNotDoneByHand($order, $to);
+            if (! $paymentConfirmed) {
+                $this->assertSettlementIsNotDoneByHand($order, $to);
+            }
+
             $reason = $this->requireReasonWhereItMatters($to, $reason);
 
             $saved = $this->orders->recordTransition($moved, $order->status, $actorId, $reason);
