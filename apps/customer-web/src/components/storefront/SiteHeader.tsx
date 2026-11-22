@@ -5,10 +5,11 @@ import type { CurrentCustomer } from '@/lib/auth-api';
 import { IconCart, IconSearch, IconUser } from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
 
+// "Đặt trước" (preorder) is left out: that is Phase 2 scope (CLAUDE.md
+// delivery stages) and isn't built, so the link had nowhere real to go.
 const NAV_ITEMS: readonly { readonly label: string; readonly target: string }[] = [
   { label: 'Trang chủ', target: 'top' },
   { label: 'Thực đơn', target: 'menu' },
-  { label: 'Đặt trước', target: 'menu' },
   { label: 'Ưu đãi', target: 'promos' },
   { label: 'Tích điểm', target: 'rewards' },
 ];
