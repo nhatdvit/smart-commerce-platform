@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use App\Modules\Catalog\Presentation\Http\Controller\AdminProductController;
 use App\Modules\Catalog\Presentation\Http\Controller\ProductImageController;
+use App\Modules\Identity\Presentation\Http\Controller\ProfileController;
 use App\Modules\Identity\Presentation\Http\Controller\RegistrationController;
 use App\Modules\Identity\Presentation\Http\Controller\SessionController;
 use App\Modules\Loyalty\Presentation\Http\Controller\AdminLoyaltyController;
 use App\Modules\Loyalty\Presentation\Http\Controller\AdminRewardController;
+use App\Modules\Loyalty\Presentation\Http\Controller\CustomerLoyaltyController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
 use App\Modules\Menu\Presentation\Http\Controller\PublicMenuController;
@@ -24,7 +26,8 @@ use Illuminate\Support\Facades\Route;
  * Versioned business API. The api/v1 prefix is applied in bootstrap/app.php.
  *
  * Built so far: the metadata endpoints, the session endpoints (including
- * customer self-registration by phone), the public today's-menu endpoint that
+ * customer self-registration by phone), a signed-in customer's own profile/
+ * password/loyalty-standing endpoints, the public today's-menu endpoint that
  * drives the customer storefront's home screen, and the admin catalog, menu,
  * order, discount-code and payment endpoints that drive the operations
  * dashboard. The rest of CLAUDE.md section 8 arrives with its module:
@@ -77,6 +80,26 @@ Route::post('/auth/logout', [SessionController::class, 'logout'])
 Route::post('/auth/register', [RegistrationController::class, 'register'])
     ->middleware('throttle:register')
     ->name('api.auth.register');
+
+/*
+ * A signed-in customer's own profile, password and loyalty standing. Scoped
+ * to the caller by the session alone - never by an id in the URL or payload.
+ */
+Route::get('/customer/profile', [ProfileController::class, 'show'])
+    ->middleware('auth:sanctum')
+    ->name('api.customer.profile.show');
+
+Route::put('/customer/profile', [ProfileController::class, 'update'])
+    ->middleware('auth:sanctum')
+    ->name('api.customer.profile.update');
+
+Route::put('/customer/password', [ProfileController::class, 'changePassword'])
+    ->middleware('auth:sanctum')
+    ->name('api.customer.password.update');
+
+Route::get('/customer/loyalty', [CustomerLoyaltyController::class, 'show'])
+    ->middleware(['auth:sanctum', 'store.resolve'])
+    ->name('api.customer.loyalty.show');
 
 /*
  * Operations dashboard: catalog master data and menus.

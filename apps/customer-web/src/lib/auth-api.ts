@@ -61,3 +61,55 @@ export async function loginCustomer(phone: string, password: string): Promise<Cu
 export async function logoutCustomer(): Promise<void> {
   await api.post('/auth/logout');
 }
+
+interface ApiCustomerProfile {
+  readonly id: string;
+  readonly name: string;
+  readonly email: string | null;
+  readonly phone: string | null;
+  readonly pending_email: string | null;
+  readonly created_at: string;
+}
+
+function toCustomerFromProfile(profile: ApiCustomerProfile): CurrentCustomer {
+  return { id: profile.id, name: profile.name, phone: profile.phone };
+}
+
+/** Full name only - see `UpdateCustomerName` on the backend for why phone/email are not here. */
+export async function updateOwnProfile(name: string): Promise<CurrentCustomer> {
+  return toCustomerFromProfile(await api.put<ApiCustomerProfile>('/customer/profile', { name }));
+}
+
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+  await api.put('/customer/password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
+export interface LoyaltyStanding {
+  readonly balance: number;
+  readonly lifetimeEarnedPoints: number;
+  readonly tier: string;
+  readonly tierLabel: string;
+}
+
+interface ApiLoyaltyStanding {
+  readonly phone: string;
+  readonly lifetime_earned_points: number;
+  readonly balance: number;
+  readonly tier: string;
+  readonly tier_label: string;
+}
+
+/** The signed-in customer's own standing in the current store's loyalty program. */
+export async function getOwnLoyalty(): Promise<LoyaltyStanding> {
+  const data = await api.get<ApiLoyaltyStanding>('/customer/loyalty');
+
+  return {
+    balance: data.balance,
+    lifetimeEarnedPoints: data.lifetime_earned_points,
+    tier: data.tier,
+    tierLabel: data.tier_label,
+  };
+}

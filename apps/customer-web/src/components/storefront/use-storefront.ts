@@ -5,10 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError } from '@/lib/api-client';
 import {
   type CurrentCustomer,
+  type LoyaltyStanding,
+  changeOwnPassword,
   getCurrentCustomer,
+  getOwnLoyalty,
   loginCustomer,
   logoutCustomer,
   registerCustomer,
+  updateOwnProfile,
 } from '@/lib/auth-api';
 import {
   MenuApiError,
@@ -52,6 +56,7 @@ export type ModalView =
   | { readonly kind: 'checkout' }
   | { readonly kind: 'rewards' }
   | { readonly kind: 'login' }
+  | { readonly kind: 'profile' }
   | {
       readonly kind: 'order-placed';
       readonly customerName: string;
@@ -60,9 +65,7 @@ export type ModalView =
     };
 
 const CART_KEY = 'pq-v5-cart';
-const POINTS_KEY = 'pq-v5-points';
 const FAVORITES_KEY = 'pq-v5-favorites';
-const STARTING_POINTS = 185;
 const COUPON_CODES = ['SANG10', 'GIAM5K'] as const;
 
 function readStored(key: string): unknown {
@@ -93,12 +96,6 @@ function asCart(value: unknown): CartState {
 
 function asFavorites(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
-}
-
-function asPoints(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
-    ? Math.floor(value)
-    : STARTING_POINTS;
 }
 
 /** The first field message from a 422, falling back to the envelope's own message. */
@@ -191,6 +188,11 @@ export function useStorefront() {
   const [currentCustomer, setCurrentCustomer] = useState<CurrentCustomer | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
+  const [loyaltyBalance, setLoyaltyBalance] = useState<LoyaltyStanding | null>(null);
 
   // Whether anyone is already signed in, revalidated against the session
   // cookie rather than assumed from anything stored in the browser.
@@ -210,8 +212,31 @@ export function useStorefront() {
     };
   }, []);
 
+  // The real points/coupon panel only makes sense for a signed-in customer -
+  // fetched fresh whenever that changes, never assumed to persist across one.
+  useEffect(() => {
+    if (currentCustomer === null) {
+      setLoyaltyBalance(null);
+
+      return;
+    }
+
+    let cancelled = false;
+
+    getOwnLoyalty()
+      .then((standing) => {
+        if (!cancelled) {
+          setLoyaltyBalance(standing);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentCustomer]);
+
   const [cart, setCart] = useState<CartState>({});
-  const [points, setPoints] = useState(STARTING_POINTS);
   const [favorites, setFavorites] = useState<readonly string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
@@ -231,7 +256,6 @@ export function useStorefront() {
   // during render would make the first client paint disagree with the markup.
   useEffect(() => {
     setCart(asCart(readStored(CART_KEY)));
-    setPoints(asPoints(readStored(POINTS_KEY)));
     setFavorites(asFavorites(readStored(FAVORITES_KEY)));
     setHydrated(true);
   }, []);
@@ -242,12 +266,11 @@ export function useStorefront() {
     }
     try {
       window.localStorage.setItem(CART_KEY, JSON.stringify(cart));
-      window.localStorage.setItem(POINTS_KEY, JSON.stringify(points));
       window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
     } catch {
       // Storage unavailable: the session keeps working in memory.
     }
-  }, [cart, points, favorites, hydrated]);
+  }, [cart, favorites, hydrated]);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
@@ -397,11 +420,14 @@ export function useStorefront() {
     setModal({ kind: 'checkout' });
   }, [totals.count, toast]);
 
-  /** Demo order: clears the cart and credits simulated points. No server call. */
+  /**
+   * Demo order: clears the cart and shows a simulated points preview. No
+   * server call, so it must not touch the real signed-in balance - only a
+   * real PAID order ever earns real points (CLAUDE.md section 6).
+   */
   const placeDemoOrder = useCallback(
     (customerName: string, method: 'cash' | 'bank') => {
       const earnedPoints = Math.floor(totals.total / 10000);
-      setPoints((current) => current + earnedPoints);
       setCart({});
       setCoupon('');
       setCouponInput('');
@@ -411,18 +437,54 @@ export function useStorefront() {
     [totals.total, toast],
   );
 
+  /** Demo redemption: a local-only preview against the real balance, never sent to the server. */
   const redeemReward = useCallback(
     (name: string, cost: number) => {
-      if (points < cost) {
+      if (loyaltyBalance === null || loyaltyBalance.balance < cost) {
         return;
       }
       if (!window.confirm(`Đổi ${cost} điểm lấy ${name}? (demo)`)) {
         return;
       }
-      setPoints((current) => current - cost);
+      setLoyaltyBalance((current) =>
+        current === null ? current : { ...current, balance: current.balance - cost },
+      );
       toast(`Đổi thưởng demo thành công: ${name}`);
     },
-    [points, toast],
+    [loyaltyBalance, toast],
+  );
+
+  const updateProfile = useCallback(
+    async (name: string) => {
+      setProfileBusy(true);
+      setProfileError('');
+      try {
+        const customer = await updateOwnProfile(name);
+        setCurrentCustomer(customer);
+        toast('Đã cập nhật hồ sơ');
+      } catch (error) {
+        setProfileError(authErrorMessage(error));
+      } finally {
+        setProfileBusy(false);
+      }
+    },
+    [toast],
+  );
+
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      setPasswordBusy(true);
+      setPasswordError('');
+      try {
+        await changeOwnPassword(currentPassword, newPassword);
+        toast('Đã đổi mật khẩu');
+      } catch (error) {
+        setPasswordError(authErrorMessage(error));
+      } finally {
+        setPasswordBusy(false);
+      }
+    },
+    [toast],
   );
 
   const login = useCallback(
@@ -474,6 +536,8 @@ export function useStorefront() {
     setModal(null);
     setDrawerOpen(false);
     setAuthError('');
+    setProfileError('');
+    setPasswordError('');
   }, []);
 
   const visibleCards = useMemo(() => {
@@ -495,7 +559,6 @@ export function useStorefront() {
     cardsByProductId,
     lines,
     totals,
-    points,
     favorites,
     couponInput,
     couponMessage,
@@ -508,6 +571,11 @@ export function useStorefront() {
     currentCustomer,
     authBusy,
     authError,
+    profileBusy,
+    profileError,
+    passwordBusy,
+    passwordError,
+    loyaltyBalance,
     setCouponInput,
     setCategoryFilter,
     setSearch,
@@ -527,6 +595,8 @@ export function useStorefront() {
     login,
     register,
     logout,
+    updateProfile,
+    changePassword,
   };
 }
 

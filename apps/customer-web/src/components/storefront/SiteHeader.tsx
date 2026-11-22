@@ -21,7 +21,7 @@ interface SiteHeaderProps {
   readonly onSearchChange: (value: string) => void;
   readonly onOpenCart: () => void;
   readonly onOpenLogin: () => void;
-  readonly onLogout: () => void;
+  readonly onOpenProfile: () => void;
 }
 
 export function SiteHeader({
@@ -32,7 +32,7 @@ export function SiteHeader({
   onSearchChange,
   onOpenCart,
   onOpenLogin,
-  onLogout,
+  onOpenProfile,
 }: SiteHeaderProps) {
   return (
     <header className={pinned ? 'header header--pinned' : 'header'}>
@@ -108,9 +108,9 @@ export function SiteHeader({
         <button
           className="login"
           type="button"
-          onClick={onLogout}
-          title="Đăng xuất"
-          aria-label={`Đăng xuất (${currentCustomer.name})`}
+          onClick={onOpenProfile}
+          title="Hồ sơ của bạn"
+          aria-label={`Hồ sơ của ${currentCustomer.name}`}
         >
           <IconUser size={17} /> <span>{currentCustomer.name}</span>
         </button>
