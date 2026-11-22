@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Catalog\Presentation\Http\Controller\AdminProductController;
 use App\Modules\Catalog\Presentation\Http\Controller\ProductImageController;
+use App\Modules\Identity\Presentation\Http\Controller\RegistrationController;
 use App\Modules\Identity\Presentation\Http\Controller\SessionController;
 use App\Modules\Loyalty\Presentation\Http\Controller\AdminLoyaltyController;
 use App\Modules\Loyalty\Presentation\Http\Controller\AdminRewardController;
@@ -22,11 +23,11 @@ use Illuminate\Support\Facades\Route;
 /*
  * Versioned business API. The api/v1 prefix is applied in bootstrap/app.php.
  *
- * Built so far: the metadata endpoints, the session endpoints, the public
- * today's-menu endpoint that drives the customer storefront's home screen, and
- * the admin catalog, menu, order, discount-code and payment endpoints that
- * drive the operations dashboard. The rest of CLAUDE.md section 8 arrives with
- * its module:
+ * Built so far: the metadata endpoints, the session endpoints (including
+ * customer self-registration by phone), the public today's-menu endpoint that
+ * drives the customer storefront's home screen, and the admin catalog, menu,
+ * order, discount-code and payment endpoints that drive the operations
+ * dashboard. The rest of CLAUDE.md section 8 arrives with its module:
  *
  *   GET    /stores/{id}                        Store
  *   GET    /products, /products/{id}           Catalog (public)
@@ -66,6 +67,16 @@ Route::post('/auth/login', [SessionController::class, 'login'])
 Route::post('/auth/logout', [SessionController::class, 'logout'])
     ->middleware('auth:sanctum')
     ->name('api.auth.logout');
+
+/*
+ * Customer self-registration by phone number (CLAUDE.md section 5: staff
+ * accounts are provisioned by an admin, never self-service). Signs the new
+ * account straight in, so it is rate limited by its own `register` limiter
+ * rather than `login`'s.
+ */
+Route::post('/auth/register', [RegistrationController::class, 'register'])
+    ->middleware('throttle:register')
+    ->name('api.auth.register');
 
 /*
  * Operations dashboard: catalog master data and menus.

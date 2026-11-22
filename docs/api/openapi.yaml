@@ -80,7 +80,7 @@ tags:
   - name: Meta
     description: Service metadata and the authenticated principal.
   - name: Auth
-    description: Session lifecycle for the first-party web apps.
+    description: Session lifecycle and customer self-registration for the first-party web apps.
   - name: Store
     description: Store identity, opening hours and offered fulfillment.
   - name: Catalog
@@ -171,9 +171,14 @@ paths:
         not part of this document — then post credentials with
         `withCredentials`.
 
+        Staff sign in by `email`; a customer who registered through
+        `POST /auth/register` signs in by `phone`. Exactly one of the two is
+        sent.
+
         Rate limited per credential *and* per IP, so neither one account nor one
         host can be brute-forced cheaply. The response never reveals whether the
-        email exists: bad credentials and an unknown address answer alike.
+        email or phone number exists: bad credentials and an unknown identity
+        answer alike.
       security: []
       requestBody:
         required: true
@@ -206,6 +211,43 @@ paths:
           description: Session destroyed.
         '401':
           $ref: '#/components/responses/Unauthenticated'
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [Auth]
+      summary: Customer self-registration
+      description: |
+        Creates a customer account identified by phone number — the same
+        identity Loyalty already keys its ledger on — and signs it straight
+        in, exactly like `POST /auth/login`. Staff accounts are provisioned by
+        an admin instead, so there is no email variant of this endpoint.
+
+        Rate limited per IP: there is no existing credential to key by yet.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created and session established; the session cookie is set.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '419':
+          $ref: '#/components/responses/CsrfTokenMismatch'
+        '422':
+          description: Invalid phone/password, or the phone number is already registered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /stores/{store}:
     get:
@@ -2947,14 +2989,14 @@ components:
         The authenticated principal. `store_memberships` is what the admin app
         uses to decide which stores a user may act in; it is informational, and
         the server re-checks scope on every request regardless.
-      required: [id, name, email, roles, store_memberships]
+      required: [id, name, roles, store_memberships]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
         name:
           type: string
         email:
-          type: string
+          type: [string, 'null']
           format: email
         phone:
           type: [string, 'null']
@@ -2986,13 +3028,16 @@ components:
 
     LoginRequest:
       type: object
-      required: [email, password]
+      description: Exactly one of `email` or `phone` is sent.
       additionalProperties: false
       properties:
         email:
-          type: string
+          type: [string, 'null']
           format: email
           maxLength: 254
+        phone:
+          type: [string, 'null']
+          maxLength: 20
         password:
           type: string
           minLength: 8
@@ -3000,6 +3045,27 @@ components:
         remember:
           type: boolean
           default: false
+      oneOf:
+        - required: [email, password]
+        - required: [phone, password]
+
+    RegisterRequest:
+      type: object
+      required: [full_name, phone, password]
+      additionalProperties: false
+      properties:
+        full_name:
+          type: string
+          minLength: 2
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 20
+          description: A Vietnamese mobile number. Must not already be registered.
+        password:
+          type: string
+          minLength: 8
+          maxLength: 255
 
     Store:
       type: object

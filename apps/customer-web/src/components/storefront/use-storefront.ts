@@ -2,6 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { ApiError } from '@/lib/api-client';
+import {
+  type CurrentCustomer,
+  getCurrentCustomer,
+  loginCustomer,
+  logoutCustomer,
+  registerCustomer,
+} from '@/lib/auth-api';
 import {
   MenuApiError,
   groupIntoCards,
@@ -93,6 +101,17 @@ function asPoints(value: unknown): number {
     : STARTING_POINTS;
 }
 
+/** The first field message from a 422, falling back to the envelope's own message. */
+function authErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const [firstFieldError] = Object.values(error.fieldErrors());
+
+    return firstFieldError ?? error.message;
+  }
+
+  return 'Có lỗi xảy ra, vui lòng thử lại.';
+}
+
 function discountFor(code: string, subtotal: number): number {
   if (code === 'SANG10' && subtotal >= 100000) {
     return Math.round(subtotal * 0.1);
@@ -168,6 +187,28 @@ export function useStorefront() {
 
     return Array.from(seen.values());
   }, [cards]);
+
+  const [currentCustomer, setCurrentCustomer] = useState<CurrentCustomer | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  // Whether anyone is already signed in, revalidated against the session
+  // cookie rather than assumed from anything stored in the browser.
+  useEffect(() => {
+    let cancelled = false;
+
+    getCurrentCustomer()
+      .then((customer) => {
+        if (!cancelled) {
+          setCurrentCustomer(customer);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const [cart, setCart] = useState<CartState>({});
   const [points, setPoints] = useState(STARTING_POINTS);
@@ -384,9 +425,55 @@ export function useStorefront() {
     [points, toast],
   );
 
+  const login = useCallback(
+    async (phone: string, password: string) => {
+      setAuthBusy(true);
+      setAuthError('');
+      try {
+        const customer = await loginCustomer(phone, password);
+        setCurrentCustomer(customer);
+        setModal(null);
+        toast(`Xin chào, ${customer.name}!`);
+      } catch (error) {
+        setAuthError(authErrorMessage(error));
+      } finally {
+        setAuthBusy(false);
+      }
+    },
+    [toast],
+  );
+
+  const register = useCallback(
+    async (fullName: string, phone: string, password: string) => {
+      setAuthBusy(true);
+      setAuthError('');
+      try {
+        const customer = await registerCustomer(fullName, phone, password);
+        setCurrentCustomer(customer);
+        setModal(null);
+        toast(`Chào mừng ${customer.name} đến với Bếp nhà mình!`);
+      } catch (error) {
+        setAuthError(authErrorMessage(error));
+      } finally {
+        setAuthBusy(false);
+      }
+    },
+    [toast],
+  );
+
+  const logout = useCallback(() => {
+    logoutCustomer()
+      .catch(() => undefined)
+      .finally(() => {
+        setCurrentCustomer(null);
+        toast('Đã đăng xuất');
+      });
+  }, [toast]);
+
   const closeLayers = useCallback(() => {
     setModal(null);
     setDrawerOpen(false);
+    setAuthError('');
   }, []);
 
   const visibleCards = useMemo(() => {
@@ -418,6 +505,9 @@ export function useStorefront() {
     drawerOpen,
     toastMessage,
     visibleCards,
+    currentCustomer,
+    authBusy,
+    authError,
     setCouponInput,
     setCategoryFilter,
     setSearch,
@@ -434,6 +524,9 @@ export function useStorefront() {
     redeemReward,
     closeLayers,
     toast,
+    login,
+    register,
+    logout,
   };
 }
 

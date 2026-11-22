@@ -2180,6 +2180,39 @@
                 }
             }
         },
+        "/auth/register": {
+            "post": {
+                "operationId": "auth.register",
+                "tags": [
+                    "Registration"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CurrentUserResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUserResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "operationId": "auth.login",
@@ -2706,12 +2739,22 @@
             },
             "LoginRequest": {
                 "type": "object",
-                "description": "Validates the designed `LoginRequest`.\n\nThe password is never logged or echoed: bootstrap/app.php already lists it\namong the fields excluded from flashed input.",
+                "description": "Validates the designed `LoginRequest`.\n\nStaff sign in by email; a customer who registered by phone signs in by\nphone - the same `users` row, the same session guard, two ways to name the\naccount. Exactly one of the two must be present.\n\nThe password is never logged or echoed: bootstrap/app.php already lists it\namong the fields excluded from flashed input.",
                 "properties": {
                     "email": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "format": "email",
                         "maxLength": 254
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 20
                     },
                     "password": {
                         "type": "string",
@@ -2723,7 +2766,6 @@
                     }
                 },
                 "required": [
-                    "email",
                     "password"
                 ],
                 "title": "LoginRequest"
@@ -3341,6 +3383,34 @@
                     "reward_id"
                 ],
                 "title": "RedeemRewardRequest"
+            },
+            "RegisterRequest": {
+                "type": "object",
+                "description": "Validates the designed `RegisterRequest`: customer self-registration by\nphone number, the identity Loyalty already keys its ledger on (CLAUDE.md\nsection 6). Staff accounts are provisioned by an admin, not self-service,\nso there is no email variant of this endpoint.",
+                "properties": {
+                    "full_name": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 150
+                    },
+                    "phone": {
+                        "type": "string",
+                        "pattern": "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$",
+                        "maxLength": 20
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Same floor as LoginRequest's password, for the same reason: a\nrule for choosing one, not for typing one.",
+                        "minLength": 8,
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "full_name",
+                    "phone",
+                    "password"
+                ],
+                "title": "RegisterRequest"
             },
             "ReplaceMenuRequest": {
                 "type": "object",

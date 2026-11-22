@@ -12,9 +12,8 @@ import type { CartTotals, ModalView } from './use-storefront';
  * Sample rewards for the points-redemption demo.
  *
  * Not real menu items: the Loyalty module's reward catalogue is its own thing
- * (CLAUDE.md section 5) and there is no customer account yet to read a real
- * balance from (delivery stage 4), so this stays illustrative until both
- * exist.
+ * (CLAUDE.md section 5), and nothing here reads a signed-in customer's real
+ * point balance yet, so this stays illustrative until it does.
  */
 const DEMO_REWARDS: readonly {
   readonly name: string;
@@ -202,6 +201,92 @@ function CheckoutForm({ totals, onPlace, onInvalid }: CheckoutFormProps) {
   );
 }
 
+interface AuthFormProps {
+  readonly busy: boolean;
+  readonly error: string;
+  readonly onLogin: (phone: string, password: string) => void;
+  readonly onRegister: (fullName: string, phone: string, password: string) => void;
+}
+
+/** Phone + password, registering or signing in - see `RegisterRequest`/`LoginRequest` on the backend. */
+function AuthForm({ busy, error, onLogin, onRegister }: AuthFormProps) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+
+  function submit() {
+    if (busy) {
+      return;
+    }
+    if (mode === 'login') {
+      onLogin(phone.trim(), password);
+    } else {
+      onRegister(fullName.trim(), phone.trim(), password);
+    }
+  }
+
+  return (
+    <>
+      {mode === 'register' ? (
+        <div className="form-row">
+          <label htmlFor="authFullName">Họ và tên</label>
+          <input
+            id="authFullName"
+            maxLength={150}
+            placeholder="Họ và tên"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+          />
+        </div>
+      ) : null}
+      <div className="form-row">
+        <label htmlFor="authPhone">Số điện thoại</label>
+        <input
+          id="authPhone"
+          inputMode="tel"
+          maxLength={20}
+          placeholder="09xxxxxxxx"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="authPassword">Mật khẩu</label>
+        <input
+          id="authPassword"
+          type="password"
+          maxLength={255}
+          placeholder="Tối thiểu 8 ký tự"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+      </div>
+      {error === '' ? null : <p className="notice">{error}</p>}
+      <button className="btn btn-yellow" type="button" disabled={busy} onClick={submit}>
+        {mode === 'login' ? 'Đăng nhập' : 'Đăng ký'} →
+      </button>
+      <p className="modal-note">
+        {mode === 'login' ? (
+          <>
+            Chưa có tài khoản?{' '}
+            <button type="button" className="link-button" onClick={() => setMode('register')}>
+              Đăng ký ngay
+            </button>
+          </>
+        ) : (
+          <>
+            Đã có tài khoản?{' '}
+            <button type="button" className="link-button" onClick={() => setMode('login')}>
+              Đăng nhập
+            </button>
+          </>
+        )}
+      </p>
+    </>
+  );
+}
+
 interface RewardListProps {
   readonly points: number;
   readonly onRedeem: (name: string, cost: number) => void;
@@ -246,11 +331,15 @@ interface ModalLayerProps {
   readonly totals: CartTotals;
   readonly points: number;
   readonly cardsByProductId: ReadonlyMap<string, MenuProductCard>;
+  readonly authBusy: boolean;
+  readonly authError: string;
   readonly onClose: () => void;
   readonly onAddMenuItem: (menuItemId: string) => void;
   readonly onPlaceOrder: (customerName: string, method: 'cash' | 'bank') => void;
   readonly onInvalidCheckout: () => void;
   readonly onRedeem: (name: string, cost: number) => void;
+  readonly onLogin: (phone: string, password: string) => void;
+  readonly onRegister: (fullName: string, phone: string, password: string) => void;
 }
 
 export function ModalLayer({
@@ -258,11 +347,15 @@ export function ModalLayer({
   totals,
   points,
   cardsByProductId,
+  authBusy,
+  authError,
   onClose,
   onAddMenuItem,
   onPlaceOrder,
   onInvalidCheckout,
   onRedeem,
+  onLogin,
+  onRegister,
 }: ModalLayerProps) {
   if (view.kind === 'variants') {
     const card = cardsByProductId.get(view.productId);
@@ -296,13 +389,7 @@ export function ModalLayer({
   if (view.kind === 'login') {
     return (
       <ModalShell title="Tài khoản thành viên" onClose={onClose}>
-        <p>
-          Đăng nhập và quản lý điểm thưởng sẽ được kết nối với Laravel API trong giai đoạn triển
-          khai Backend.
-        </p>
-        <button className="btn btn-yellow" type="button" onClick={onClose}>
-          Đã hiểu
-        </button>
+        <AuthForm busy={authBusy} error={authError} onLogin={onLogin} onRegister={onRegister} />
       </ModalShell>
     );
   }

@@ -155,11 +155,21 @@ final class AppServiceProvider extends ServiceProvider
         )->by($request->user()?->getAuthIdentifier() ?? $request->ip()));
 
         // Authentication is limited per credential AND per IP, so neither a
-        // single account nor a single host can be brute-forced cheaply.
+        // single account nor a single host can be brute-forced cheaply. The
+        // credential is whichever identity field the attempt sent - a phone
+        // login and an email login never share a bucket.
         RateLimiter::for('login', static fn (Request $request): array => [
-            Limit::perMinute(5)->by('login:'.(string) $request->input('email')),
+            Limit::perMinute(5)->by(
+                'login:'.(string) ($request->input('phone') ?? $request->input('email')),
+            ),
             Limit::perMinute(20)->by('login-ip:'.$request->ip()),
         ]);
+
+        // Self-registration has no existing credential to key by, so it is
+        // limited per IP only - generous enough for a real household, tight
+        // enough that scripting a flood of accounts is not free.
+        RateLimiter::for('register', static fn (Request $request): Limit => Limit::perMinute(5)
+            ->by('register-ip:'.$request->ip()));
     }
 
     private function configureDatabaseGuards(): void

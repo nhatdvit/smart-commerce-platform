@@ -135,3 +135,108 @@ it('refuses a logout without a session', function (): void {
         ->assertUnauthorized()
         ->assertJsonPath('code', 'UNAUTHENTICATED');
 });
+
+it('logs in a customer by phone - the same guard, a different identity field', function (): void {
+    $user = User::factory()->phoneOnly()->create(['phone' => '0909555001', 'full_name' => 'Chị Lan']);
+
+    $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/login', ['phone' => '0909555001', 'password' => 'password'])
+        ->assertOk()
+        ->assertJsonPath('id', $user->id)
+        ->assertJsonPath('phone', '0909555001')
+        ->assertJsonCount(0, 'roles')
+        ->assertJsonCount(0, 'store_memberships');
+
+    $this->assertAuthenticatedAs($user);
+});
+
+it('answers a wrong password and an unknown phone the same way', function (): void {
+    User::factory()->phoneOnly()->create(['phone' => '0909555002']);
+
+    $wrongPassword = $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/login', ['phone' => '0909555002', 'password' => 'not-the-password']);
+
+    $unknownPhone = $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/login', ['phone' => '0909555099', 'password' => 'password']);
+
+    expect($wrongPassword->status())->toBe(422)
+        ->and($unknownPhone->status())->toBe(422)
+        ->and($wrongPassword->json('message'))->toBe($unknownPhone->json('message'));
+
+    $this->assertGuest();
+});
+
+it('registers a customer by phone and signs them straight in', function (): void {
+    $response = $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/register', [
+            'full_name' => 'Nguyễn Thảo Vy',
+            'phone' => '0912345678',
+            'password' => 'matkhau123',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('name', 'Nguyễn Thảo Vy')
+        ->assertJsonPath('phone', '0912345678')
+        ->assertJsonCount(0, 'roles')
+        ->assertJsonCount(0, 'store_memberships');
+
+    expect($response->json())->not->toHaveKey('password_hash')
+        ->and($response->json())->not->toHaveKey('password');
+
+    $user = User::query()->where('phone', '0912345678')->sole();
+    $this->assertAuthenticatedAs($user);
+});
+
+it('refuses registering a phone number that is already taken', function (): void {
+    User::factory()->phoneOnly()->create(['phone' => '0909555003']);
+
+    $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/register', [
+            'full_name' => 'Người khác',
+            'phone' => '0909555003',
+            'password' => 'matkhau123',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('code', 'VALIDATION_FAILED');
+
+    $this->assertGuest();
+});
+
+it('refuses a phone number that is not a valid Vietnamese mobile number', function (): void {
+    $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/register', [
+            'full_name' => 'Người dùng',
+            'phone' => '12345',
+            'password' => 'matkhau123',
+        ])
+        ->assertStatus(422);
+});
+
+it('refuses a registration password shorter than the floor', function (): void {
+    $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/register', [
+            'full_name' => 'Người dùng',
+            'phone' => '0909555004',
+            'password' => 'short',
+        ])
+        ->assertStatus(422);
+
+    $this->assertGuest();
+});
+
+it('stores a password that the login endpoint can later verify', function (): void {
+    // Registration signs the account straight in via Auth::login(), which
+    // never checks a hash - this is what actually proves RegisterCustomerAccount
+    // wrote a hash that Auth::attempt()'s own verification can match.
+    $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/register', [
+            'full_name' => 'Trần Minh Khang',
+            'phone' => '0909555005',
+            'password' => 'matkhau123',
+        ])
+        ->assertCreated();
+
+    $this->withHeaders(DASHBOARD_HEADERS)
+        ->postJson('/api/v1/auth/login', ['phone' => '0909555005', 'password' => 'matkhau123'])
+        ->assertOk()
+        ->assertJsonPath('phone', '0909555005');
+});

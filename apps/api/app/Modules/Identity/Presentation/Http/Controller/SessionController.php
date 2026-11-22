@@ -47,16 +47,13 @@ final class SessionController extends Controller
 
         // Laravel's session guard verifies the hash and regenerates nothing by
         // itself; the regenerate below is what prevents session fixation.
-        if (! Auth::guard('web')->attempt(
-            ['email' => $request->email(), 'password' => $request->password()],
-            $request->remember(),
-        )) {
-            // One answer for a wrong password and for an unknown address: the
-            // response must not reveal which emails have accounts.
+        if (! Auth::guard('web')->attempt($request->credentials(), $request->remember())) {
+            // One answer for a wrong password and for an unknown address/
+            // number: the response must not reveal which ones have accounts.
             throw new BusinessRuleViolation(
                 ErrorCode::ValidationFailed,
                 'These credentials do not match our records',
-                [['field' => 'email', 'message' => 'Email hoặc mật khẩu không đúng.']],
+                [['field' => $request->identityField(), 'message' => $this->invalidCredentialsMessage($request)]],
             );
         }
 
@@ -77,7 +74,7 @@ final class SessionController extends Controller
             throw new BusinessRuleViolation(
                 ErrorCode::ValidationFailed,
                 'These credentials do not match our records',
-                [['field' => 'email', 'message' => 'Email hoặc mật khẩu không đúng.']],
+                [['field' => $request->identityField(), 'message' => $this->invalidCredentialsMessage($request)]],
             );
         }
 
@@ -98,6 +95,13 @@ final class SessionController extends Controller
         }
 
         return new JsonResponse(status: 204);
+    }
+
+    private function invalidCredentialsMessage(LoginRequest $request): string
+    {
+        return $request->identityField() === 'phone'
+            ? 'Số điện thoại hoặc mật khẩu không đúng.'
+            : 'Email hoặc mật khẩu không đúng.';
     }
 
     /** @return array<string, string> */

@@ -67,9 +67,11 @@ export function StorefrontApp() {
         search={store.search}
         cartCount={store.totals.count}
         pinned={headerPinned}
+        currentCustomer={store.currentCustomer}
         onSearchChange={store.setSearch}
         onOpenCart={() => store.setDrawerOpen(true)}
         onOpenLogin={() => store.setModal({ kind: 'login' })}
+        onLogout={store.logout}
       />
 
       <main className="page" id="top">
@@ -183,6 +185,8 @@ export function StorefrontApp() {
           totals={store.totals}
           points={store.points}
           cardsByProductId={store.cardsByProductId}
+          authBusy={store.authBusy}
+          authError={store.authError}
           onClose={store.closeLayers}
           onAddMenuItem={(menuItemId) => {
             store.addMenuItem(menuItemId);
@@ -191,6 +195,8 @@ export function StorefrontApp() {
           onPlaceOrder={store.placeDemoOrder}
           onInvalidCheckout={() => store.toast('Vui lòng nhập tên và số điện thoại hợp lệ')}
           onRedeem={store.redeemReward}
+          onLogin={(phone, password) => void store.login(phone, password)}
+          onRegister={(fullName, phone, password) => void store.register(fullName, phone, password)}
         />
       )}
 
