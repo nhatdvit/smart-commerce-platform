@@ -122,6 +122,7 @@ Use Composer for PHP dependencies, `composer.lock` for reproducible builds and p
 | Fulfillment | Pickup, delivery, scheduled collection and handoff |
 | Kitchen | Kitchen queue, preparation and ready statuses |
 | Customer | Customer profiles, addresses, order history |
+| Loyalty | Points ledger, earning policy, reward catalogue, redemption |
 | Notification | In-app, realtime, email/SMS provider adapters |
 | Reporting | Sales, bestsellers, operational summaries |
 | Audit | Security- and business-sensitive action history |

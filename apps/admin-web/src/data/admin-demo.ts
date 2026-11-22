@@ -1,25 +1,17 @@
 /**
  * Demo data for the parts of the dashboard that have no API yet.
  *
- * Three screens no longer read from here. The menu is real - products, prices
- * and portions live in `@/lib/menu-api` - and so are orders (`@/lib/orders-api`)
- * and discount codes (`@/lib/coupons-api`). Rewards and customers are still
- * illustrative sample data held in memory, because the Loyalty and Customer
- * endpoints are designed but not built. Replace each the same way as its
- * module lands: delete its block here and point the provider at the API.
+ * Four screens no longer read from here. The menu is real - products, prices
+ * and portions live in `@/lib/menu-api` - and so are orders
+ * (`@/lib/orders-api`), discount codes (`@/lib/coupons-api`) and loyalty
+ * (`@/lib/loyalty-api`). Customers is still illustrative sample data held in
+ * memory, because the Customer endpoint is designed but not built. Replace it
+ * the same way as its module lands: delete its block here and point the
+ * provider at the API.
  *
  * The dashboard's revenue chart and bestseller counts are still illustrative
  * too, and the screen says so where it shows them.
  */
-
-import type { FoodIconName } from '@/components/admin/icons';
-
-export interface DemoReward {
-  readonly name: string;
-  readonly points: number;
-  readonly icon: FoodIconName;
-  readonly claimed: number;
-}
 
 export interface DemoCustomer {
   readonly name: string;
@@ -29,12 +21,6 @@ export interface DemoCustomer {
   readonly points: number;
   readonly tier: string;
 }
-
-export const INITIAL_REWARDS: readonly DemoReward[] = [
-  { name: 'Cà phê sữa đá', points: 150, icon: 'drink', claimed: 12 },
-  { name: 'Bánh mì pate trứng', points: 200, icon: 'banh-mi', claimed: 7 },
-  { name: 'Xôi gà xé', points: 250, icon: 'xoi', claimed: 4 },
-];
 
 export const DEMO_CUSTOMERS: readonly DemoCustomer[] = [
   { name: 'Nguyễn Minh Anh', orders: 12, spent: 385000, points: 185, tier: 'Thân thiết' },

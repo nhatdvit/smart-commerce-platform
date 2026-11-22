@@ -264,6 +264,301 @@
                 }
             }
         },
+        "/admin/loyalty/summary": {
+            "get": {
+                "operationId": "admin.loyalty.summary",
+                "summary": "Dashboard tiles: how many members, how many points issued, how much was redeemed this month",
+                "tags": [
+                    "AdminLoyalty"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "members": {
+                                            "type": "integer"
+                                        },
+                                        "pointsIssued": {
+                                            "type": "integer"
+                                        },
+                                        "redemptionsThisMonth": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "members",
+                                        "pointsIssued",
+                                        "redemptionsThisMonth"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/admin/loyalty/members": {
+            "get": {
+                "operationId": "admin.loyalty.members.index",
+                "tags": [
+                    "AdminLoyalty"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 120
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "has_more": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "items",
+                                        "next_cursor",
+                                        "has_more"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/loyalty/members/{phone}": {
+            "get": {
+                "operationId": "admin.loyalty.members.show",
+                "summary": "One member's standing and their full history, most recent first",
+                "tags": [
+                    "AdminLoyalty"
+                ],
+                "parameters": [
+                    {
+                        "name": "phone",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "phone": {
+                                            "type": "string"
+                                        },
+                                        "lifetime_earned_points": {
+                                            "type": "integer"
+                                        },
+                                        "balance": {
+                                            "type": "integer"
+                                        },
+                                        "history": {
+                                            "type": "array",
+                                            "items": []
+                                        }
+                                    },
+                                    "required": [
+                                        "phone",
+                                        "lifetime_earned_points",
+                                        "balance",
+                                        "history"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
+        "/admin/loyalty/members/{phone}/redeem": {
+            "post": {
+                "operationId": "admin.loyalty.members.redeem",
+                "tags": [
+                    "AdminLoyalty"
+                ],
+                "parameters": [
+                    {
+                        "name": "phone",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RedeemRewardRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`LedgerEntryResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LedgerEntryResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/loyalty/settings": {
+            "get": {
+                "operationId": "admin.loyalty.settings.show",
+                "tags": [
+                    "AdminLoyalty"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`LoyaltySettingsResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LoyaltySettingsResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "admin.loyalty.settings.update",
+                "tags": [
+                    "AdminLoyalty"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateLoyaltySettingsRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`LoyaltySettingsResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LoyaltySettingsResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/menus": {
             "get": {
                 "operationId": "admin.menus.index",
@@ -935,6 +1230,127 @@
                 }
             }
         },
+        "/admin/loyalty/rewards": {
+            "get": {
+                "operationId": "admin.loyalty.rewards.index",
+                "tags": [
+                    "AdminReward"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        }
+                                    },
+                                    "required": [
+                                        "items"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "admin.loyalty.rewards.store",
+                "tags": [
+                    "AdminReward"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveRewardRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`RewardResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RewardResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/admin/loyalty/rewards/{reward}": {
+            "put": {
+                "operationId": "admin.loyalty.rewards.update",
+                "tags": [
+                    "AdminReward"
+                ],
+                "parameters": [
+                    {
+                        "name": "reward",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveRewardRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`RewardResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RewardResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/media/products/{store}/{file}": {
             "get": {
                 "operationId": "media.product-image",
@@ -1288,6 +1704,72 @@
                 ],
                 "title": "CurrentUserResource"
             },
+            "LedgerEntryResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "EARN",
+                            "REDEEM"
+                        ]
+                    },
+                    "points": {
+                        "type": "integer"
+                    },
+                    "payment_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "reward_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "reward_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "actor_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "points",
+                    "payment_id",
+                    "reward_id",
+                    "reward_name",
+                    "note",
+                    "actor_name",
+                    "created_at"
+                ],
+                "title": "LedgerEntryResource"
+            },
             "LoginRequest": {
                 "type": "object",
                 "description": "Validates the designed `LoginRequest`.\n\nThe password is never logged or echoed: bootstrap/app.php already lists it\namong the fields excluded from flashed input.",
@@ -1311,6 +1793,26 @@
                     "password"
                 ],
                 "title": "LoginRequest"
+            },
+            "LoyaltySettingsResource": {
+                "type": "object",
+                "properties": {
+                    "store_id": {
+                        "type": "string"
+                    },
+                    "points_per_currency": {
+                        "type": "integer"
+                    },
+                    "loyal_tier_threshold_points": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "store_id",
+                    "points_per_currency",
+                    "loyal_tier_threshold_points"
+                ],
+                "title": "LoyaltySettingsResource"
             },
             "MenuItemResource": {
                 "type": "object",
@@ -1885,6 +2387,27 @@
                 ],
                 "title": "ProductResource"
             },
+            "RedeemRewardRequest": {
+                "type": "object",
+                "description": "Spends a member's points on a reward, recorded against the staff member who did it.",
+                "properties": {
+                    "reward_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    }
+                },
+                "required": [
+                    "reward_id"
+                ],
+                "title": "RedeemRewardRequest"
+            },
             "ReplaceMenuRequest": {
                 "type": "object",
                 "description": "Validates `UpdateMenuRequest`: a full replacement of a menu.\n\nThe portion limits match the admin form's\n(`apps/admin-web/src/lib/product-form.ts`), and the price rule is the same\ndigits-only string rule the catalog uses - one definition of \"a price\", not\ntwo that can drift (CLAUDE.md section 6).",
@@ -1981,6 +2504,48 @@
                     "schedules"
                 ],
                 "title": "ReplaceMenuRequest"
+            },
+            "RewardResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "store_id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "points_cost": {
+                        "type": "integer"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_active": {
+                        "type": "boolean"
+                    },
+                    "redeemed_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id",
+                    "store_id",
+                    "name",
+                    "points_cost",
+                    "icon",
+                    "is_active",
+                    "redeemed_count"
+                ],
+                "title": "RewardResource"
             },
             "SaveCouponRequest": {
                 "type": "object",
@@ -2246,6 +2811,37 @@
                 ],
                 "title": "SaveProductRequest"
             },
+            "SaveRewardRequest": {
+                "type": "object",
+                "description": "Validates a reward, for both create and edit.\n\nShape only, same split `SaveProductRequest` draws for its own icon field:\nthe actual icon catalogue is the admin UI's concern, not a list this\nendpoint has to keep in sync with it.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "points_cost": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1000000
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "pattern": "^[a-z0-9-]+$",
+                        "maxLength": 40
+                    },
+                    "is_active": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "points_cost"
+                ],
+                "title": "SaveRewardRequest"
+            },
             "SetDailyPortionsRequest": {
                 "type": "object",
                 "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty bánh mì has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
@@ -2309,6 +2905,27 @@
                     "to_status"
                 ],
                 "title": "TransitionOrderRequest"
+            },
+            "UpdateLoyaltySettingsRequest": {
+                "type": "object",
+                "description": "Changes how many points a PAID order earns, and the loyal-tier threshold.",
+                "properties": {
+                    "points_per_currency": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000000
+                    },
+                    "loyal_tier_threshold_points": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1000000
+                    }
+                },
+                "required": [
+                    "points_per_currency",
+                    "loyal_tier_threshold_points"
+                ],
+                "title": "UpdateLoyaltySettingsRequest"
             },
             "UpdateMenuItemAvailabilityRequest": {
                 "type": "object",

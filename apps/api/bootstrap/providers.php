@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Catalog\CatalogServiceProvider;
 use App\Modules\Identity\IdentityServiceProvider;
+use App\Modules\Loyalty\LoyaltyServiceProvider;
 use App\Modules\Menu\MenuServiceProvider;
 use App\Modules\Order\OrderServiceProvider;
 use App\Modules\Payment\PaymentServiceProvider;
@@ -34,4 +35,5 @@ return [
     PaymentServiceProvider::class,
     OrderServiceProvider::class,
     PricingServiceProvider::class,
+    LoyaltyServiceProvider::class,
 ];
