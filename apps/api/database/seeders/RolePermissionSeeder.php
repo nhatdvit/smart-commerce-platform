@@ -41,6 +41,9 @@ final class RolePermissionSeeder extends Seeder
         ['code' => 'payment.bank-account.manage', 'description' => 'Change the store receiving bank account'],
         ['code' => 'promotion.read', 'description' => 'View discount codes and their usage'],
         ['code' => 'promotion.manage', 'description' => 'Create, edit and retire discount codes'],
+        ['code' => 'loyalty.read', 'description' => "View members' points and the reward catalogue"],
+        ['code' => 'loyalty.redeem', 'description' => "Spend a member's points on a reward"],
+        ['code' => 'loyalty.manage', 'description' => 'Manage the reward catalogue and the earning rate'],
         ['code' => 'report.read', 'description' => 'View sales and operational reports'],
         ['code' => 'audit.read', 'description' => 'Read the audit log'],
     ];
@@ -145,6 +148,12 @@ final class RolePermissionSeeder extends Seeder
                     // decide; a cashier may not (see the CASHIER grants).
                     'promotion.read',
                     'promotion.manage',
+                    // The reward catalogue and the earning rate are the same
+                    // kind of decision as a discount code - a manager's call,
+                    // not a cashier's.
+                    'loyalty.read',
+                    'loyalty.redeem',
+                    'loyalty.manage',
                     'report.read',
                 ],
             ],
@@ -163,6 +172,11 @@ final class RolePermissionSeeder extends Seeder
                     // Reads codes to apply one at the counter, but cannot
                     // invent a discount: that is the manager's decision.
                     'promotion.read',
+                    // Looks up a member's balance and hands over a reward at
+                    // the counter, same trust level as collecting cash - but
+                    // cannot add rewards or change the earning rate.
+                    'loyalty.read',
+                    'loyalty.redeem',
                 ],
             ],
             [

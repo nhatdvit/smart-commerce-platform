@@ -107,6 +107,8 @@ tags:
     description: Daily portions and stock limits.
   - name: Admin - Promotions
     description: Discount codes a store hands out.
+  - name: Admin - Loyalty
+    description: Points earned on paid orders, spent on rewards.
   - name: Admin - Store
     description: Store settings, receiving bank account and payment methods.
 
@@ -1117,6 +1119,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /admin/customers:
+    get:
+      operationId: listAdminCustomers
+      tags: [Admin - Orders]
+      summary: Guest customers, grouped by phone
+      description: |
+        Permission `order.read` - the same grant as the order queue, since
+        reading this is reading orders, only grouped differently. There is no
+        registered-account module yet (CLAUDE.md section 5 still lists
+        `Customer` as a future module), so a "customer" here is every order
+        placed under one contact phone number - the closest thing to an
+        identity a guest checkout has.
+
+        Deliberately carries no points, tier or membership field. That is
+        Loyalty's data, and needs a real customer identity and a real
+        checkout to earn from before either number means anything (CLAUDE.md
+        delivery stage 4).
+
+        `total_spent` counts only orders whose payment is `PAID` - order
+        status and payment status are separate state machines (section 6),
+        and a cancelled or still-uncollected order was never actually spent.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: q
+          in: query
+          description: Partial, case-insensitive match on the phone or the contact name.
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        '200':
+          description: A page of this store's guest customers, most recent activity first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, has_more]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminCustomer'
+                  next_cursor:
+                    type: [string, 'null']
+                  has_more:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
@@ -2169,6 +2225,272 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  # Points earned on paid orders, spent on rewards. There is no registered-
+  # account module yet, so a member is identified by the phone number an order
+  # was placed under — the same identity the admin customer directory uses,
+  # read fresh from the ledger rather than stored on a customer record.
+  #
+  # Earning has no endpoint: a scheduled job credits every PAID payment a
+  # store has not yet been credited for, because nothing a customer or an
+  # operator does over HTTP should be able to invent points.
+  /admin/loyalty/summary:
+    get:
+      operationId: getAdminLoyaltySummary
+      tags: [Admin - Loyalty]
+      summary: Program totals for the dashboard
+      x-provisional: true
+      description: Permission `loyalty.read`.
+      responses:
+        '200':
+          description: How many members, how many points issued, how much was redeemed this month.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltySummary'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+
+  /admin/loyalty/members:
+    get:
+      operationId: listAdminLoyaltyMembers
+      tags: [Admin - Loyalty]
+      summary: Members of this store, by lifetime points earned
+      x-provisional: true
+      description: |
+        Permission `loyalty.read`. A cashier holds it, to look up a member's
+        balance at the counter.
+
+        `tier` is derived from lifetime points earned, never from the current
+        balance — redeeming a reward does not make a member less loyal.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: q
+          in: query
+          description: Partial, case-insensitive match on the phone or the contact name.
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        '200':
+          description: A page of members, highest lifetime points earned first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyMemberPage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /admin/loyalty/members/{phone}:
+    get:
+      operationId: getAdminLoyaltyMember
+      tags: [Admin - Loyalty]
+      summary: One member's balance and full history
+      x-provisional: true
+      description: Permission `loyalty.read`. A phone with no ledger rows reads as a zero balance, not 404 — there is nothing to look up but a number.
+      parameters:
+        - $ref: '#/components/parameters/LoyaltyPhone'
+      responses:
+        '200':
+          description: The member's standing and every ledger entry, most recent first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyMemberDetail'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+
+  /admin/loyalty/members/{phone}/redeem:
+    post:
+      operationId: redeemAdminLoyaltyReward
+      tags: [Admin - Loyalty]
+      summary: Spend a member's points on a reward
+      x-provisional: true
+      description: |
+        Permission `loyalty.redeem` — a cashier holds it, the same trust level
+        as collecting cash. There is no customer-facing redemption flow yet, so
+        this is always staff acting at the counter after handing the reward
+        over; the signed-in staff member is recorded as the one who processed
+        it.
+
+        `409 INVALID_STATE_TRANSITION` when the reward has been retired;
+        `422 VALIDATION_FAILED` when the member's balance is below the
+        reward's cost.
+      parameters:
+        - $ref: '#/components/parameters/LoyaltyPhone'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemRewardRequest'
+      responses:
+        '201':
+          description: The recorded redemption.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyLedgerEntry'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The reward is no longer offered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /admin/loyalty/rewards:
+    get:
+      operationId: listAdminLoyaltyRewards
+      tags: [Admin - Loyalty]
+      summary: The redeemable-reward catalogue
+      x-provisional: true
+      description: |
+        Permission `loyalty.read`. Active and inactive, most recently created
+        first — this is the catalogue to manage, not to browse, so there is no
+        pagination.
+      responses:
+        '200':
+          description: Every reward this store has defined.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LoyaltyReward'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+
+    post:
+      operationId: createAdminLoyaltyReward
+      tags: [Admin - Loyalty]
+      summary: Create a reward
+      x-provisional: true
+      description: Permission `loyalty.manage` — deciding the catalogue sits with the owner and the manager, the same split `promotion.manage` draws for discount codes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoyaltyRewardRequest'
+      responses:
+        '201':
+          description: The created reward.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyReward'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /admin/loyalty/rewards/{reward}:
+    put:
+      operationId: updateAdminLoyaltyReward
+      tags: [Admin - Loyalty]
+      summary: Edit a reward, or retire it
+      x-provisional: true
+      description: |
+        Permission `loyalty.manage`. A reward belonging to another store
+        answers 404, not 403. `redeemed_count` is not accepted — how many
+        times a reward has been redeemed is the system's record.
+      parameters:
+        - name: reward
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Uuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoyaltyRewardRequest'
+      responses:
+        '200':
+          description: The updated reward.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltyReward'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /admin/loyalty/settings:
+    get:
+      operationId: getAdminLoyaltySettings
+      tags: [Admin - Loyalty]
+      summary: This store's earning policy
+      x-provisional: true
+      description: Permission `loyalty.read`. A store that never configured one reads the documented default rather than 404.
+      responses:
+        '200':
+          description: How many points a PAID order earns, and the loyal-tier threshold.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltySettings'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+
+    put:
+      operationId: updateAdminLoyaltySettings
+      tags: [Admin - Loyalty]
+      summary: Change the earning policy
+      x-provisional: true
+      description: Permission `loyalty.manage`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoyaltySettingsRequest'
+      responses:
+        '200':
+          description: The updated policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoyaltySettings'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
 components:
 
   securitySchemes:
@@ -2241,6 +2563,18 @@ components:
         minimum: 1
         maximum: 100
         default: 20
+    LoyaltyPhone:
+      name: phone
+      in: path
+      required: true
+      description: |
+        The contact phone number an order was placed under — there is no
+        registered-account module yet, so this is what identifies a member.
+      schema:
+        type: string
+        minLength: 6
+        maxLength: 20
+        pattern: '^[0-9+]+$'
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -3480,6 +3814,208 @@ components:
             to that yet (CLAUDE.md §15).
           x-provisional: true
 
+    LoyaltyTier:
+      type: string
+      description: |
+        Derived from lifetime points earned, never from the current balance —
+        redeeming a reward does not make a member less loyal, so nothing here
+        ever demotes one.
+      enum: [MEMBER, LOYAL]
+
+    LoyaltyEntryType:
+      type: string
+      description: What a ledger row records. EARN is always a positive delta, REDEEM always negative.
+      enum: [EARN, REDEEM]
+
+    LoyaltySummary:
+      type: object
+      x-provisional: true
+      required: [members, pointsIssued, redemptionsThisMonth]
+      properties:
+        members:
+          type: integer
+          description: Distinct phones with at least one ledger entry.
+        pointsIssued:
+          type: integer
+          description: Lifetime points ever earned, across every member.
+        redemptionsThisMonth:
+          type: integer
+          description: How many rewards have been redeemed since the first of this calendar month.
+
+    LoyaltyMember:
+      type: object
+      x-provisional: true
+      required: [phone, name, lifetime_earned_points, balance, tier, tier_label]
+      properties:
+        phone:
+          type: string
+          description: Identifies the member — there is no registered-account module yet.
+        name:
+          type: string
+          description: The contact name on this phone's most recent order.
+        lifetime_earned_points:
+          type: integer
+          description: Never counts down on a redemption. What `tier` is derived from.
+        balance:
+          type: integer
+          description: Spendable now — lifetime earned minus whatever has been redeemed.
+        tier:
+          $ref: '#/components/schemas/LoyaltyTier'
+        tier_label:
+          type: string
+          description: Vietnamese display label for `tier`, since this screen has no other language yet.
+
+    LoyaltyMemberPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/LoyaltyMember'
+
+    LoyaltyLedgerEntry:
+      type: object
+      x-provisional: true
+      description: One line of a member's history — never edited after it is written. A correction is a new entry.
+      required: [id, type, points, payment_id, reward_id, reward_name, note, actor_name, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        type:
+          $ref: '#/components/schemas/LoyaltyEntryType'
+        points:
+          type: integer
+          description: Signed — positive for EARN, negative for REDEEM.
+        payment_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Set only for EARN — the payment that was credited.
+        reward_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: Set only for REDEEM — which reward was given.
+        reward_name:
+          type: [string, 'null']
+          description: Resolved name, kept even if the reward is later retired.
+        note:
+          type: [string, 'null']
+        actor_name:
+          type: [string, 'null']
+          description: Who processed a REDEEM. Always null for EARN, which the sync job writes on nobody's behalf.
+        created_at:
+          type: string
+          format: date-time
+
+    LoyaltyMemberDetail:
+      type: object
+      x-provisional: true
+      required: [phone, lifetime_earned_points, balance, history]
+      properties:
+        phone:
+          type: string
+        lifetime_earned_points:
+          type: integer
+        balance:
+          type: integer
+        history:
+          type: array
+          description: Most recent first.
+          items:
+            $ref: '#/components/schemas/LoyaltyLedgerEntry'
+
+    RedeemRewardRequest:
+      type: object
+      required: [reward_id]
+      additionalProperties: false
+      x-provisional: true
+      properties:
+        reward_id:
+          $ref: '#/components/schemas/Uuid'
+        note:
+          type: [string, 'null']
+          maxLength: 500
+
+    LoyaltyReward:
+      type: object
+      x-provisional: true
+      required: [id, store_id, name, points_cost, icon, is_active, redeemed_count]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        store_id:
+          $ref: '#/components/schemas/Uuid'
+        name:
+          type: string
+          maxLength: 160
+        points_cost:
+          type: integer
+          description: How many points this reward spends.
+        icon:
+          type: [string, 'null']
+          description: One of the admin UI's known icon names — usually a menu item given away free.
+        is_active:
+          type: boolean
+          description: A retired reward cannot be redeemed again, but past redemptions of it are kept.
+        redeemed_count:
+          type: integer
+          description: How many times this has ever been redeemed. The system's record, never a form field.
+
+    LoyaltyRewardRequest:
+      type: object
+      required: [name, points_cost]
+      additionalProperties: false
+      x-provisional: true
+      description: The same body creates and edits. `redeemed_count` is deliberately absent — it is the system's record.
+      properties:
+        name:
+          type: string
+          maxLength: 160
+        points_cost:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+        icon:
+          type: [string, 'null']
+          maxLength: 40
+          pattern: '^[a-z0-9-]+$'
+        is_active:
+          type: boolean
+          default: true
+
+    LoyaltySettings:
+      type: object
+      x-provisional: true
+      required: [store_id, points_per_currency, loyal_tier_threshold_points]
+      properties:
+        store_id:
+          $ref: '#/components/schemas/Uuid'
+        points_per_currency:
+          type: integer
+          description: Whole đồng a customer spends, on a PAID order, to earn one point.
+        loyal_tier_threshold_points:
+          type: integer
+          description: Lifetime points earned at or above this makes a phone LOYAL rather than MEMBER.
+
+    LoyaltySettingsRequest:
+      type: object
+      required: [points_per_currency, loyal_tier_threshold_points]
+      additionalProperties: false
+      x-provisional: true
+      properties:
+        points_per_currency:
+          type: integer
+          minimum: 1
+          maximum: 10000000
+        loyal_tier_threshold_points:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+
     SetDailyPortionsRequest:
       type: object
       required: [items]
@@ -4423,6 +4959,31 @@ components:
                 $ref: '#/components/schemas/PaymentMethod'
               enabled:
                 type: boolean
+
+    AdminCustomer:
+      type: object
+      description: |
+        A guest's order history, grouped by the contact phone number it was
+        placed under - there is no registered-account module yet (CLAUDE.md
+        section 5). Deliberately has no points, tier or membership field; see
+        the path's own description.
+      required: [phone, name, order_count, total_spent]
+      properties:
+        phone:
+          type: string
+        name:
+          type: string
+          description: The contact name on this phone's most recent order.
+        email:
+          type: [string, 'null']
+        order_count:
+          type: integer
+        total_spent:
+          $ref: '#/components/schemas/Money'
+          description: Sums only orders whose payment is PAID.
+        last_order_at:
+          type: [string, 'null']
+          format: date-time
 
     CustomerProfile:
       type: object

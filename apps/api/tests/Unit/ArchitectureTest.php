@@ -212,3 +212,52 @@ arch('pricing models are final and its contracts are interfaces')
 arch('the pricing contract is an interface')
     ->expect('App\Modules\Pricing\Domain\Contract')
     ->toBeInterfaces();
+
+/*
+ * Loyalty owns the points ledger, the reward catalogue and the earning
+ * policy, and depends on nothing but Identity's permission check, Store's
+ * directory and the shared kernel (CLAUDE.md section 5).
+ *
+ * It reads `orders` and `payments` directly through the query builder (see
+ * the migration note on why: both modules carry an open, unrelated,
+ * in-flight change), but it never imports a class from either - the
+ * dependency this test actually forbids. Replace both reads with exported
+ * contracts once those branches settle.
+ */
+arch('the loyalty domain layer is framework-free')
+    ->expect('App\Modules\Loyalty\Domain')
+    ->not->toUse([
+        'Illuminate\Database\Eloquent\Model',
+        'Illuminate\Http\Request',
+        'Illuminate\Support\Facades',
+    ]);
+
+arch('the loyalty module does not depend on order or payment classes')
+    ->expect('App\Modules\Loyalty')
+    ->not->toUse([
+        'App\Modules\Order\Domain',
+        'App\Modules\Order\Infrastructure',
+        'App\Modules\Order\Presentation',
+        'App\Modules\Payment\Domain',
+        'App\Modules\Payment\Infrastructure',
+        'App\Modules\Payment\Presentation',
+    ]);
+
+arch('no module depends on loyalty yet, and none should until it exports one')
+    ->expect([
+        'App\Modules\Catalog',
+        'App\Modules\Menu',
+        'App\Modules\Order',
+        'App\Modules\Payment',
+        'App\Modules\Pricing',
+    ])
+    ->not->toUse('App\Modules\Loyalty');
+
+arch('loyalty models are final and its contracts are interfaces')
+    ->expect('App\Modules\Loyalty\Infrastructure\Persistence\Model')
+    ->classes()
+    ->toBeFinal();
+
+arch('the loyalty contract is an interface')
+    ->expect('App\Modules\Loyalty\Domain\Contract')
+    ->toBeInterfaces();

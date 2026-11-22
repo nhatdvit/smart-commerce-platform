@@ -5,8 +5,11 @@ declare(strict_types=1);
 use App\Modules\Catalog\Presentation\Http\Controller\AdminProductController;
 use App\Modules\Catalog\Presentation\Http\Controller\ProductImageController;
 use App\Modules\Identity\Presentation\Http\Controller\SessionController;
+use App\Modules\Loyalty\Presentation\Http\Controller\AdminLoyaltyController;
+use App\Modules\Loyalty\Presentation\Http\Controller\AdminRewardController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
+use App\Modules\Order\Presentation\Http\Controller\AdminCustomerController;
 use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
 use App\Modules\Payment\Presentation\Http\Controller\AdminPaymentController;
 use App\Modules\Payment\Presentation\Http\Controller\AdminStorePaymentSettingsController;
@@ -167,6 +170,15 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->name('orders.status');
 
         /*
+         * The guest-customer directory: orders grouped by contact phone.
+         * Same `order.read` grant as the queue above - there is no dedicated
+         * Customer module yet to give this a permission of its own.
+         */
+        Route::get('/customers', [AdminCustomerController::class, 'index'])
+            ->middleware('store.can:order.read')
+            ->name('customers.index');
+
+        /*
          * Discount codes.
          *
          * A coupon is money the shop gives away, so reading and writing are
@@ -247,4 +259,53 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
         Route::put('/stores/{store}/payment-methods', [AdminStorePaymentSettingsController::class, 'updatePaymentMethods'])
             ->middleware('store.can:store.update')
             ->name('stores.payment-methods.update');
+
+        /*
+         * Loyalty: points earned on paid orders, spent on rewards.
+         *
+         * `loyalty.read` is everyday visibility, `loyalty.redeem` is spending
+         * points at the counter and `loyalty.manage` is deciding the program
+         * itself - the same three-way split promotion.* draws for discount
+         * codes (see RolePermissionSeeder). A member is identified by phone,
+         * not a route id, since there is no registered-account module yet
+         * (CLAUDE.md section 5).
+         */
+        Route::get('/loyalty/summary', [AdminLoyaltyController::class, 'summary'])
+            ->middleware('store.can:loyalty.read')
+            ->name('loyalty.summary');
+
+        Route::get('/loyalty/members', [AdminLoyaltyController::class, 'members'])
+            ->middleware('store.can:loyalty.read')
+            ->name('loyalty.members.index');
+
+        Route::get('/loyalty/members/{phone}', [AdminLoyaltyController::class, 'show'])
+            ->middleware('store.can:loyalty.read')
+            ->where('phone', '[0-9+]{6,20}')
+            ->name('loyalty.members.show');
+
+        Route::post('/loyalty/members/{phone}/redeem', [AdminLoyaltyController::class, 'redeem'])
+            ->middleware(['store.can:loyalty.redeem', 'throttle:commerce-write'])
+            ->where('phone', '[0-9+]{6,20}')
+            ->name('loyalty.members.redeem');
+
+        Route::get('/loyalty/rewards', [AdminRewardController::class, 'index'])
+            ->middleware('store.can:loyalty.read')
+            ->name('loyalty.rewards.index');
+
+        Route::post('/loyalty/rewards', [AdminRewardController::class, 'store'])
+            ->middleware('store.can:loyalty.manage')
+            ->name('loyalty.rewards.store');
+
+        Route::put('/loyalty/rewards/{reward}', [AdminRewardController::class, 'update'])
+            ->middleware('store.can:loyalty.manage')
+            ->whereUuid('reward')
+            ->name('loyalty.rewards.update');
+
+        Route::get('/loyalty/settings', [AdminLoyaltyController::class, 'settings'])
+            ->middleware('store.can:loyalty.read')
+            ->name('loyalty.settings.show');
+
+        Route::put('/loyalty/settings', [AdminLoyaltyController::class, 'updateSettings'])
+            ->middleware('store.can:loyalty.manage')
+            ->name('loyalty.settings.update');
     });
