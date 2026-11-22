@@ -55,7 +55,15 @@ export function CustomersScreen() {
                     </strong>
                   </td>
                   <td>
-                    <span className="status ready">{customer.tier}</span>
+                    {/* Same tone convention as the loyalty screen's real tier
+                        badge: "Thân thiết" reads as ready (green), everyone
+                        else as waiting (amber) - so the two screens agree on
+                        what a hạng looks like, not only on what it says. */}
+                    <span
+                      className={`status ${customer.tier === 'Thân thiết' ? 'ready' : 'waiting'}`}
+                    >
+                      {customer.tier}
+                    </span>
                   </td>
                 </tr>
               ))}
