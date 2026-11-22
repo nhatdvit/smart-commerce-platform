@@ -9,6 +9,7 @@ use App\Modules\Loyalty\Presentation\Http\Controller\AdminLoyaltyController;
 use App\Modules\Loyalty\Presentation\Http\Controller\AdminRewardController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
+use App\Modules\Order\Presentation\Http\Controller\AdminCustomerController;
 use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
 use App\Modules\Pricing\Presentation\Http\Controller\AdminCouponController;
 use Illuminate\Http\Request;
@@ -159,6 +160,15 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->middleware(['store.can:order.transition|kitchen.operate', 'throttle:commerce-write'])
             ->whereUuid('order')
             ->name('orders.status');
+
+        /*
+         * The guest-customer directory: orders grouped by contact phone.
+         * Same `order.read` grant as the queue above - there is no dedicated
+         * Customer module yet to give this a permission of its own.
+         */
+        Route::get('/customers', [AdminCustomerController::class, 'index'])
+            ->middleware('store.can:order.read')
+            ->name('customers.index');
 
         /*
          * Discount codes.
