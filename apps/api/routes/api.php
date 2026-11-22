@@ -213,6 +213,11 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->whereUuid('payment')
             ->name('payments.flag');
 
+        Route::post('/payments/{payment}/regenerate-qr', [AdminPaymentController::class, 'regenerateQr'])
+            ->middleware(['store.can:payment.confirm', 'throttle:commerce-write'])
+            ->whereUuid('payment')
+            ->name('payments.regenerate-qr');
+
         // Static reference data for the bank-account form's picker - not
         // store-scoped data itself, gated the same as that form because it
         // exists only to serve it.

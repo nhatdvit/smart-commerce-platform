@@ -7,6 +7,7 @@ namespace App\Modules\Payment\Domain\Contract;
 use App\Modules\Payment\Domain\Criteria\PaymentCriteria;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Domain\Entity\PaymentDiscrepancy;
+use DateTimeImmutable;
 
 /**
  * Persistence seam for the admin side of payments: reading the reconciliation
@@ -69,10 +70,16 @@ interface PaymentRepository
     public function recordDiscrepancy(Payment $payment, PaymentDiscrepancy $discrepancy): Payment;
 
     /**
-     * Attaches a dynamically generated VietQR to a payment that does not have
-     * one yet - the one write this module performs outside the admin screens,
-     * on behalf of whatever created the order (the demo seeder today,
-     * checkout once it exists).
+     * Attaches a dynamically generated VietQR to a payment - either the first
+     * one, on behalf of whatever created the order (the demo seeder today,
+     * checkout once it exists), or a fresh one replacing an expired or lost
+     * one, on behalf of an operator (CLAUDE.md section 6's "configurable
+     * expiry" for a pending transfer).
+     *
+     * `$expiresAt` is left untouched (null) for the first case: the window a
+     * customer has to pay is decided once, by whatever created the payment
+     * row, not by the act of encoding it into a QR. A regenerate call passes
+     * a fresh deadline explicitly instead.
      */
     public function attachBankTransferInstructions(
         string $storeId,
@@ -83,5 +90,6 @@ interface PaymentRepository
         string $bankAccountName,
         string $transferReference,
         string $qrPayload,
+        ?DateTimeImmutable $expiresAt = null,
     ): Payment;
 }

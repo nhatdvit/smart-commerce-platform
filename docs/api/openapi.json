@@ -1022,6 +1022,44 @@
                 }
             }
         },
+        "/admin/payments/{payment}/regenerate-qr": {
+            "post": {
+                "operationId": "admin.payments.regenerate-qr",
+                "description": "Same ability as confirming: the same staff who verify a transfer are\nthe ones who would need to re-issue its QR, and neither one moves\nmoney by itself.",
+                "summary": "Replaces the VietQR on a payment still awaiting its transfer - an\nexpired window or a lost QR, never one already settled (the action\nitself refuses that; see GenerateBankTransferInstructions)",
+                "tags": [
+                    "AdminPayment"
+                ],
+                "parameters": [
+                    {
+                        "name": "payment",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`AdminPaymentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminPaymentResource"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
         "/admin/products": {
             "get": {
                 "operationId": "admin.products.index",
@@ -1723,6 +1761,13 @@
                             "null"
                         ]
                     },
+                    "qr_payload": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The raw EMVCo string, for the admin screen to render its own\nscannable QR from - never a system an operator needs to trust;\nthey can read bank_account_masked/transfer_reference instead."
+                    },
                     "bank_transaction_reference": {
                         "type": [
                             "string",
@@ -1775,6 +1820,7 @@
                     "amount",
                     "confirmed_amount",
                     "transfer_reference",
+                    "qr_payload",
                     "bank_transaction_reference",
                     "bank_account_masked",
                     "confirmed_by",

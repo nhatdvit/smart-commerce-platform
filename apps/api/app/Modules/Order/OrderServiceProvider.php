@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Order;
 
+use App\Modules\Order\Application\Listener\AdvanceOrderOnPaymentConfirmed;
 use App\Modules\Order\Domain\Contract\OrderRepository;
 use App\Modules\Order\Domain\Entity\Order;
 use App\Modules\Order\Infrastructure\Persistence\EloquentOrderRepository;
 use App\Modules\Order\Presentation\Policy\OrderPolicy;
+use App\Shared\Infrastructure\Outbox\OutboxEventPublished;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -33,5 +36,10 @@ final class OrderServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Order::class, OrderPolicy::class);
+
+        // The only consumer of the outbox today: Order reacts to Payment's
+        // `payment.confirmed` without depending on the Payment module itself
+        // (CLAUDE.md section 3) - see AdvanceOrderOnPaymentConfirmed.
+        Event::listen(OutboxEventPublished::class, AdvanceOrderOnPaymentConfirmed::class);
     }
 }

@@ -107,6 +107,12 @@ export interface AdminPayment {
   /** What staff recorded as actually received. */
   readonly confirmedAmount: number | null;
   readonly transferReference: string | null;
+  /**
+   * The raw EMVCo/VietQR string, for rendering a scannable code. Never proof
+   * of anything itself - staff verify a transfer against bankAccountMasked
+   * and transferReference, not this.
+   */
+  readonly qrPayload: string | null;
   readonly bankTransactionReference: string | null;
   readonly bankAccountMasked: string | null;
   /** The person who said the money arrived. Never a system name. */
@@ -194,6 +200,7 @@ interface ApiAdminPayment {
   readonly amount: ApiMoney;
   readonly confirmed_amount: ApiMoney | null;
   readonly transfer_reference: string | null;
+  readonly qr_payload: string | null;
   readonly bank_transaction_reference: string | null;
   readonly bank_account_masked: string | null;
   readonly confirmed_by: string | null;
@@ -221,6 +228,7 @@ function toPayment(payment: ApiAdminPayment): AdminPayment {
     amount: toAmount(payment.amount) ?? 0,
     confirmedAmount: toAmount(payment.confirmed_amount),
     transferReference: payment.transfer_reference,
+    qrPayload: payment.qr_payload,
     bankTransactionReference: payment.bank_transaction_reference,
     bankAccountMasked: payment.bank_account_masked,
     confirmedBy: payment.confirmed_by,
@@ -329,6 +337,17 @@ export async function flagPayment(
   });
 
   return toPayment(payment);
+}
+
+/**
+ * Replaces the VietQR on a payment still awaiting its transfer - an expired
+ * window or a lost QR. The server refuses this for anything already settled
+ * or not a bank transfer; see GenerateBankTransferInstructions.
+ */
+export async function regeneratePaymentQr(paymentId: string): Promise<AdminPayment> {
+  return toPayment(
+    await api.post<ApiAdminPayment>(`/admin/payments/${paymentId}/regenerate-qr`, {}),
+  );
 }
 
 /** Where a store's bank transfers are received, masked. */

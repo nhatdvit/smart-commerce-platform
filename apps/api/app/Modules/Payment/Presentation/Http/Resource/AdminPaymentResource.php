@@ -44,6 +44,10 @@ final class AdminPaymentResource extends JsonResource
             'amount' => $payment->amount->jsonSerialize(),
             'confirmed_amount' => $payment->confirmedAmount?->jsonSerialize(),
             'transfer_reference' => $payment->transferReference,
+            // The raw EMVCo string, for the admin screen to render its own
+            // scannable QR from - never a system an operator needs to trust;
+            // they can read bank_account_masked/transfer_reference instead.
+            'qr_payload' => $payment->qrPayload,
             'bank_transaction_reference' => $payment->bankTransactionReference,
             'bank_account_masked' => $payment->bankAccountNumber === null
                 ? null

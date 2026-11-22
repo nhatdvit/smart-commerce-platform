@@ -449,27 +449,25 @@ final class DemoOrderSeeder extends Seeder
             'order_id' => $order->id,
             'order_code' => $order->order_code,
             'method' => $demo['method']->value,
-            'status' => $demo['settled'] ? PaymentStatus::Paid->value : PaymentStatus::Pending->value,
+            // Always created PENDING, settled below if at all: the action
+            // that attaches VietQR instructions refuses an already-settled
+            // payment, the same real rule a genuine confirm-after-generate
+            // order of events never runs into (CLAUDE.md section 6).
+            'status' => PaymentStatus::Pending->value,
             'amount' => $total,
             'currency' => 'VND',
             // Only a transfer has a window to miss; cash is collected in person.
             'expires_at' => $demo['method'] === PaymentMethod::BankTransfer && ! $demo['settled']
                 ? $pickupAt->addMinutes((int) config('commerce.bank_transfer.expiry_minutes', 30))
                 : null,
-            // Set only when the money was really seen, which for demo data
-            // means "this order is one a cashier already confirmed" - and the
-            // CHECK constraint on `payments` refuses PAID without a named
-            // confirmer, same as the real confirm endpoint would.
-            'paid_at' => $demo['settled'] ? $confirmedAt : null,
-            'confirmed_by' => $demo['settled'] ? $actorId : null,
-            'confirmed_at' => $demo['settled'] ? $confirmedAt : null,
-            'confirmed_amount' => $demo['settled'] ? $total : null,
         ]);
 
         // A transfer order gets the same VietQR a customer would actually
         // scan - generated through the real use case, not hand-built data,
         // so the admin reconciliation screen has a genuine reference and
-        // payload to show and match against (CLAUDE.md section 6).
+        // payload to show and match against (CLAUDE.md section 6). Done
+        // while the payment is still PENDING, the same order a real checkout
+        // and a later confirmation would happen in.
         if ($demo['method'] === PaymentMethod::BankTransfer) {
             app(GenerateBankTransferInstructions::class)->handle(
                 $storeId,
@@ -477,6 +475,20 @@ final class DemoOrderSeeder extends Seeder
                 $order->order_code,
                 Money::vnd($total),
             );
+        }
+
+        if ($demo['settled']) {
+            // Set only when the money was really seen, which for demo data
+            // means "this order is one a cashier already confirmed" - and the
+            // CHECK constraint on `payments` refuses PAID without a named
+            // confirmer, same as the real confirm endpoint would.
+            $payment->fill([
+                'status' => PaymentStatus::Paid->value,
+                'paid_at' => $confirmedAt,
+                'confirmed_by' => $actorId,
+                'confirmed_at' => $confirmedAt,
+                'confirmed_amount' => $total,
+            ])->save();
         }
     }
 

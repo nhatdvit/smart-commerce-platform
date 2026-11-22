@@ -6,6 +6,7 @@ namespace App\Modules\Payment\Presentation\Http\Controller;
 
 use App\Modules\Payment\Application\Action\ConfirmPayment;
 use App\Modules\Payment\Application\Action\FlagPayment;
+use App\Modules\Payment\Application\Action\GenerateBankTransferInstructions;
 use App\Modules\Payment\Domain\Contract\PaymentRepository;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Presentation\Http\Request\ConfirmPaymentRequest;
@@ -17,6 +18,7 @@ use App\Shared\Domain\Exception\BusinessRuleViolation;
 use App\Shared\Presentation\Http\Controllers\Controller;
 use App\Shared\Presentation\Http\ErrorCode;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -106,8 +108,48 @@ final class AdminPaymentController extends Controller
         return (new AdminPaymentResource($updated))->response();
     }
 
+    /**
+     * Replaces the VietQR on a payment still awaiting its transfer - an
+     * expired window or a lost QR, never one already settled (the action
+     * itself refuses that; see GenerateBankTransferInstructions).
+     *
+     * Same ability as confirming: the same staff who verify a transfer are
+     * the ones who would need to re-issue its QR, and neither one moves
+     * money by itself.
+     */
+    public function regenerateQr(
+        string $payment,
+        StoreContext $storeContext,
+        Request $request,
+        GenerateBankTransferInstructions $generateInstructions,
+    ): JsonResponse {
+        $storeId = $storeContext->require()->id;
+        $existing = $this->payments->findInStore($storeId, $payment);
+
+        if ($existing === null) {
+            throw new BusinessRuleViolation(ErrorCode::ResourceNotFound, 'Payment not found');
+        }
+
+        Gate::authorize('confirm', $existing);
+
+        $expiresAt = now()
+            ->addMinutes((int) config('commerce.bank_transfer.expiry_minutes', 30))
+            ->toImmutable();
+
+        $updated = $generateInstructions->handle(
+            $storeId,
+            $payment,
+            $existing->orderCode,
+            $existing->amount,
+            $expiresAt,
+            $this->actorId($request),
+        );
+
+        return (new AdminPaymentResource($updated))->response();
+    }
+
     /** The signed-in staff member, for the audit trail and the event history. */
-    private function actorId(ConfirmPaymentRequest|FlagPaymentRequest $request): string
+    private function actorId(Request $request): string
     {
         $id = $request->user()?->getAuthIdentifier();
 

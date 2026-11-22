@@ -15,6 +15,7 @@ use App\Modules\Payment\Infrastructure\Persistence\Model\Payment as PaymentModel
 use App\Modules\Payment\Infrastructure\Persistence\Model\PaymentDiscrepancy as PaymentDiscrepancyModel;
 use App\Modules\Payment\Infrastructure\Persistence\Model\PaymentEvent as PaymentEventModel;
 use App\Shared\Domain\ValueObject\Money;
+use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -186,6 +187,7 @@ final class EloquentPaymentRepository implements PaymentRepository
         string $bankAccountName,
         string $transferReference,
         string $qrPayload,
+        ?DateTimeImmutable $expiresAt = null,
     ): Payment {
         $row = PaymentModel::query()
             ->where('store_id', $storeId)
@@ -199,6 +201,7 @@ final class EloquentPaymentRepository implements PaymentRepository
             'bank_account_name' => $bankAccountName,
             'transfer_reference' => $transferReference,
             'qr_payload' => $qrPayload,
+            ...($expiresAt === null ? [] : ['expires_at' => $expiresAt]),
         ])->save();
 
         return $this->toEntity($row->refresh(), withHistory: false);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import QRCode from 'qrcode';
 
 import { mediaUrl } from '@/lib/api-client';
 import {
@@ -25,6 +26,7 @@ import {
   PAYMENT_STATUS_LABELS as SETTLEMENT_STATUS_LABELS,
   loadPayment,
   paymentStatusTone,
+  regeneratePaymentQr,
   type AdminPayment,
   type DiscrepancyType,
   type KnownBankOption,
@@ -1108,6 +1110,42 @@ function dateTime(iso: string | null): string {
 }
 
 /**
+ * The actual scannable VietQR, rendered client-side from the raw EMVCo
+ * string the server already validated - never proof of anything itself,
+ * just a convenience so staff can show it on a screen without a second app.
+ */
+function PaymentQrImage({ payload }: { readonly payload: string }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    setDataUrl(null);
+
+    void QRCode.toDataURL(payload, { margin: 1, width: 200 })
+      .then((url) => {
+        if (current) {
+          setDataUrl(url);
+        }
+      })
+      .catch(() => {
+        // Decorative: a failed render just means no image, not an error the
+        // operator needs to see - the reference and masked account below are
+        // what they actually verify a transfer against.
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [payload]);
+
+  if (dataUrl === null) {
+    return null;
+  }
+
+  return <img src={dataUrl} alt="Mã QR chuyển khoản" className="payment-qr" />;
+}
+
+/**
  * One payment: its reconciliation facts, then the two things staff can do
  * about it.
  *
@@ -1117,7 +1155,7 @@ function dateTime(iso: string | null): string {
  * touches the status - a discrepancy is a note on the queue, not a verdict.
  */
 function PaymentModal({ paymentId }: { readonly paymentId: string }) {
-  const { confirmPayment, flagPayment, paymentsBusy } = useAdminData();
+  const { confirmPayment, flagPayment, paymentsBusy, notify } = useAdminData();
   const [payment, setPayment] = useState<AdminPayment | null>(null);
   const [loadError, setLoadError] = useState('');
 
@@ -1130,6 +1168,8 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
   const [flagType, setFlagType] = useState<DiscrepancyType>('UNKNOWN_REFERENCE');
   const [flagAmount, setFlagAmount] = useState('');
   const [flagNote, setFlagNote] = useState('');
+
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -1200,6 +1240,22 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
     });
   }
 
+  // Not routed through the provider's confirm/flag writes: those close the
+  // modal on success, and the point here is the opposite - staying open so
+  // the fresh QR is immediately visible to show a customer.
+  function submitRegenerate(target: AdminPayment) {
+    setRegenerating(true);
+    void regeneratePaymentQr(target.id)
+      .then((updated) => {
+        setPayment(updated);
+        notify(`Đã tạo mã QR mới cho đơn ${updated.orderCode}`);
+      })
+      .catch((error: unknown) => {
+        notify(error instanceof Error ? error.message : 'Không tạo lại được mã QR.');
+      })
+      .finally(() => setRegenerating(false));
+  }
+
   return (
     <ModalFrame title={`Thanh toán đơn ${payment.orderCode}`}>
       <div className="order-detail">
@@ -1254,6 +1310,22 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
             </>
           )}
         </dl>
+
+        {payment.method !== 'BANK_TRANSFER' ? null : (
+          <div className="payment-qr-block">
+            {payment.qrPayload === null ? null : <PaymentQrImage payload={payment.qrPayload} />}
+            {settled ? null : (
+              <button
+                type="button"
+                className="btn"
+                disabled={regenerating}
+                onClick={() => submitRegenerate(payment)}
+              >
+                {payment.qrPayload === null ? 'Tạo mã QR' : 'Tạo lại mã QR'}
+              </button>
+            )}
+          </div>
+        )}
 
         {payment.discrepancies.length === 0 ? null : (
           <>

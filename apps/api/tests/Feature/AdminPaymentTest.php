@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Payment\Domain\Enum\PaymentMethod;
 use App\Modules\Payment\Domain\Enum\PaymentStatus;
+use App\Modules\Payment\Infrastructure\Persistence\Model\BankAccount;
 use App\Modules\Payment\Infrastructure\Persistence\Model\Payment;
 use App\Modules\Store\Infrastructure\Persistence\Model\Store;
 use App\Shared\Infrastructure\Persistence\Model\AuditLog;
@@ -249,6 +250,73 @@ it('flags an exception without confirming or failing the payment, and audits it'
         ->and($entry->changes['type'] ?? null)->toBe('UNKNOWN_REFERENCE');
 });
 
+it('regenerates the QR for a payment still awaiting its transfer', function (): void {
+    [$store, $manager] = storeWithStaff();
+    BankAccount::factory()->inStore($store->id)->create();
+    $order = orderInStore($store->id, method: PaymentMethod::BankTransfer);
+    $payment = Payment::query()->where('order_id', $order->id)->sole();
+    $payment->update(['transfer_reference' => 'SCPORIGINAL1', 'qr_payload' => '00020101STALE']);
+
+    $response = $this->actingAs($manager, 'sanctum')
+        ->postJson("/api/v1/admin/payments/{$payment->id}/regenerate-qr", [])
+        ->assertOk()
+        ->assertJsonPath('status', 'PENDING');
+
+    $refreshed = $payment->refresh();
+    expect($refreshed->transfer_reference)->not->toBe('SCPORIGINAL1')
+        ->and($refreshed->qr_payload)->not->toBe('00020101STALE')
+        ->and($response->json('transfer_reference'))->toBe($refreshed->transfer_reference)
+        ->and($response->json('qr_payload'))->toBe($refreshed->qr_payload)
+        ->and($refreshed->expires_at)->not->toBeNull()
+        ->and($refreshed->expires_at->isFuture())->toBeTrue();
+
+    $entry = AuditLog::query()->where('action', 'payment.transfer-instructions.regenerate')->sole();
+    expect($entry->actor_id)->toBe($manager->id)
+        ->and($entry->changes['previous_transfer_reference'] ?? null)->toBe('SCPORIGINAL1')
+        ->and($entry->changes['transfer_reference'] ?? null)->toBe($refreshed->transfer_reference);
+});
+
+it('refuses to regenerate a QR for a cash payment', function (): void {
+    [$store, $manager] = storeWithStaff();
+    $order = orderInStore($store->id, method: PaymentMethod::Cash);
+    $payment = Payment::query()->where('order_id', $order->id)->sole();
+
+    $this->actingAs($manager, 'sanctum')
+        ->postJson("/api/v1/admin/payments/{$payment->id}/regenerate-qr", [])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'INVALID_STATE_TRANSITION');
+});
+
+it('refuses to regenerate a QR for a payment already settled', function (): void {
+    [$store, $manager] = storeWithStaff();
+    BankAccount::factory()->inStore($store->id)->create();
+    $order = orderInStore($store->id, method: PaymentMethod::BankTransfer);
+    $payment = Payment::query()->where('order_id', $order->id)->sole();
+    $payment->fill([
+        'status' => PaymentStatus::Paid,
+        'confirmed_by' => $manager->id,
+        'confirmed_at' => now(),
+        'confirmed_amount' => $payment->amount,
+        'paid_at' => now(),
+    ])->save();
+
+    $this->actingAs($manager, 'sanctum')
+        ->postJson("/api/v1/admin/payments/{$payment->id}/regenerate-qr", [])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'PAYMENT_ALREADY_CONFIRMED');
+});
+
+it('refuses kitchen staff regenerating a QR, same as confirming', function (): void {
+    [$store, $kitchen] = storeWithStaff('KITCHEN_STAFF');
+    $order = orderInStore($store->id, method: PaymentMethod::BankTransfer);
+    $payment = Payment::query()->where('order_id', $order->id)->sole();
+
+    $this->actingAs($kitchen, 'sanctum')
+        ->postJson("/api/v1/admin/payments/{$payment->id}/regenerate-qr", [])
+        ->assertForbidden()
+        ->assertJsonPath('code', 'STORE_SCOPE_DENIED');
+});
+
 it('lets a cashier read and confirm payments', function (): void {
     [$store, $cashier] = storeWithStaff('CASHIER');
     $order = orderInStore($store->id, method: PaymentMethod::Cash);
@@ -281,5 +349,7 @@ it('refuses kitchen staff entirely: no payment or pricing access', function (): 
 it('refuses an unauthenticated caller', function (): void {
     $this->getJson('/api/v1/admin/payments')->assertUnauthorized();
     $this->postJson('/api/v1/admin/payments/01930000-0000-7000-8000-000000000001/confirm', [])
+        ->assertUnauthorized();
+    $this->postJson('/api/v1/admin/payments/01930000-0000-7000-8000-000000000001/regenerate-qr', [])
         ->assertUnauthorized();
 });
