@@ -1,9 +1,8 @@
 'use client';
 
-import { productImage } from '@/data/products';
 import { money } from '@/lib/money';
 
-import { IconBag } from './icons';
+import { FoodIcon, IconBag } from './icons';
 
 import type { CartKey, CartLine, CartTotals } from './use-storefront';
 
@@ -31,12 +30,14 @@ export function CartLines({ lines, onChangeQuantity }: CartLinesProps) {
     <>
       {lines.map((line) => (
         <div className="cart-line" key={line.key}>
-          <img src={productImage(line.product)} alt={line.product.name} />
+          {line.item.imageUrl === null ? (
+            <FoodIcon name={line.item.icon} size={36} />
+          ) : (
+            <img src={line.item.imageUrl} alt={line.item.productName} />
+          )}
           <div className="cart-detail">
             <div className="cart-name">{line.displayName}</div>
-            <div className="cart-unit">
-              {money(line.unitPrice)} / {line.unitLabel}
-            </div>
+            <div className="cart-unit">{money(line.item.price)}</div>
             <div className="cart-controls">
               <div className="qty">
                 <button
@@ -55,7 +56,7 @@ export function CartLines({ lines, onChangeQuantity }: CartLinesProps) {
                   +
                 </button>
               </div>
-              <span className="cart-price">{money(line.unitPrice * line.quantity)}</span>
+              <span className="cart-price">{money(line.item.price * line.quantity)}</span>
             </div>
           </div>
         </div>

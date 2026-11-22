@@ -2,49 +2,32 @@
 
 import type { ReactNode } from 'react';
 
-import { productImage, type Product, type ProductCategory } from '@/data/products';
+import type { MenuProductCard } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 
-import { IconCup, IconFlame, IconStar } from './icons';
+import { FoodIcon, IconCup, IconFlame, IconStar } from './icons';
 import { scrollToSection } from './scroll';
 import type { CategoryFilter } from './use-storefront';
-
-interface SectionSpec {
-  readonly icon: ReactNode;
-  readonly heading: string;
-  readonly categories: readonly ProductCategory[];
-  readonly seeAll: CategoryFilter;
-}
 
 /** Matches the 24px heading type the design sets on `.section-heading h2`. */
 const HEADING_ICON = 22;
 
-const SECTIONS: readonly SectionSpec[] = [
-  {
-    icon: <IconFlame size={HEADING_ICON} />,
-    heading: 'Món ăn sáng nổi bật',
-    categories: ['breakfast', 'main'],
-    seeAll: 'breakfast',
-  },
-  {
-    icon: <IconStar size={HEADING_ICON} />,
-    heading: 'Chả đặc sản – Món ngon nhà làm',
-    categories: ['special', 'snack'],
-    seeAll: 'special',
-  },
-  {
-    icon: <IconCup size={HEADING_ICON} />,
-    heading: 'Đồ uống & combo yêu thích',
-    categories: ['drink', 'combo'],
-    seeAll: 'drink',
-  },
+/** Cycled across sections purely for visual variety - categories carry no icon of their own. */
+const HEADING_ICONS: readonly ReactNode[] = [
+  <IconFlame key="flame" size={HEADING_ICON} />,
+  <IconStar key="star" size={HEADING_ICON} />,
+  <IconCup key="cup" size={HEADING_ICON} />,
 ];
 
+function headingIconFor(index: number): ReactNode {
+  return HEADING_ICONS[index % HEADING_ICONS.length] ?? <IconStar size={HEADING_ICON} />;
+}
+
 interface ProductCardProps {
-  readonly product: Product;
+  readonly card: MenuProductCard;
   readonly liked: boolean;
-  readonly onAdd: (productId: number) => void;
-  readonly onToggleFavorite: (productId: number) => void;
+  readonly onAdd: (card: MenuProductCard) => void;
+  readonly onToggleFavorite: (productId: string) => void;
 }
 
 /**
@@ -75,37 +58,49 @@ function HeartIcon({ filled }: { filled: boolean }) {
   );
 }
 
-function ProductCard({ product, liked, onAdd, onToggleFavorite }: ProductCardProps) {
-  const subtitle = product.variants === undefined ? product.unit : 'Nhiều quy cách đóng gói';
-  const firstVariant = product.variants?.[0];
+function ProductCard({ card, liked, onAdd, onToggleFavorite }: ProductCardProps) {
+  const subtitle = card.options.length <= 1 ? null : 'Nhiều quy cách đóng gói';
+  const cheapest = card.options.reduce<number | null>(
+    (min, option) => (min === null || option.price < min ? option.price : min),
+    null,
+  );
   const price =
-    firstVariant === undefined ? money(product.price) : `Từ ${money(firstVariant.price)}`;
+    cheapest === null
+      ? 'Hết hàng'
+      : card.options.length > 1
+        ? `Từ ${money(cheapest)}`
+        : money(cheapest);
 
   return (
-    <article className="product">
+    <article className={card.isSoldOut ? 'product sold-out' : 'product'}>
       <div className="product-photo">
-        <img src={productImage(product)} alt={product.name} loading="lazy" />
+        {card.imageUrl === null ? (
+          <FoodIcon name={card.icon} size={48} />
+        ) : (
+          <img src={card.imageUrl} alt={card.name} loading="lazy" />
+        )}
         <button
           type="button"
           className={liked ? 'heart liked' : 'heart'}
-          aria-label={`Yêu thích ${product.name}`}
-          onClick={() => onToggleFavorite(product.id)}
+          aria-label={`Yêu thích ${card.name}`}
+          onClick={() => onToggleFavorite(card.productId)}
         >
           <HeartIcon filled={liked} />
         </button>
       </div>
       <div className="product-content">
-        <div className="product-name">{product.name}</div>
-        <div className="product-sub">{subtitle}</div>
+        <div className="product-name">{card.name}</div>
+        {subtitle === null ? null : <div className="product-sub">{subtitle}</div>}
         <div className="product-bottom">
           <span className="product-price">{price}</span>
           <button
             type="button"
             className="add"
-            aria-label={`Thêm ${product.name}`}
-            onClick={() => onAdd(product.id)}
+            aria-label={`Thêm ${card.name}`}
+            disabled={card.isSoldOut}
+            onClick={() => onAdd(card)}
           >
-            +
+            {card.isSoldOut ? '✕' : '+'}
           </button>
         </div>
       </div>
@@ -114,61 +109,110 @@ function ProductCard({ product, liked, onAdd, onToggleFavorite }: ProductCardPro
 }
 
 interface ProductSectionsProps {
-  readonly products: readonly Product[];
-  readonly favorites: readonly number[];
-  readonly onAdd: (productId: number) => void;
-  readonly onToggleFavorite: (productId: number) => void;
+  readonly cards: readonly MenuProductCard[];
+  readonly favorites: readonly string[];
+  readonly onAdd: (card: MenuProductCard) => void;
+  readonly onToggleFavorite: (productId: string) => void;
   readonly onSeeAll: (category: CategoryFilter) => void;
 }
 
+/** One category's worth of dishes, in a named section. */
+function section(
+  key: string,
+  heading: string,
+  icon: ReactNode,
+  cards: readonly MenuProductCard[],
+  favorites: readonly string[],
+  onAdd: (card: MenuProductCard) => void,
+  onToggleFavorite: (productId: string) => void,
+  onSeeAll: (category: CategoryFilter) => void,
+  seeAllTarget: CategoryFilter,
+) {
+  return (
+    <section key={key} className="product-section">
+      <div className="section-heading">
+        <h2>
+          {icon} {heading}
+        </h2>
+        <button
+          type="button"
+          className="see-all"
+          onClick={() => {
+            onSeeAll(seeAllTarget);
+            scrollToSection('menu');
+          }}
+        >
+          Xem tất cả →
+        </button>
+      </div>
+      <div className="product-grid">
+        {cards.map((card) => (
+          <ProductCard
+            key={card.productId}
+            card={card}
+            liked={favorites.includes(card.productId)}
+            onAdd={onAdd}
+            onToggleFavorite={onToggleFavorite}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function ProductSections({
-  products,
+  cards,
   favorites,
   onAdd,
   onToggleFavorite,
   onSeeAll,
 }: ProductSectionsProps) {
+  const byCategory = new Map<
+    string,
+    { readonly name: string; readonly cards: MenuProductCard[] }
+  >();
+  const order: string[] = [];
+
+  for (const card of cards) {
+    const key = card.category?.id ?? '';
+    const name = card.category?.name ?? 'Món khác';
+    const existing = byCategory.get(key);
+
+    if (existing === undefined) {
+      byCategory.set(key, { name, cards: [card] });
+      order.push(key);
+    } else {
+      existing.cards.push(card);
+    }
+  }
+
+  if (order.length === 0) {
+    return (
+      <div id="menu">
+        <p className="notice">Chưa có món nào trên thực đơn hôm nay.</p>
+      </div>
+    );
+  }
+
   return (
     <div id="menu">
-      {SECTIONS.map((section) => {
-        const items = products.filter((product) => section.categories.includes(product.category));
+      {order.map((key, index) => {
+        const group = byCategory.get(key);
 
-        return (
-          <section
-            key={section.heading}
-            className={items.length === 0 ? 'product-section hide' : 'product-section'}
-          >
-            <div className="section-heading">
-              <h2>
-                {section.icon} {section.heading}
-              </h2>
-              <button
-                type="button"
-                className="see-all"
-                onClick={() => {
-                  onSeeAll(section.seeAll);
-                  scrollToSection('menu');
-                }}
-              >
-                Xem tất cả →
-              </button>
-            </div>
-            <div className="product-grid">
-              {items.length === 0 ? (
-                <p>Chưa có món phù hợp.</p>
-              ) : (
-                items.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    liked={favorites.includes(product.id)}
-                    onAdd={onAdd}
-                    onToggleFavorite={onToggleFavorite}
-                  />
-                ))
-              )}
-            </div>
-          </section>
+        if (group === undefined) {
+          return null;
+        }
+
+        return section(
+          key,
+          group.name,
+          headingIconFor(index),
+          group.cards,
+          favorites,
+          onAdd,
+          onToggleFavorite,
+          onSeeAll,
+          key === '' ? 'all' : key,
         );
       })}
     </div>

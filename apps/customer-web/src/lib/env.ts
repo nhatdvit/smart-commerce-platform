@@ -11,3 +11,22 @@ export const publicEnv = {
 export function serverApiBaseUrl(): string {
   return process.env.INTERNAL_API_BASE_URL ?? publicEnv.apiBaseUrl;
 }
+
+/**
+ * What the storefront's own browser-side API calls use, which is not
+ * `publicEnv.apiBaseUrl`.
+ *
+ * Relative by default, because the gateway serves the storefront and the API
+ * from one origin (`localhost:8080` in development) - see
+ * `infra/nginx/conf.d/default.conf`. That is also why an image path the API
+ * returns (an uploaded photo, or a seeded one under `/assets`) is rendered
+ * exactly as given, with no origin to join it against: both already resolve
+ * against this same origin.
+ *
+ * Set NEXT_PUBLIC_STOREFRONT_API_BASE_URL to the gateway's origin when opening
+ * the Next.js port directly in development; `/api/v1` would otherwise resolve
+ * against Next itself, which serves no API.
+ */
+export const storefrontEnv = {
+  apiBaseUrl: process.env.NEXT_PUBLIC_STOREFRONT_API_BASE_URL ?? '/api/v1',
+} as const;
