@@ -3,7 +3,7 @@
     "info": {
         "title": "Smart Commerce Platform",
         "version": "1.0.0",
-        "description": "Customer storefront and operations API for the Smart Commerce Platform.\n\n**Money.** Amounts are whole Vietnamese đồng transported as decimal\nstrings (`\"45000\"`), because JSON numbers cannot hold a 64-bit integer\nsafely in every client. Never parse them into a float.\n\n**Errors.** Every failure returns the same envelope with a stable\nmachine-readable `code`; branch on that, never on `message`.\n\n**Store scope.** Admin operations require both the role permission and\nan active membership of the target store. Store context comes from the\nroute or the host, never from a query parameter.\n\n**Payments.** MVP settles in `CASH` or `BANK_TRANSFER` only. A generated\nVietQR is not a confirmation of payment: authorized staff confirm the\nactual bank credit."
+        "description": "Customer storefront and operations API for the Smart Commerce Platform.\n\n**Money.** Amounts are whole Vietnamese \u0111\u1ed3ng transported as decimal\nstrings (`\"45000\"`), because JSON numbers cannot hold a 64-bit integer\nsafely in every client. Never parse them into a float.\n\n**Errors.** Every failure returns the same envelope with a stable\nmachine-readable `code`; branch on that, never on `message`.\n\n**Store scope.** Admin operations require both the role permission and\nan active membership of the target store. Store context comes from the\nroute or the host, never from a query parameter.\n\n**Payments.** MVP settles in `CASH` or `BANK_TRANSFER` only. A generated\nVietQR is not a confirmation of payment: authorized staff confirm the\nactual bank credit."
     },
     "servers": [
         {
@@ -65,7 +65,7 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "id": []
+                                        "id": {}
                                     },
                                     "required": [
                                         "id"
@@ -145,7 +145,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -264,6 +264,88 @@
                 }
             }
         },
+        "/admin/customers": {
+            "get": {
+                "operationId": "admin.customers.index",
+                "tags": [
+                    "AdminCustomer"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 120
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {}
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "has_more": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "items",
+                                        "next_cursor",
+                                        "has_more"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/admin/menus": {
             "get": {
                 "operationId": "admin.menus.index",
@@ -282,7 +364,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": "null"
@@ -420,7 +502,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         }
                                     },
                                     "required": [
@@ -625,7 +707,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -816,7 +898,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": []
+                                            "items": {}
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -1097,7 +1179,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "array",
-                                    "items": []
+                                    "items": {}
                                 }
                             }
                         }
@@ -1271,11 +1353,11 @@
                     },
                     "roles": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "store_memberships": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     }
                 },
                 "required": [
@@ -1513,7 +1595,7 @@
                     },
                     "items": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     }
                 },
                 "required": [
@@ -1607,7 +1689,7 @@
                     },
                     "items": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "totals": {
                         "type": "object",
@@ -1701,11 +1783,11 @@
                             "array",
                             "null"
                         ],
-                        "items": []
+                        "items": {}
                     },
                     "status_history": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "placed_at": {
                         "type": [
@@ -1856,7 +1938,7 @@
                     },
                     "variants": {
                         "type": "array",
-                        "items": []
+                        "items": {}
                     },
                     "modifier_groups": {
                         "type": "array",
@@ -2248,7 +2330,7 @@
             },
             "SetDailyPortionsRequest": {
                 "type": "object",
-                "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty bánh mì has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
+                "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty b\u00e1nh m\u00ec has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
                 "properties": {
                     "items": {
                         "type": "array",

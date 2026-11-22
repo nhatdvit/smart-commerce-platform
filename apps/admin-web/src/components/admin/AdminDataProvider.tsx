@@ -20,6 +20,7 @@ import {
   type Coupon,
   type CouponDraft,
 } from '@/lib/coupons-api';
+import { loadCustomers as loadCustomersRequest, type AdminCustomer } from '@/lib/customers-api';
 import {
   archiveMenuProduct,
   createMenuProduct,
@@ -65,6 +66,7 @@ interface AdminContextValue {
   readonly orderCounts: OrderStatusCounts;
   readonly products: readonly MenuProduct[];
   readonly coupons: readonly Coupon[];
+  readonly customers: readonly AdminCustomer[];
   readonly rewards: readonly DemoReward[];
   readonly pendingCount: number;
   readonly modal: AdminModal | null;
@@ -82,6 +84,9 @@ interface AdminContextValue {
   readonly newOrderIds: ReadonlySet<string>;
   readonly couponsBusy: boolean;
   readonly couponsError: string;
+  readonly customersBusy: boolean;
+  readonly customersError: string;
+  readonly hasMoreCustomers: boolean;
   readonly openModal: (modal: AdminModal) => void;
   readonly closeModal: () => void;
   readonly setSidebarOpen: (open: boolean) => void;
@@ -107,6 +112,9 @@ interface AdminContextValue {
   readonly createCoupon: (draft: CouponDraft) => void;
   readonly updateCoupon: (couponId: string, draft: CouponDraft) => void;
   readonly addReward: (name: string, points: number) => void;
+  /** Reads the guest-customer directory. The customers screen asks on mount. */
+  readonly loadCustomers: (search?: string) => void;
+  readonly loadMoreCustomers: () => void;
 }
 
 const AdminContext = createContext<AdminContextValue | null>(null);
@@ -140,6 +148,13 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   /** Whether the list has been asked for yet, so a re-mount does not re-ask. */
   const couponsLoaded = useRef(false);
   const [rewards, setRewards] = useState<readonly DemoReward[]>(INITIAL_REWARDS);
+
+  const [customers, setCustomers] = useState<readonly AdminCustomer[]>([]);
+  const [customersBusy, setCustomersBusy] = useState(false);
+  const [customersError, setCustomersError] = useState('');
+  const [customersCursor, setCustomersCursor] = useState<string | null>(null);
+  /** The search term currently on screen, for "load more" of the same list. */
+  const customersSearch = useRef('');
 
   const [orders, setOrders] = useState<readonly AdminOrder[]>([]);
   const [orderCounts, setOrderCounts] = useState<OrderStatusCounts>({});
@@ -677,6 +692,49 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     void refreshCoupons();
   }, [refreshCoupons]);
 
+  const runCustomersLoad = useCallback(
+    async (search: string, cursor?: string, append = false): Promise<void> => {
+      setCustomersBusy(true);
+
+      try {
+        const page = await loadCustomersRequest(search, cursor);
+        setCustomers((current) => (append ? [...current, ...page.items] : page.items));
+        setCustomersCursor(page.nextCursor);
+        setCustomersError('');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+
+        setCustomersError(
+          error instanceof Error ? error.message : 'Không tải được danh sách khách hàng.',
+        );
+      } finally {
+        setCustomersBusy(false);
+      }
+    },
+    [notify],
+  );
+
+  const loadCustomers = useCallback(
+    (search = ''): void => {
+      customersSearch.current = search;
+      void runCustomersLoad(search);
+    },
+    [runCustomersLoad],
+  );
+
+  const loadMoreCustomers = useCallback((): void => {
+    if (customersCursor === null) {
+      return;
+    }
+
+    void runCustomersLoad(customersSearch.current, customersCursor, true);
+  }, [customersCursor, runCustomersLoad]);
+
   /**
    * Runs one coupon write.
    *
@@ -768,6 +826,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       orderCounts,
       products,
       coupons,
+      customers,
       rewards,
       pendingCount,
       modal,
@@ -782,6 +841,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       newOrderIds,
       couponsBusy,
       couponsError,
+      customersBusy,
+      customersError,
+      hasMoreCustomers: customersCursor !== null,
       openModal,
       closeModal,
       setSidebarOpen,
@@ -802,12 +864,15 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       createCoupon,
       updateCoupon,
       addReward,
+      loadCustomers,
+      loadMoreCustomers,
     }),
     [
       orders,
       orderCounts,
       products,
       coupons,
+      customers,
       rewards,
       pendingCount,
       modal,
@@ -822,6 +887,9 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       newOrderIds,
       couponsBusy,
       couponsError,
+      customersBusy,
+      customersError,
+      customersCursor,
       openModal,
       closeModal,
       notify,
@@ -841,6 +909,8 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       createCoupon,
       updateCoupon,
       addReward,
+      loadCustomers,
+      loadMoreCustomers,
     ],
   );
 

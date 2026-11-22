@@ -1120,6 +1120,60 @@ paths:
         '422':
           $ref: '#/components/responses/ValidationFailed'
 
+  /admin/customers:
+    get:
+      operationId: listAdminCustomers
+      tags: [Admin - Orders]
+      summary: Guest customers, grouped by phone
+      description: |
+        Permission `order.read` - the same grant as the order queue, since
+        reading this is reading orders, only grouped differently. There is no
+        registered-account module yet (CLAUDE.md section 5 still lists
+        `Customer` as a future module), so a "customer" here is every order
+        placed under one contact phone number - the closest thing to an
+        identity a guest checkout has.
+
+        Deliberately carries no points, tier or membership field. That is
+        Loyalty's data, and needs a real customer identity and a real
+        checkout to earn from before either number means anything (CLAUDE.md
+        delivery stage 4).
+
+        `total_spent` counts only orders whose payment is `PAID` - order
+        status and payment status are separate state machines (section 6),
+        and a cancelled or still-uncollected order was never actually spent.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: q
+          in: query
+          description: Partial, case-insensitive match on the phone or the contact name.
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        '200':
+          description: A page of this store's guest customers, most recent activity first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, has_more]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminCustomer'
+                  next_cursor:
+                    type: [string, 'null']
+                  has_more:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
   /admin/payments:
     get:
       operationId: listAdminPayments
@@ -4275,6 +4329,31 @@ components:
                 $ref: '#/components/schemas/PaymentMethod'
               enabled:
                 type: boolean
+
+    AdminCustomer:
+      type: object
+      description: |
+        A guest's order history, grouped by the contact phone number it was
+        placed under - there is no registered-account module yet (CLAUDE.md
+        section 5). Deliberately has no points, tier or membership field; see
+        the path's own description.
+      required: [phone, name, order_count, total_spent]
+      properties:
+        phone:
+          type: string
+        name:
+          type: string
+          description: The contact name on this phone's most recent order.
+        email:
+          type: [string, 'null']
+        order_count:
+          type: integer
+        total_spent:
+          $ref: '#/components/schemas/Money'
+          description: Sums only orders whose payment is PAID.
+        last_order_at:
+          type: [string, 'null']
+          format: date-time
 
     CustomerProfile:
       type: object
