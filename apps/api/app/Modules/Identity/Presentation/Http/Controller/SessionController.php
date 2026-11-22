@@ -85,6 +85,25 @@ final class SessionController extends Controller
         return (new CurrentUserResource($user, $this->storeNames($user)))->response();
     }
 
+    /**
+     * The designed `GET /me`: the authenticated principal, with roles and
+     * store memberships - not just the bare id `auth:sanctum` alone proves.
+     * `auth:sanctum` already turned an unauthenticated request into a 401
+     * before this runs.
+     */
+    public function me(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            throw new BusinessRuleViolation(ErrorCode::Unauthenticated, 'Not authenticated');
+        }
+
+        $user->load(['globalRoles', 'storeMemberships.role']);
+
+        return (new CurrentUserResource($user, $this->storeNames($user)))->response();
+    }
+
     /** Idempotent: calling it twice, or with a session already gone, is not an error. */
     public function logout(Request $request): JsonResponse
     {

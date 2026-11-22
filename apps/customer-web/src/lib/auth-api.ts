@@ -80,7 +80,10 @@ export async function updateOwnProfile(name: string): Promise<CurrentCustomer> {
   return toCustomerFromProfile(await api.put<ApiCustomerProfile>('/customer/profile', { name }));
 }
 
-export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
   await api.put('/customer/password', {
     current_password: currentPassword,
     new_password: newPassword,

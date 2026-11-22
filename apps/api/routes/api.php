@@ -55,9 +55,9 @@ Route::get('/', static fn (Request $request): array => [
     'request_id' => $request->attributes->get('request_id'),
 ])->name('api.index');
 
-Route::get('/me', static fn (Request $request): array => [
-    'id' => $request->user()?->getAuthIdentifier(),
-])->middleware('auth:sanctum')->name('api.me');
+Route::get('/me', [SessionController::class, 'me'])
+    ->middleware('auth:sanctum')
+    ->name('api.me');
 
 /*
  * Session lifecycle for the first-party web apps (cookie authentication).

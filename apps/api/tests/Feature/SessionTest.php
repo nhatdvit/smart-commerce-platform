@@ -240,3 +240,17 @@ it('stores a password that the login endpoint can later verify', function (): vo
         ->assertOk()
         ->assertJsonPath('phone', '0909555005');
 });
+
+it("reports the signed-in principal's name, phone and roles on GET /me", function (): void {
+    $customer = User::factory()->phoneOnly()->create(['phone' => '0909555010', 'full_name' => 'Khách A']);
+
+    $this->actingAs($customer, 'web')
+        ->withHeaders(DASHBOARD_HEADERS)
+        ->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('id', $customer->id)
+        ->assertJsonPath('name', 'Khách A')
+        ->assertJsonPath('phone', '0909555010')
+        ->assertJsonCount(0, 'roles')
+        ->assertJsonCount(0, 'store_memberships');
+});

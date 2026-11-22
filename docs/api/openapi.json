@@ -54,32 +54,6 @@
                 }
             }
         },
-        "/me": {
-            "get": {
-                "operationId": "me",
-                "responses": {
-                    "200": {
-                        "description": "",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": []
-                                    },
-                                    "required": [
-                                        "id"
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/AuthenticationException"
-                    }
-                }
-            }
-        },
         "/admin/coupons": {
             "get": {
                 "operationId": "admin.coupons.index",
@@ -2361,6 +2335,30 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/me": {
+            "get": {
+                "operationId": "me",
+                "summary": "The designed `GET /me`: the authenticated principal, with roles and\nstore memberships - not just the bare id `auth:sanctum` alone proves.\n`auth:sanctum` already turned an unauthenticated request into a 401\nbefore this runs",
+                "tags": [
+                    "Session"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CurrentUserResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUserResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     }
                 }
             }
