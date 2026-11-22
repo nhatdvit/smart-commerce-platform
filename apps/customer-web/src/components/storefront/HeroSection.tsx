@@ -12,7 +12,7 @@ import { scrollToSection } from './scroll';
  */
 export function HeroSection() {
   return (
-    <section className="hero">
+    <section className="hero" id="hero">
       <div className="hero-copy">
         <span className="eyebrow">MÓN NGON NHÀ LÀM · GIAO MỖI NGÀY</span>
         <h1>

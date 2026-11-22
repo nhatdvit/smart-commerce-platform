@@ -61,9 +61,20 @@ select:focus-visible {
   background: #fff;
   padding: 0 max(22px, calc((100vw - 1680px) / 2));
   box-shadow: 0 1px 8px #14243a12;
+  position: static;
+  z-index: 20;
+}
+/*
+ * The hero banner is the page's first section, so a header that is sticky
+ * from scroll position zero has no "slack" before it starts overlapping
+ * the hero - it would cover the headline and the top of the cover photo on
+ * the very first scroll tick. `usePinnedHeader` only adds this class once
+ * the hero has scrolled completely out of view, so switching `.header`
+ * from static to sticky never fights with content still inside it.
+ */
+.header--pinned {
   position: sticky;
   top: 0;
-  z-index: 20;
 }
 .brand {
   display: flex;

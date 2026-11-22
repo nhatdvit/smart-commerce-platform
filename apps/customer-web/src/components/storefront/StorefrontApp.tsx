@@ -19,6 +19,7 @@ import {
   IconStar,
 } from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
+import { usePinnedHeader } from './use-pinned-header';
 import { useStorefront } from './use-storefront';
 
 /**
@@ -35,6 +36,7 @@ import { useStorefront } from './use-storefront';
 export function StorefrontApp() {
   const store = useStorefront();
   const layerOpen = store.drawerOpen || store.modal !== null;
+  const headerPinned = usePinnedHeader('hero');
 
   // Escape closes the drawer and the modal, and the page behind a layer must
   // not scroll - both behaviours of the delivered design.
@@ -64,6 +66,7 @@ export function StorefrontApp() {
       <SiteHeader
         search={store.search}
         cartCount={store.totals.count}
+        pinned={headerPinned}
         onSearchChange={store.setSearch}
         onOpenCart={() => store.setDrawerOpen(true)}
         onOpenLogin={() => store.setModal({ kind: 'login' })}

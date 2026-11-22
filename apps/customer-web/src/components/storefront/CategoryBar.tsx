@@ -1,6 +1,6 @@
 'use client';
 
-import { IconGrid, IconSkewer, IconTicket } from './icons';
+import { CategoryIcon, IconGrid, IconTicket } from './icons';
 import type { CategoryFilter } from './use-storefront';
 
 /** Tile size from the design: the stylesheet set these glyphs at 32px. */
@@ -41,7 +41,7 @@ export function CategoryBar({ categories, active, onSelect }: CategoryBarProps) 
           onClick={() => onSelect(category.id)}
         >
           <span>
-            <IconSkewer size={TILE_ICON} />
+            <CategoryIcon slug={category.slug} size={TILE_ICON} />
           </span>
           <b>{category.name}</b>
         </button>

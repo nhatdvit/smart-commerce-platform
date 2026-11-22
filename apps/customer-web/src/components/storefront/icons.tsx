@@ -148,6 +148,42 @@ export function IconTicket({ size }: IconProps) {
   );
 }
 
+/** Fallback for a real category this icon set has no dedicated glyph for. */
+export function IconDish({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="12" r="8.4" />
+      <circle cx="12" cy="12" r="3.2" />
+    </Icon>
+  );
+}
+
+/**
+ * Renders the tab icon for a real category, keyed by its slug rather than its
+ * (editable, Vietnamese) name. Falls back to a plain dish for a category this
+ * storefront has no dedicated glyph for yet, so every tab still reads as food.
+ */
+export function CategoryIcon({ slug, size }: { readonly slug: string } & IconProps) {
+  switch (slug) {
+    case 'banh-mi':
+      return <IconBaguette size={size} />;
+    case 'xoi':
+      return <IconXoi size={size} />;
+    case 'mon-chinh':
+      return <IconNoodleBowl size={size} />;
+    case 'do-uong':
+      return <IconCup size={size} />;
+    case 'cha-dac-san':
+      return <IconSkewer size={size} />;
+    case 'combo':
+      return <IconBox size={size} />;
+    case 'an-vat':
+      return <IconDumpling size={size} />;
+    default:
+      return <IconDish size={size} />;
+  }
+}
+
 // ------------------------------------------------------------------ sections
 
 export function IconFlame({ size }: IconProps) {
@@ -308,7 +344,8 @@ function IconBanhMi({ size }: IconProps) {
   );
 }
 
-function IconXoi({ size }: IconProps) {
+/** Xôi: also used as the Xôi category tab's icon. */
+export function IconXoi({ size }: IconProps) {
   return (
     <Icon size={size}>
       <path d="M4.5 12.5h15a7.5 7.5 0 0 1-15 0Z" />

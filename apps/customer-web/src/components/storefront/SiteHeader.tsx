@@ -14,6 +14,7 @@ const NAV_ITEMS: readonly { readonly label: string; readonly target: string }[] 
 interface SiteHeaderProps {
   readonly search: string;
   readonly cartCount: number;
+  readonly pinned: boolean;
   readonly onSearchChange: (value: string) => void;
   readonly onOpenCart: () => void;
   readonly onOpenLogin: () => void;
@@ -22,12 +23,13 @@ interface SiteHeaderProps {
 export function SiteHeader({
   search,
   cartCount,
+  pinned,
   onSearchChange,
   onOpenCart,
   onOpenLogin,
 }: SiteHeaderProps) {
   return (
-    <header className="header">
+    <header className={pinned ? 'header header--pinned' : 'header'}>
       <div
         className="brand"
         role="button"
