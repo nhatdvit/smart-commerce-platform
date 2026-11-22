@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Order;
 
+use App\Modules\Order\Domain\Contract\CustomerDirectory;
 use App\Modules\Order\Domain\Contract\OrderRepository;
 use App\Modules\Order\Domain\Entity\Order;
+use App\Modules\Order\Infrastructure\Persistence\EloquentCustomerDirectory;
 use App\Modules\Order\Infrastructure\Persistence\EloquentOrderRepository;
 use App\Modules\Order\Presentation\Policy\OrderPolicy;
 use Illuminate\Support\Facades\Gate;
@@ -28,6 +30,7 @@ final class OrderServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(OrderRepository::class, EloquentOrderRepository::class);
+        $this->app->singleton(CustomerDirectory::class, EloquentCustomerDirectory::class);
     }
 
     public function boot(): void
