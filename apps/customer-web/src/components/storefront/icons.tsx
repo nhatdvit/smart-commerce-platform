@@ -148,6 +148,42 @@ export function IconTicket({ size }: IconProps) {
   );
 }
 
+/** Fallback for a real category this icon set has no dedicated glyph for. */
+export function IconDish({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="12" r="8.4" />
+      <circle cx="12" cy="12" r="3.2" />
+    </Icon>
+  );
+}
+
+/**
+ * Renders the tab icon for a real category, keyed by its slug rather than its
+ * (editable, Vietnamese) name. Falls back to a plain dish for a category this
+ * storefront has no dedicated glyph for yet, so every tab still reads as food.
+ */
+export function CategoryIcon({ slug, size }: { readonly slug: string } & IconProps) {
+  switch (slug) {
+    case 'banh-mi':
+      return <IconBaguette size={size} />;
+    case 'xoi':
+      return <IconXoi size={size} />;
+    case 'mon-chinh':
+      return <IconNoodleBowl size={size} />;
+    case 'do-uong':
+      return <IconCup size={size} />;
+    case 'cha-dac-san':
+      return <IconSkewer size={size} />;
+    case 'combo':
+      return <IconBox size={size} />;
+    case 'an-vat':
+      return <IconDumpling size={size} />;
+    default:
+      return <IconDish size={size} />;
+  }
+}
+
 // ------------------------------------------------------------------ sections
 
 export function IconFlame({ size }: IconProps) {
@@ -284,4 +320,93 @@ export function IconCheckCircle({ size }: IconProps) {
       <path d="m8 12.3 2.6 2.6 5.4-5.4" />
     </Icon>
   );
+}
+
+// ------------------------------------------------------------ food thumbs
+
+/**
+ * Stand-ins for product photography, one per dish family.
+ *
+ * The same line set the admin dashboard uses for the same purpose - a product
+ * created there with one of these names looks the same here.
+ */
+export type FoodIconName = 'banh-mi' | 'xoi' | 'pho' | 'drink' | 'combo' | 'gift';
+
+function IconBanhMi({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M3.5 13.5c0-3.6 3.8-6.5 8.5-6.5s8.5 2.9 8.5 6.5" />
+      <path d="M3.5 13.5c0 2 1.6 3.5 3.5 3.5h10c1.9 0 3.5-1.5 3.5-3.5" />
+      <path d="M3.5 13.5h17" />
+      <path d="M8.2 9.6 9.6 12" />
+      <path d="M13 9.1 14.4 11.5" />
+    </Icon>
+  );
+}
+
+/** Xôi: also used as the Xôi category tab's icon. */
+export function IconXoi({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M4.5 12.5h15a7.5 7.5 0 0 1-15 0Z" />
+      <path d="M3.5 12.5h17" />
+      <path d="M8.4 9.4c.9-1 2.1-1.6 3.6-1.6s2.7.6 3.6 1.6" />
+      <path d="M11 5.4c.6-.5 1.4-.5 2 0" />
+    </Icon>
+  );
+}
+
+function IconPho({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M3.5 11.5h17a8.5 8.5 0 0 1-8.5 8.5 8.5 8.5 0 0 1-8.5-8.5Z" />
+      <path d="M2.5 11.5h19" />
+      <path d="M9 3.2c-.9 1.2-.9 2.2 0 3.4" />
+      <path d="M13.5 2.6c-1.1 1.4-1.1 2.7 0 4.1" />
+    </Icon>
+  );
+}
+
+function IconDrinkThumb({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M5.5 5.5h13v2.2h-13Z" />
+      <path d="M6.6 7.7h10.8l-1.2 11.1a2 2 0 0 1-2 1.7h-4.4a2 2 0 0 1-2-1.7Z" />
+      <path d="M13.8 2.6 12.6 5.5" />
+      <path d="M7.5 12.5h9" />
+    </Icon>
+  );
+}
+
+function IconComboThumb({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <rect x="3" y="6.5" width="18" height="13.5" rx="2.4" />
+      <path d="M3 11.2h18" />
+      <path d="M12 11.2V20" />
+      <path d="M8.5 6.5 10 3.5h4l1.5 3" />
+    </Icon>
+  );
+}
+
+/**
+ * Renders the thumbnail icon a dish is tagged with, falling back to the gift
+ * box for anything the server sends that is not one of the known names - a
+ * category this storefront does not know about yet must still show something.
+ */
+export function FoodIcon({ name, size }: { readonly name: string | null } & IconProps) {
+  switch (name) {
+    case 'banh-mi':
+      return <IconBanhMi size={size} />;
+    case 'xoi':
+      return <IconXoi size={size} />;
+    case 'pho':
+      return <IconPho size={size} />;
+    case 'drink':
+      return <IconDrinkThumb size={size} />;
+    case 'combo':
+      return <IconComboThumb size={size} />;
+    default:
+      return <IconGift size={size} />;
+  }
 }

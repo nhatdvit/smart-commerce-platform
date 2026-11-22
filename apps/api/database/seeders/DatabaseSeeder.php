@@ -32,6 +32,9 @@ final class DatabaseSeeder extends Seeder
         $this->call(DemoStoreSeeder::class);
         // After the demo store exists, so it gets a menu too.
         $this->call(DefaultMenuSeeder::class);
+        // After there is a menu to put dishes on, and before the orders that
+        // snapshot them.
+        $this->call(DemoCatalogMenuSeeder::class);
         // Last: the orders snapshot whatever the menu offers by now, and they
         // are attributed to the demo staff the store seeder created.
         $this->call(DemoOrderSeeder::class);

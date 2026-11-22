@@ -2,25 +2,34 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { PRODUCTS, findProduct, type Product, type ProductCategory } from '@/data/products';
+import {
+  MenuApiError,
+  groupIntoCards,
+  loadTodayMenu,
+  type MenuItem,
+  type MenuProductCard,
+} from '@/lib/menu-api';
 
-/** `all` and `promo` are navigation filters, not product categories. */
-export type CategoryFilter = 'all' | 'promo' | ProductCategory;
+/**
+ * Which section of the menu is showing.
+ *
+ * `'all'` and `'promo'` are reserved navigation values, not real categories;
+ * any other string is a category id. One alias rather than a union, because a
+ * category id is itself a string and TypeScript collapses `'all' | string` to
+ * `string` anyway.
+ */
+export type CategoryFilter = string;
 
-/** Cart key: the product id, plus the variant index when the product has variants. */
+/** Cart key: the menu item id - the exact sellable unit a cart line references. */
 export type CartKey = string;
 export type CartState = Readonly<Record<CartKey, number>>;
 
 export interface CartLine {
   readonly key: CartKey;
-  readonly product: Product;
+  readonly item: MenuItem;
   readonly quantity: number;
-  /** Product name with the chosen variant label appended, as the design shows it. */
+  /** Product name with the chosen variant appended, when the dish has more than one. */
   readonly displayName: string;
-  /** Unit price of the chosen variant, in integer đồng. */
-  readonly unitPrice: number;
-  /** The noun after the price: the product unit, or "quy cách" for variant products. */
-  readonly unitLabel: string;
 }
 
 export interface CartTotals {
@@ -31,7 +40,7 @@ export interface CartTotals {
 }
 
 export type ModalView =
-  | { readonly kind: 'variants'; readonly productId: number }
+  | { readonly kind: 'variants'; readonly productId: string }
   | { readonly kind: 'checkout' }
   | { readonly kind: 'rewards' }
   | { readonly kind: 'login' }
@@ -47,10 +56,6 @@ const POINTS_KEY = 'pq-v5-points';
 const FAVORITES_KEY = 'pq-v5-favorites';
 const STARTING_POINTS = 185;
 const COUPON_CODES = ['SANG10', 'GIAM5K'] as const;
-
-export function cartKeyFor(productId: number, variantIndex?: number): CartKey {
-  return variantIndex === undefined ? String(productId) : `${productId}_${variantIndex}`;
-}
 
 function readStored(key: string): unknown {
   try {
@@ -78,33 +83,14 @@ function asCart(value: unknown): CartState {
   return cart;
 }
 
-function asFavorites(value: unknown): readonly number[] {
-  return Array.isArray(value) ? value.filter((id): id is number => typeof id === 'number') : [];
+function asFavorites(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
 }
 
 function asPoints(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
     ? Math.floor(value)
     : STARTING_POINTS;
-}
-
-export function cartLineFor(key: CartKey, quantity: number): CartLine | null {
-  const [rawId, rawVariant] = key.split('_');
-  const product = findProduct(Number(rawId));
-  if (product === undefined) {
-    return null;
-  }
-
-  const variant = rawVariant === undefined ? undefined : product.variants?.[Number(rawVariant)];
-
-  return {
-    key,
-    product,
-    quantity,
-    displayName: variant === undefined ? product.name : `${product.name} · ${variant.label}`,
-    unitPrice: variant?.price ?? product.price,
-    unitLabel: product.variants === undefined ? product.unit : 'quy cách',
-  };
 }
 
 function discountFor(code: string, subtotal: number): number {
@@ -121,15 +107,71 @@ function discountFor(code: string, subtotal: number): number {
 /**
  * All storefront interaction state.
  *
- * Cart, coupon and loyalty values live in the browser exactly as the delivered
- * prototype did. They are presentation state only: the server revalidates
- * price, availability and totals at checkout and never trusts these
- * (CLAUDE.md section 6).
+ * The menu is real: `GET /menus/today`, revalidated on every page load. Cart,
+ * coupon and loyalty values stay in the browser exactly as the delivered
+ * prototype did - they are presentation state only, and a real checkout (not
+ * built yet) would have the server revalidate price, availability and totals
+ * again rather than trust them (CLAUDE.md section 6).
  */
 export function useStorefront() {
+  const [items, setItems] = useState<readonly MenuItem[]>([]);
+  const [menuBusy, setMenuBusy] = useState(true);
+  const [menuError, setMenuError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setMenuBusy(true);
+    loadTodayMenu()
+      .then((menu) => {
+        if (cancelled) {
+          return;
+        }
+        setItems(menu?.items ?? []);
+        setMenuError('');
+      })
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setMenuError(error instanceof MenuApiError ? error.message : 'Không tải được thực đơn.');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMenuBusy(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cards = useMemo(() => groupIntoCards(items), [items]);
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const cardsByProductId = useMemo(
+    () => new Map(cards.map((card) => [card.productId, card])),
+    [cards],
+  );
+
+  const categories = useMemo(() => {
+    const seen = new Map<
+      string,
+      { readonly id: string; readonly name: string; readonly slug: string }
+    >();
+
+    for (const card of cards) {
+      if (card.category !== null && !seen.has(card.category.id)) {
+        seen.set(card.category.id, card.category);
+      }
+    }
+
+    return Array.from(seen.values());
+  }, [cards]);
+
   const [cart, setCart] = useState<CartState>({});
   const [points, setPoints] = useState(STARTING_POINTS);
-  const [favorites, setFavorites] = useState<readonly number[]>([]);
+  const [favorites, setFavorites] = useState<readonly string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   const [coupon, setCoupon] = useState('');
@@ -174,19 +216,33 @@ export function useStorefront() {
     toastTimer.current = setTimeout(() => setToastMessage(''), 2500);
   }, []);
 
-  const lines = useMemo(
-    () =>
-      Object.entries(cart)
-        .map(([key, quantity]) => cartLineFor(key, quantity))
-        .filter((line): line is CartLine => line !== null && line.quantity > 0),
-    [cart],
-  );
+  const lines = useMemo<readonly CartLine[]>(() => {
+    const result: CartLine[] = [];
+
+    for (const [key, quantity] of Object.entries(cart)) {
+      const item = itemsById.get(key);
+
+      if (item === undefined || quantity <= 0) {
+        continue;
+      }
+
+      const card = cardsByProductId.get(item.productId);
+      const displayName =
+        card === undefined || card.options.length <= 1
+          ? item.productName
+          : `${item.productName} · ${item.variantName}`;
+
+      result.push({ key, item, quantity, displayName });
+    }
+
+    return result;
+  }, [cart, itemsById, cardsByProductId]);
 
   const totals = useMemo<CartTotals>(() => {
     let subtotal = 0;
     let count = 0;
     for (const line of lines) {
-      subtotal += line.unitPrice * line.quantity;
+      subtotal += line.item.price * line.quantity;
       count += line.quantity;
     }
     const discount = discountFor(coupon, subtotal);
@@ -194,23 +250,37 @@ export function useStorefront() {
     return { subtotal, count, discount, total: Math.max(0, subtotal - discount) };
   }, [lines, coupon]);
 
-  const addToCart = useCallback(
-    (productId: number, variantIndex?: number) => {
-      const product = findProduct(productId);
-      if (product === undefined) {
-        return;
-      }
-      if (product.variants !== undefined && variantIndex === undefined) {
-        setModal({ kind: 'variants', productId });
+  /** Adds a specific sellable variant directly - what the variant picker calls once a choice is made. */
+  const addMenuItem = useCallback(
+    (menuItemId: string) => {
+      const item = itemsById.get(menuItemId);
 
+      if (item === undefined) {
         return;
       }
 
-      const key = cartKeyFor(productId, variantIndex);
-      setCart((current) => ({ ...current, [key]: (current[key] ?? 0) + 1 }));
-      toast(`Đã thêm ${product.name} vào giỏ hàng`);
+      setCart((current) => ({ ...current, [menuItemId]: (current[menuItemId] ?? 0) + 1 }));
+      toast(`Đã thêm ${item.productName} vào giỏ hàng`);
     },
-    [toast],
+    [itemsById, toast],
+  );
+
+  /** Adds a dish card: straight to the cart with one option, or opens the picker with more than one. */
+  const addToCart = useCallback(
+    (card: MenuProductCard) => {
+      const [onlyOption] = card.options;
+
+      if (onlyOption === undefined) {
+        return;
+      }
+      if (card.options.length === 1) {
+        addMenuItem(onlyOption.id);
+
+        return;
+      }
+      setModal({ kind: 'variants', productId: card.productId });
+    },
+    [addMenuItem],
   );
 
   const changeQuantity = useCallback((key: CartKey, delta: number) => {
@@ -238,7 +308,7 @@ export function useStorefront() {
     setCoupon('');
   }, [totals.count]);
 
-  const toggleFavorite = useCallback((productId: number) => {
+  const toggleFavorite = useCallback((productId: string) => {
     setFavorites((current) =>
       current.includes(productId)
         ? current.filter((id) => id !== productId)
@@ -301,16 +371,15 @@ export function useStorefront() {
   );
 
   const redeemReward = useCallback(
-    (productId: number, cost: number) => {
-      const product = findProduct(productId);
-      if (product === undefined || points < cost) {
+    (name: string, cost: number) => {
+      if (points < cost) {
         return;
       }
-      if (!window.confirm(`Đổi ${cost} điểm lấy ${product.name}? (demo)`)) {
+      if (!window.confirm(`Đổi ${cost} điểm lấy ${name}? (demo)`)) {
         return;
       }
       setPoints((current) => current - cost);
-      toast(`Đổi thưởng demo thành công: ${product.name}`);
+      toast(`Đổi thưởng demo thành công: ${name}`);
     },
     [points, toast],
   );
@@ -320,20 +389,23 @@ export function useStorefront() {
     setDrawerOpen(false);
   }, []);
 
-  const visibleProducts = useMemo(() => {
+  const visibleCards = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase('vi');
 
-    return PRODUCTS.filter(
-      (product) =>
+    return cards.filter(
+      (card) =>
         (categoryFilter === 'all' ||
           categoryFilter === 'promo' ||
-          product.category === categoryFilter ||
-          (categoryFilter === 'breakfast' && product.category === 'main')) &&
-        product.name.toLocaleLowerCase('vi').includes(needle),
+          card.category?.id === categoryFilter) &&
+        card.name.toLocaleLowerCase('vi').includes(needle),
     );
-  }, [categoryFilter, search]);
+  }, [cards, categoryFilter, search]);
 
   return {
+    menuBusy,
+    menuError,
+    categories,
+    cardsByProductId,
     lines,
     totals,
     points,
@@ -345,13 +417,14 @@ export function useStorefront() {
     modal,
     drawerOpen,
     toastMessage,
-    visibleProducts,
+    visibleCards,
     setCouponInput,
     setCategoryFilter,
     setSearch,
     setModal,
     setDrawerOpen,
     addToCart,
+    addMenuItem,
     changeQuantity,
     clearCart,
     toggleFavorite,

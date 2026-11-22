@@ -1,56 +1,62 @@
 'use client';
 
-import type { ReactNode } from 'react';
-
-import {
-  IconBaguette,
-  IconBox,
-  IconCup,
-  IconDumpling,
-  IconGrid,
-  IconNoodleBowl,
-  IconSkewer,
-  IconTicket,
-} from './icons';
+import { CategoryIcon, IconGrid, IconTicket } from './icons';
 import type { CategoryFilter } from './use-storefront';
 
 /** Tile size from the design: the stylesheet set these glyphs at 32px. */
 const TILE_ICON = 30;
 
-const CATEGORIES: readonly {
-  readonly key: CategoryFilter;
-  readonly icon: ReactNode;
-  readonly label: string;
-}[] = [
-  { key: 'all', icon: <IconGrid size={TILE_ICON} />, label: 'Tất cả' },
-  { key: 'breakfast', icon: <IconBaguette size={TILE_ICON} />, label: 'Bữa sáng' },
-  { key: 'special', icon: <IconSkewer size={TILE_ICON} />, label: 'Chả đặc sản' },
-  { key: 'main', icon: <IconNoodleBowl size={TILE_ICON} />, label: 'Món chính' },
-  { key: 'drink', icon: <IconCup size={TILE_ICON} />, label: 'Đồ uống' },
-  { key: 'combo', icon: <IconBox size={TILE_ICON} />, label: 'Combo' },
-  { key: 'snack', icon: <IconDumpling size={TILE_ICON} />, label: 'Ăn vặt' },
-  { key: 'promo', icon: <IconTicket size={TILE_ICON} />, label: 'Ưu đãi' },
-];
+interface Category {
+  readonly id: string;
+  readonly name: string;
+  readonly slug: string;
+}
 
 interface CategoryBarProps {
+  readonly categories: readonly Category[];
   readonly active: CategoryFilter;
   readonly onSelect: (category: CategoryFilter) => void;
 }
 
-export function CategoryBar({ active, onSelect }: CategoryBarProps) {
+/** Today's real categories, plus the two navigation-only tiles the design always shows. */
+export function CategoryBar({ categories, active, onSelect }: CategoryBarProps) {
   return (
     <section className="categories" aria-label="Danh mục sản phẩm" id="categories">
-      {CATEGORIES.map((category) => (
+      <button
+        type="button"
+        className={active === 'all' ? 'category active' : 'category'}
+        onClick={() => onSelect('all')}
+      >
+        <span>
+          <IconGrid size={TILE_ICON} />
+        </span>
+        <b>Tất cả</b>
+      </button>
+
+      {categories.map((category) => (
         <button
-          key={category.key}
+          key={category.id}
           type="button"
-          className={category.key === active ? 'category active' : 'category'}
-          onClick={() => onSelect(category.key)}
+          className={category.id === active ? 'category active' : 'category'}
+          onClick={() => onSelect(category.id)}
         >
-          <span>{category.icon}</span>
-          <b>{category.label}</b>
+          <span>
+            <CategoryIcon slug={category.slug} size={TILE_ICON} />
+          </span>
+          <b>{category.name}</b>
         </button>
       ))}
+
+      <button
+        type="button"
+        className={active === 'promo' ? 'category active' : 'category'}
+        onClick={() => onSelect('promo')}
+      >
+        <span>
+          <IconTicket size={TILE_ICON} />
+        </span>
+        <b>Ưu đãi</b>
+      </button>
     </section>
   );
 }

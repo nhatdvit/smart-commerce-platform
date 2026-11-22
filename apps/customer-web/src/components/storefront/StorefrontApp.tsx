@@ -19,6 +19,7 @@ import {
   IconStar,
 } from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
+import { usePinnedHeader } from './use-pinned-header';
 import { useStorefront } from './use-storefront';
 
 /**
@@ -26,13 +27,16 @@ import { useStorefront } from './use-storefront';
  *
  * It is one scrolling page, exactly as designed: the category bar and the
  * "see all" links filter the sections in place rather than navigating, so the
- * whole screen is a single client component tree. Every price, total and
- * loyalty figure here is demo data (see `@/data/products`); the API has no
- * catalogue, cart or order endpoint yet.
+ * whole screen is a single client component tree.
+ *
+ * The menu is real now (`GET /menus/today`). Cart, checkout, sign-in and
+ * loyalty points are still the delivered demo behaviour, held in the browser:
+ * there is no cart, order or customer-account endpoint yet for them to call.
  */
 export function StorefrontApp() {
   const store = useStorefront();
   const layerOpen = store.drawerOpen || store.modal !== null;
+  const headerPinned = usePinnedHeader('hero');
 
   // Escape closes the drawer and the modal, and the page behind a layer must
   // not scroll - both behaviours of the delivered design.
@@ -62,6 +66,7 @@ export function StorefrontApp() {
       <SiteHeader
         search={store.search}
         cartCount={store.totals.count}
+        pinned={headerPinned}
         onSearchChange={store.setSearch}
         onOpenCart={() => store.setDrawerOpen(true)}
         onOpenLogin={() => store.setModal({ kind: 'login' })}
@@ -72,6 +77,7 @@ export function StorefrontApp() {
           <HeroSection />
 
           <CategoryBar
+            categories={store.categories}
             active={store.categoryFilter}
             onSelect={(category) => {
               store.setCategoryFilter(category);
@@ -79,13 +85,21 @@ export function StorefrontApp() {
             }}
           />
 
-          <ProductSections
-            products={store.visibleProducts}
-            favorites={store.favorites}
-            onAdd={store.addToCart}
-            onToggleFavorite={store.toggleFavorite}
-            onSeeAll={store.setCategoryFilter}
-          />
+          {store.menuError !== '' ? (
+            <div className="notice">{store.menuError}</div>
+          ) : store.menuBusy ? (
+            <div id="menu">
+              <p className="notice">Đang tải thực đơn...</p>
+            </div>
+          ) : (
+            <ProductSections
+              cards={store.visibleCards}
+              favorites={store.favorites}
+              onAdd={store.addToCart}
+              onToggleFavorite={store.toggleFavorite}
+              onSeeAll={store.setCategoryFilter}
+            />
+          )}
 
           <section className="why">
             <div>
@@ -168,9 +182,10 @@ export function StorefrontApp() {
           view={store.modal}
           totals={store.totals}
           points={store.points}
+          cardsByProductId={store.cardsByProductId}
           onClose={store.closeLayers}
-          onAddVariant={(productId, variantIndex) => {
-            store.addToCart(productId, variantIndex);
+          onAddMenuItem={(menuItemId) => {
+            store.addMenuItem(menuItemId);
             store.closeLayers();
           }}
           onPlaceOrder={store.placeDemoOrder}

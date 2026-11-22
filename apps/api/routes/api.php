@@ -9,6 +9,7 @@ use App\Modules\Loyalty\Presentation\Http\Controller\AdminLoyaltyController;
 use App\Modules\Loyalty\Presentation\Http\Controller\AdminRewardController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuController;
 use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
+use App\Modules\Menu\Presentation\Http\Controller\PublicMenuController;
 use App\Modules\Order\Presentation\Http\Controller\AdminCustomerController;
 use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
 use App\Modules\Payment\Presentation\Http\Controller\AdminPaymentController;
@@ -21,13 +22,13 @@ use Illuminate\Support\Facades\Route;
 /*
  * Versioned business API. The api/v1 prefix is applied in bootstrap/app.php.
  *
- * Built so far: the metadata endpoints, the session endpoints, and the admin
- * catalog, menu, order, discount-code and payment endpoints that drive the
- * operations dashboard. The rest of CLAUDE.md section 8 arrives with its
- * module:
+ * Built so far: the metadata endpoints, the session endpoints, the public
+ * today's-menu endpoint that drives the customer storefront's home screen, and
+ * the admin catalog, menu, order, discount-code and payment endpoints that
+ * drive the operations dashboard. The rest of CLAUDE.md section 8 arrives with
+ * its module:
  *
  *   GET    /stores/{id}                        Store
- *   GET    /menus/today                        Menu
  *   GET    /products, /products/{id}           Catalog (public)
  *   POST   /carts, /carts/{id}/items           Cart
  *   POST   /orders                             Order   (Idempotency-Key required)
@@ -84,6 +85,15 @@ Route::get('/media/products/{store}/{file}', [ProductImageController::class, 'sh
     ->whereUuid('store')
     ->where('file', '[0-9a-f-]{36}\.(jpg|png|webp)')
     ->name('api.media.product-image');
+
+/*
+ * The customer storefront's home screen: today's menu, grouped by category.
+ * Public on purpose - a menu is what a shop puts in its window - so this
+ * carries `store.resolve` alone, never `auth:sanctum` or `store.can`.
+ */
+Route::get('/menus/today', [PublicMenuController::class, 'today'])
+    ->middleware('store.resolve')
+    ->name('api.menus.today');
 
 Route::middleware(['auth:sanctum', 'store.resolve'])
     ->prefix('admin')

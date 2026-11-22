@@ -2,17 +2,28 @@
 
 import { useId, useState, type ReactNode } from 'react';
 
-import { findProduct, productImage, type Product } from '@/data/products';
+import type { MenuProductCard } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 
-import { IconCheckCircle, IconGift } from './icons';
+import { FoodIcon, IconCheckCircle, IconGift, type FoodIconName } from './icons';
 import type { CartTotals, ModalView } from './use-storefront';
 
-/** Points cost of each demo reward, keyed by product id - loyalty is not an API yet. */
-const REWARDS: readonly { readonly productId: number; readonly points: number }[] = [
-  { productId: 5, points: 150 },
-  { productId: 1, points: 200 },
-  { productId: 7, points: 500 },
+/**
+ * Sample rewards for the points-redemption demo.
+ *
+ * Not real menu items: the Loyalty module's reward catalogue is its own thing
+ * (CLAUDE.md section 5) and there is no customer account yet to read a real
+ * balance from (delivery stage 4), so this stays illustrative until both
+ * exist.
+ */
+const DEMO_REWARDS: readonly {
+  readonly name: string;
+  readonly icon: FoodIconName;
+  readonly points: number;
+}[] = [
+  { name: 'Cà phê sữa đá', icon: 'drink', points: 150 },
+  { name: 'Bánh mì pate trứng', icon: 'banh-mi', points: 200 },
+  { name: 'Chả ốc 250g', icon: 'gift', points: 500 },
 ];
 
 interface ModalShellProps {
@@ -42,44 +53,45 @@ function ModalShell({ title, icon, onClose, children }: ModalShellProps) {
 }
 
 interface VariantPickerProps {
-  readonly product: Product;
-  readonly onConfirm: (variantIndex: number) => void;
+  readonly card: MenuProductCard;
+  readonly onConfirm: (menuItemId: string) => void;
 }
 
-function VariantPicker({ product, onConfirm }: VariantPickerProps) {
-  const [variantIndex, setVariantIndex] = useState(0);
-  const variants = product.variants ?? [];
+function VariantPicker({ card, onConfirm }: VariantPickerProps) {
+  const [menuItemId, setMenuItemId] = useState(() => card.options[0]?.id ?? '');
 
   return (
     <>
-      <img
-        src={productImage(product)}
-        alt={product.name}
-        style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 12 }}
-      />
-      <p>Chọn khối lượng phù hợp:</p>
+      {card.imageUrl === null ? (
+        <FoodIcon name={card.icon} size={64} />
+      ) : (
+        <img
+          src={card.imageUrl}
+          alt={card.name}
+          style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 12 }}
+        />
+      )}
+      <p>Chọn quy cách phù hợp:</p>
       <div className="form-row">
         <label htmlFor="variantChoice">Quy cách</label>
         <select
           id="variantChoice"
-          value={variantIndex}
-          onChange={(event) => setVariantIndex(Number(event.target.value))}
+          value={menuItemId}
+          onChange={(event) => setMenuItemId(event.target.value)}
         >
-          {variants.map((variant, index) => (
-            <option key={variant.label} value={index}>
-              {variant.label} — {money(variant.price)}
+          {card.options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.variantName} — {money(option.price)}
             </option>
           ))}
         </select>
       </div>
-      <div className="form-row">
-        <label htmlFor="variantPrep">Chế biến</label>
-        <select id="variantPrep" defaultValue="Đóng gói tiêu chuẩn">
-          <option>Đóng gói tiêu chuẩn</option>
-          <option>Chiên sẵn (ghi chú cho cửa hàng)</option>
-        </select>
-      </div>
-      <button className="btn btn-yellow" type="button" onClick={() => onConfirm(variantIndex)}>
+      <button
+        className="btn btn-yellow"
+        type="button"
+        disabled={menuItemId === ''}
+        onClick={() => onConfirm(menuItemId)}
+      >
         Thêm vào giỏ →
       </button>
     </>
@@ -192,7 +204,7 @@ function CheckoutForm({ totals, onPlace, onInvalid }: CheckoutFormProps) {
 
 interface RewardListProps {
   readonly points: number;
-  readonly onRedeem: (productId: number, cost: number) => void;
+  readonly onRedeem: (name: string, cost: number) => void;
 }
 
 function RewardList({ points, onRedeem }: RewardListProps) {
@@ -201,24 +213,20 @@ function RewardList({ points, onRedeem }: RewardListProps) {
       <p>
         Bạn đang có <strong>{points} điểm</strong>. Chọn phần thưởng để đổi:
       </p>
-      {REWARDS.map((reward) => {
-        const product = findProduct(reward.productId);
-        if (product === undefined) {
-          return null;
-        }
+      {DEMO_REWARDS.map((reward) => {
         const affordable = points >= reward.points;
 
         return (
-          <div className="reward-item" key={reward.productId}>
-            <img src={productImage(product)} alt={product.name} />
+          <div className="reward-item" key={reward.name}>
+            <FoodIcon name={reward.icon} size={32} />
             <div>
-              <strong>{product.name}</strong>
+              <strong>{reward.name}</strong>
               <small>{reward.points} điểm</small>
             </div>
             <button
               type="button"
               disabled={!affordable}
-              onClick={() => onRedeem(reward.productId, reward.points)}
+              onClick={() => onRedeem(reward.name, reward.points)}
             >
               {affordable ? 'Đổi món' : 'Chưa đủ'}
             </button>
@@ -237,35 +245,34 @@ interface ModalLayerProps {
   readonly view: ModalView;
   readonly totals: CartTotals;
   readonly points: number;
+  readonly cardsByProductId: ReadonlyMap<string, MenuProductCard>;
   readonly onClose: () => void;
-  readonly onAddVariant: (productId: number, variantIndex: number) => void;
+  readonly onAddMenuItem: (menuItemId: string) => void;
   readonly onPlaceOrder: (customerName: string, method: 'cash' | 'bank') => void;
   readonly onInvalidCheckout: () => void;
-  readonly onRedeem: (productId: number, cost: number) => void;
+  readonly onRedeem: (name: string, cost: number) => void;
 }
 
 export function ModalLayer({
   view,
   totals,
   points,
+  cardsByProductId,
   onClose,
-  onAddVariant,
+  onAddMenuItem,
   onPlaceOrder,
   onInvalidCheckout,
   onRedeem,
 }: ModalLayerProps) {
   if (view.kind === 'variants') {
-    const product = findProduct(view.productId);
-    if (product === undefined) {
+    const card = cardsByProductId.get(view.productId);
+    if (card === undefined) {
       return null;
     }
 
     return (
-      <ModalShell title={`Chọn quy cách · ${product.name}`} onClose={onClose}>
-        <VariantPicker
-          product={product}
-          onConfirm={(variantIndex) => onAddVariant(product.id, variantIndex)}
-        />
+      <ModalShell title={`Chọn quy cách · ${card.name}`} onClose={onClose}>
+        <VariantPicker card={card} onConfirm={onAddMenuItem} />
       </ModalShell>
     );
   }

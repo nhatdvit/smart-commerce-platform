@@ -2123,6 +2123,63 @@
                 }
             }
         },
+        "/menus/today": {
+            "get": {
+                "operationId": "menus.today",
+                "tags": [
+                    "PublicMenu"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "store_id": {
+                                            "type": "string"
+                                        },
+                                        "menu_id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "service_date": {
+                                            "type": "string"
+                                        },
+                                        "timezone": {
+                                            "type": "string"
+                                        },
+                                        "served_from": {
+                                            "type": "null"
+                                        },
+                                        "served_until": {
+                                            "type": "null"
+                                        },
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        }
+                                    },
+                                    "required": [
+                                        "store_id",
+                                        "menu_id",
+                                        "name",
+                                        "service_date",
+                                        "timezone",
+                                        "served_from",
+                                        "served_until",
+                                        "items"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "operationId": "auth.login",
