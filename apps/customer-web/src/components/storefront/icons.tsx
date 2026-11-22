@@ -312,6 +312,17 @@ export function IconMenuList({ size }: IconProps) {
   );
 }
 
+/** Sign out. */
+export function IconLogout({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M9.5 4.2H6.2a2 2 0 0 0-2 2v11.6a2 2 0 0 0 2 2h3.3" />
+      <path d="M16.3 16.3 21 11.6l-4.7-4.7" />
+      <path d="M21 11.6H9.6" />
+    </Icon>
+  );
+}
+
 /** Order accepted. */
 export function IconCheckCircle({ size }: IconProps) {
   return (

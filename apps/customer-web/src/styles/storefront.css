@@ -245,6 +245,27 @@ select:focus-visible {
 .btn-yellow:hover {
   filter: brightness(0.97);
 }
+.btn-centered {
+  justify-content: center;
+}
+.btn-outline {
+  background: #fff;
+  border: 1.5px solid var(--line);
+  color: var(--navy);
+}
+.btn-outline:hover {
+  border-color: var(--navy);
+  background: #f8fafc;
+}
+.btn-danger-outline {
+  background: #fff;
+  border: 1.5px solid #f4c7c2;
+  color: var(--red);
+}
+.btn-danger-outline:hover {
+  border-color: var(--red);
+  background: #fdf1f0;
+}
 .hero-features {
   display: flex;
   gap: 20px;
@@ -748,13 +769,12 @@ footer {
   color: var(--navy);
 }
 .modal-subheading {
-  margin: 22px 0 6px;
-  font-size: 15px;
-}
-.modal-divider {
-  border: 0;
-  border-top: 1px solid var(--line);
-  margin: 18px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--navy);
 }
 .sign-in-panel {
   text-align: center;
@@ -763,6 +783,46 @@ footer {
   width: 100%;
   justify-content: center;
   margin-top: 10px;
+}
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.profile-avatar {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--navy), #163a63);
+  color: var(--yellow);
+  font-size: 20px;
+  font-weight: 900;
+}
+.profile-identity strong {
+  display: block;
+  font-size: 16px;
+}
+.profile-identity small {
+  color: var(--muted);
+  font-size: 13px;
+}
+.profile-section {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  margin: 22px 0 18px;
+}
+.profile-section .form-row:last-of-type {
+  margin-bottom: 14px;
+}
+.logout-button {
+  width: 100%;
 }
 .modal-total {
   font-size: 21px;
