@@ -76,6 +76,17 @@ select:focus-visible {
   position: sticky;
   top: 0;
 }
+/*
+ * The nav links and the category bar jump here via scrollToSection. Once
+ * the header is pinned (`.header--pinned`), landing without this would put
+ * the top of the target right under the header - the same problem the hero
+ * itself had before `usePinnedHeader`, just further down the page.
+ */
+#menu,
+#promos,
+#rewards {
+  scroll-margin-top: 96px;
+}
 .brand {
   display: flex;
   align-items: center;
