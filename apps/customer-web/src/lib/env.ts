@@ -29,4 +29,7 @@ export function serverApiBaseUrl(): string {
  */
 export const storefrontEnv = {
   apiBaseUrl: process.env.NEXT_PUBLIC_STOREFRONT_API_BASE_URL ?? '/api/v1',
+  csrfPath:
+    (process.env.NEXT_PUBLIC_STOREFRONT_API_BASE_URL ?? '').replace(/\/api\/v1\/?$/, '') +
+    '/sanctum/csrf-cookie',
 } as const;

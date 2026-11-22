@@ -29,9 +29,10 @@ import { useStorefront } from './use-storefront';
  * "see all" links filter the sections in place rather than navigating, so the
  * whole screen is a single client component tree.
  *
- * The menu is real now (`GET /menus/today`). Cart, checkout, sign-in and
- * loyalty points are still the delivered demo behaviour, held in the browser:
- * there is no cart, order or customer-account endpoint yet for them to call.
+ * The menu, sign-in/registration and a signed-in customer's own loyalty
+ * balance are real now. Cart and checkout are still the delivered demo
+ * behaviour, held in the browser: there is no cart or order endpoint yet for
+ * them to call.
  */
 export function StorefrontApp() {
   const store = useStorefront();
@@ -67,9 +68,11 @@ export function StorefrontApp() {
         search={store.search}
         cartCount={store.totals.count}
         pinned={headerPinned}
+        currentCustomer={store.currentCustomer}
         onSearchChange={store.setSearch}
         onOpenCart={() => store.setDrawerOpen(true)}
         onOpenLogin={() => store.setModal({ kind: 'login' })}
+        onOpenProfile={() => store.setModal({ kind: 'profile' })}
       />
 
       <main className="page" id="top">
@@ -120,7 +123,8 @@ export function StorefrontApp() {
         <SidePanels
           lines={store.lines}
           totals={store.totals}
-          points={store.points}
+          currentCustomer={store.currentCustomer}
+          loyaltyBalance={store.loyaltyBalance}
           couponInput={store.couponInput}
           couponMessage={store.couponMessage}
           onCouponInputChange={store.setCouponInput}
@@ -134,6 +138,7 @@ export function StorefrontApp() {
           onClearCart={store.clearCart}
           onCheckout={store.openCheckout}
           onOpenRewards={() => store.setModal({ kind: 'rewards' })}
+          onOpenLogin={() => store.setModal({ kind: 'login' })}
         />
       </main>
 
@@ -151,7 +156,12 @@ export function StorefrontApp() {
           <IconMenuList size={22} />
           <span>Thực đơn</span>
         </button>
-        <button type="button" onClick={() => store.setModal({ kind: 'rewards' })}>
+        <button
+          type="button"
+          onClick={() =>
+            store.setModal({ kind: store.currentCustomer === null ? 'login' : 'rewards' })
+          }
+        >
           <IconStar size={22} />
           <span>Tích điểm</span>
         </button>
@@ -181,8 +191,15 @@ export function StorefrontApp() {
         <ModalLayer
           view={store.modal}
           totals={store.totals}
-          points={store.points}
+          loyaltyBalance={store.loyaltyBalance}
           cardsByProductId={store.cardsByProductId}
+          currentCustomer={store.currentCustomer}
+          authBusy={store.authBusy}
+          authError={store.authError}
+          profileBusy={store.profileBusy}
+          profileError={store.profileError}
+          passwordBusy={store.passwordBusy}
+          passwordError={store.passwordError}
           onClose={store.closeLayers}
           onAddMenuItem={(menuItemId) => {
             store.addMenuItem(menuItemId);
@@ -191,6 +208,11 @@ export function StorefrontApp() {
           onPlaceOrder={store.placeDemoOrder}
           onInvalidCheckout={() => store.toast('Vui lòng nhập tên và số điện thoại hợp lệ')}
           onRedeem={store.redeemReward}
+          onLogin={(phone, password) => void store.login(phone, password)}
+          onRegister={(fullName, phone, password) => void store.register(fullName, phone, password)}
+          onUpdateName={(name) => void store.updateProfile(name)}
+          onChangePassword={(current, next) => void store.changePassword(current, next)}
+          onLogout={store.logout}
         />
       )}
 

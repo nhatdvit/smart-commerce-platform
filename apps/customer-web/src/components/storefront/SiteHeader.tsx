@@ -1,5 +1,7 @@
 'use client';
 
+import type { CurrentCustomer } from '@/lib/auth-api';
+
 import { IconCart, IconSearch, IconUser } from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
 
@@ -15,18 +17,22 @@ interface SiteHeaderProps {
   readonly search: string;
   readonly cartCount: number;
   readonly pinned: boolean;
+  readonly currentCustomer: CurrentCustomer | null;
   readonly onSearchChange: (value: string) => void;
   readonly onOpenCart: () => void;
   readonly onOpenLogin: () => void;
+  readonly onOpenProfile: () => void;
 }
 
 export function SiteHeader({
   search,
   cartCount,
   pinned,
+  currentCustomer,
   onSearchChange,
   onOpenCart,
   onOpenLogin,
+  onOpenProfile,
 }: SiteHeaderProps) {
   return (
     <header className={pinned ? 'header header--pinned' : 'header'}>
@@ -94,9 +100,21 @@ export function SiteHeader({
         <span>{cartCount}</span>
       </button>
 
-      <button className="login" type="button" onClick={onOpenLogin}>
-        <IconUser size={17} /> <span>Đăng nhập</span>
-      </button>
+      {currentCustomer === null ? (
+        <button className="login" type="button" onClick={onOpenLogin}>
+          <IconUser size={17} /> <span>Đăng nhập</span>
+        </button>
+      ) : (
+        <button
+          className="login"
+          type="button"
+          onClick={onOpenProfile}
+          title="Hồ sơ của bạn"
+          aria-label={`Hồ sơ của ${currentCustomer.name}`}
+        >
+          <IconUser size={17} /> <span>{currentCustomer.name}</span>
+        </button>
+      )}
     </header>
   );
 }

@@ -54,32 +54,6 @@
                 }
             }
         },
-        "/me": {
-            "get": {
-                "operationId": "me",
-                "responses": {
-                    "200": {
-                        "description": "",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": []
-                                    },
-                                    "required": [
-                                        "id"
-                                    ]
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "$ref": "#/components/responses/AuthenticationException"
-                    }
-                }
-            }
-        },
         "/admin/coupons": {
             "get": {
                 "operationId": "admin.coupons.index",
@@ -2008,6 +1982,64 @@
                 }
             }
         },
+        "/customer/loyalty": {
+            "get": {
+                "operationId": "customer.loyalty.show",
+                "tags": [
+                    "CustomerLoyalty"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "phone": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "lifetime_earned_points": {
+                                            "type": "integer"
+                                        },
+                                        "balance": {
+                                            "type": "integer"
+                                        },
+                                        "tier": {
+                                            "type": "string",
+                                            "enum": [
+                                                "MEMBER",
+                                                "LOYAL"
+                                            ]
+                                        },
+                                        "tier_label": {
+                                            "type": "string",
+                                            "enum": [
+                                                "Thành viên",
+                                                "Thân thiết"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "phone",
+                                        "lifetime_earned_points",
+                                        "balance",
+                                        "tier",
+                                        "tier_label"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
         "/media/products/{store}/{file}": {
             "get": {
                 "operationId": "media.product-image",
@@ -2123,6 +2155,100 @@
                 }
             }
         },
+        "/customer/profile": {
+            "get": {
+                "operationId": "customer.profile.show",
+                "tags": [
+                    "Profile"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CustomerProfileResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomerProfileResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "customer.profile.update",
+                "tags": [
+                    "Profile"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateProfileRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CustomerProfileResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CustomerProfileResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/customer/password": {
+            "put": {
+                "operationId": "customer.password.update",
+                "tags": [
+                    "Profile"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChangePasswordRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "No content",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": []
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/menus/today": {
             "get": {
                 "operationId": "menus.today",
@@ -2176,6 +2302,63 @@
                                 }
                             }
                         }
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "operationId": "auth.register",
+                "tags": [
+                    "Registration"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CurrentUserResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUserResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/me": {
+            "get": {
+                "operationId": "me",
+                "summary": "The designed `GET /me`: the authenticated principal, with roles and\nstore memberships - not just the bare id `auth:sanctum` alone proves.\n`auth:sanctum` already turned an unauthenticated request into a 401\nbefore this runs",
+                "tags": [
+                    "Session"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CurrentUserResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CurrentUserResource"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     }
                 }
             }
@@ -2386,6 +2569,27 @@
                     "events"
                 ],
                 "title": "AdminPaymentResource"
+            },
+            "ChangePasswordRequest": {
+                "type": "object",
+                "description": "Validates the designed `ChangePasswordRequest`.",
+                "properties": {
+                    "current_password": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "description": "Same floor as RegisterRequest's password, for the same reason.",
+                        "minLength": 8,
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "current_password",
+                    "new_password"
+                ],
+                "title": "ChangePasswordRequest"
             },
             "ConfirmPaymentRequest": {
                 "type": "object",
@@ -2603,6 +2807,47 @@
                 ],
                 "title": "CurrentUserResource"
             },
+            "CustomerProfileResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "pending_email": {
+                        "type": "null"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "email",
+                    "phone",
+                    "pending_email",
+                    "created_at"
+                ],
+                "title": "CustomerProfileResource"
+            },
             "FlagPaymentRequest": {
                 "type": "object",
                 "properties": {
@@ -2706,12 +2951,22 @@
             },
             "LoginRequest": {
                 "type": "object",
-                "description": "Validates the designed `LoginRequest`.\n\nThe password is never logged or echoed: bootstrap/app.php already lists it\namong the fields excluded from flashed input.",
+                "description": "Validates the designed `LoginRequest`.\n\nStaff sign in by email; a customer who registered by phone signs in by\nphone - the same `users` row, the same session guard, two ways to name the\naccount. Exactly one of the two must be present.\n\nThe password is never logged or echoed: bootstrap/app.php already lists it\namong the fields excluded from flashed input.",
                 "properties": {
                     "email": {
-                        "type": "string",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
                         "format": "email",
                         "maxLength": 254
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 20
                     },
                     "password": {
                         "type": "string",
@@ -2723,7 +2978,6 @@
                     }
                 },
                 "required": [
-                    "email",
                     "password"
                 ],
                 "title": "LoginRequest"
@@ -3341,6 +3595,34 @@
                     "reward_id"
                 ],
                 "title": "RedeemRewardRequest"
+            },
+            "RegisterRequest": {
+                "type": "object",
+                "description": "Validates the designed `RegisterRequest`: customer self-registration by\nphone number, the identity Loyalty already keys its ledger on (CLAUDE.md\nsection 6). Staff accounts are provisioned by an admin, not self-service,\nso there is no email variant of this endpoint.",
+                "properties": {
+                    "full_name": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 150
+                    },
+                    "phone": {
+                        "type": "string",
+                        "pattern": "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$",
+                        "maxLength": 20
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Same floor as LoginRequest's password, for the same reason: a\nrule for choosing one, not for typing one.",
+                        "minLength": 8,
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "full_name",
+                    "phone",
+                    "password"
+                ],
+                "title": "RegisterRequest"
             },
             "ReplaceMenuRequest": {
                 "type": "object",
@@ -4002,6 +4284,21 @@
                     "methods"
                 ],
                 "title": "UpdatePaymentMethodsRequest"
+            },
+            "UpdateProfileRequest": {
+                "type": "object",
+                "description": "Validates the designed `UpdateCustomerProfileRequest`, narrowed to `name`:\nsee `UpdateCustomerName` for why phone and email are not accepted here yet.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 2,
+                        "maxLength": 150
+                    }
+                },
+                "required": [
+                    "name"
+                ],
+                "title": "UpdateProfileRequest"
             },
             "UploadProductImageRequest": {
                 "type": "object",

@@ -47,16 +47,13 @@ final class SessionController extends Controller
 
         // Laravel's session guard verifies the hash and regenerates nothing by
         // itself; the regenerate below is what prevents session fixation.
-        if (! Auth::guard('web')->attempt(
-            ['email' => $request->email(), 'password' => $request->password()],
-            $request->remember(),
-        )) {
-            // One answer for a wrong password and for an unknown address: the
-            // response must not reveal which emails have accounts.
+        if (! Auth::guard('web')->attempt($request->credentials(), $request->remember())) {
+            // One answer for a wrong password and for an unknown address/
+            // number: the response must not reveal which ones have accounts.
             throw new BusinessRuleViolation(
                 ErrorCode::ValidationFailed,
                 'These credentials do not match our records',
-                [['field' => 'email', 'message' => 'Email hoặc mật khẩu không đúng.']],
+                [['field' => $request->identityField(), 'message' => $this->invalidCredentialsMessage($request)]],
             );
         }
 
@@ -77,12 +74,31 @@ final class SessionController extends Controller
             throw new BusinessRuleViolation(
                 ErrorCode::ValidationFailed,
                 'These credentials do not match our records',
-                [['field' => 'email', 'message' => 'Email hoặc mật khẩu không đúng.']],
+                [['field' => $request->identityField(), 'message' => $this->invalidCredentialsMessage($request)]],
             );
         }
 
         // Relations first, then the store names they name: the resource reads
         // both and the order of two arguments is a poor place to hide that.
+        $user->load(['globalRoles', 'storeMemberships.role']);
+
+        return (new CurrentUserResource($user, $this->storeNames($user)))->response();
+    }
+
+    /**
+     * The designed `GET /me`: the authenticated principal, with roles and
+     * store memberships - not just the bare id `auth:sanctum` alone proves.
+     * `auth:sanctum` already turned an unauthenticated request into a 401
+     * before this runs.
+     */
+    public function me(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            throw new BusinessRuleViolation(ErrorCode::Unauthenticated, 'Not authenticated');
+        }
+
         $user->load(['globalRoles', 'storeMemberships.role']);
 
         return (new CurrentUserResource($user, $this->storeNames($user)))->response();
@@ -98,6 +114,13 @@ final class SessionController extends Controller
         }
 
         return new JsonResponse(status: 204);
+    }
+
+    private function invalidCredentialsMessage(LoginRequest $request): string
+    {
+        return $request->identityField() === 'phone'
+            ? 'Số điện thoại hoặc mật khẩu không đúng.'
+            : 'Email hoặc mật khẩu không đúng.';
     }
 
     /** @return array<string, string> */

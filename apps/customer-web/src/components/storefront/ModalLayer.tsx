@@ -2,19 +2,20 @@
 
 import { useId, useState, type ReactNode } from 'react';
 
+import type { CurrentCustomer, LoyaltyStanding } from '@/lib/auth-api';
 import type { MenuProductCard } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 
-import { FoodIcon, IconCheckCircle, IconGift, type FoodIconName } from './icons';
+import { FoodIcon, IconCheckCircle, IconGift, IconUser, type FoodIconName } from './icons';
 import type { CartTotals, ModalView } from './use-storefront';
 
 /**
  * Sample rewards for the points-redemption demo.
  *
  * Not real menu items: the Loyalty module's reward catalogue is its own thing
- * (CLAUDE.md section 5) and there is no customer account yet to read a real
- * balance from (delivery stage 4), so this stays illustrative until both
- * exist.
+ * (CLAUDE.md section 5). The balance they are weighed against is real
+ * (`GET /customer/loyalty`); the redemption itself still is not - see
+ * `redeemReward` in `use-storefront.ts`.
  */
 const DEMO_REWARDS: readonly {
   readonly name: string;
@@ -202,12 +203,192 @@ function CheckoutForm({ totals, onPlace, onInvalid }: CheckoutFormProps) {
   );
 }
 
+interface AuthFormProps {
+  readonly busy: boolean;
+  readonly error: string;
+  readonly onLogin: (phone: string, password: string) => void;
+  readonly onRegister: (fullName: string, phone: string, password: string) => void;
+}
+
+/** Phone + password, registering or signing in - see `RegisterRequest`/`LoginRequest` on the backend. */
+function AuthForm({ busy, error, onLogin, onRegister }: AuthFormProps) {
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+
+  function submit() {
+    if (busy) {
+      return;
+    }
+    if (mode === 'login') {
+      onLogin(phone.trim(), password);
+    } else {
+      onRegister(fullName.trim(), phone.trim(), password);
+    }
+  }
+
+  return (
+    <>
+      {mode === 'register' ? (
+        <div className="form-row">
+          <label htmlFor="authFullName">Họ và tên</label>
+          <input
+            id="authFullName"
+            maxLength={150}
+            placeholder="Họ và tên"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+          />
+        </div>
+      ) : null}
+      <div className="form-row">
+        <label htmlFor="authPhone">Số điện thoại</label>
+        <input
+          id="authPhone"
+          inputMode="tel"
+          maxLength={20}
+          placeholder="09xxxxxxxx"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="authPassword">Mật khẩu</label>
+        <input
+          id="authPassword"
+          type="password"
+          maxLength={255}
+          placeholder="Tối thiểu 8 ký tự"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+      </div>
+      {error === '' ? null : <p className="notice">{error}</p>}
+      <button className="btn btn-yellow" type="button" disabled={busy} onClick={submit}>
+        {mode === 'login' ? 'Đăng nhập' : 'Đăng ký'} →
+      </button>
+      <p className="modal-note">
+        {mode === 'login' ? (
+          <>
+            Chưa có tài khoản?{' '}
+            <button type="button" className="link-button" onClick={() => setMode('register')}>
+              Đăng ký ngay
+            </button>
+          </>
+        ) : (
+          <>
+            Đã có tài khoản?{' '}
+            <button type="button" className="link-button" onClick={() => setMode('login')}>
+              Đăng nhập
+            </button>
+          </>
+        )}
+      </p>
+    </>
+  );
+}
+
+interface ProfileFormProps {
+  readonly customer: CurrentCustomer;
+  readonly profileBusy: boolean;
+  readonly profileError: string;
+  readonly passwordBusy: boolean;
+  readonly passwordError: string;
+  readonly onUpdateName: (name: string) => void;
+  readonly onChangePassword: (currentPassword: string, newPassword: string) => void;
+  readonly onLogout: () => void;
+}
+
+/** A signed-in customer's own name, password and sign-out - see `ProfileController` on the backend. */
+function ProfileForm({
+  customer,
+  profileBusy,
+  profileError,
+  passwordBusy,
+  passwordError,
+  onUpdateName,
+  onChangePassword,
+  onLogout,
+}: ProfileFormProps) {
+  const [name, setName] = useState(customer.name);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+
+  return (
+    <>
+      <div className="form-row">
+        <label htmlFor="profilePhone">Số điện thoại</label>
+        <input id="profilePhone" value={customer.phone ?? ''} disabled />
+      </div>
+      <div className="form-row">
+        <label htmlFor="profileName">Họ và tên</label>
+        <input
+          id="profileName"
+          maxLength={150}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+      </div>
+      {profileError === '' ? null : <p className="notice">{profileError}</p>}
+      <button
+        className="btn btn-yellow"
+        type="button"
+        disabled={profileBusy || name.trim() === ''}
+        onClick={() => onUpdateName(name.trim())}
+      >
+        Lưu thay đổi →
+      </button>
+
+      <h4 className="modal-subheading">Đổi mật khẩu</h4>
+      <div className="form-row">
+        <label htmlFor="profileCurrentPassword">Mật khẩu hiện tại</label>
+        <input
+          id="profileCurrentPassword"
+          type="password"
+          maxLength={255}
+          value={currentPassword}
+          onChange={(event) => setCurrentPassword(event.target.value)}
+        />
+      </div>
+      <div className="form-row">
+        <label htmlFor="profileNewPassword">Mật khẩu mới</label>
+        <input
+          id="profileNewPassword"
+          type="password"
+          maxLength={255}
+          placeholder="Tối thiểu 8 ký tự"
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+        />
+      </div>
+      {passwordError === '' ? null : <p className="notice">{passwordError}</p>}
+      <button
+        type="button"
+        disabled={passwordBusy || currentPassword === '' || newPassword === ''}
+        onClick={() => {
+          onChangePassword(currentPassword, newPassword);
+          setCurrentPassword('');
+          setNewPassword('');
+        }}
+      >
+        Đổi mật khẩu
+      </button>
+
+      <hr className="modal-divider" />
+      <button type="button" className="text-danger" onClick={onLogout}>
+        Đăng xuất
+      </button>
+    </>
+  );
+}
+
 interface RewardListProps {
-  readonly points: number;
+  readonly balance: number;
   readonly onRedeem: (name: string, cost: number) => void;
 }
 
-function RewardList({ points, onRedeem }: RewardListProps) {
+function RewardList({ balance: points, onRedeem }: RewardListProps) {
   return (
     <>
       <p>
@@ -234,8 +415,8 @@ function RewardList({ points, onRedeem }: RewardListProps) {
         );
       })}
       <p className="modal-note">
-        Điểm và đổi thưởng trong bản này chỉ là mô phỏng, chưa có tài khoản thành viên hoặc xác minh
-        tồn kho từ máy chủ.
+        Số điểm là thật, nhưng việc đổi thưởng ở đây vẫn là mô phỏng - chưa trừ điểm hay xác minh
+        tồn kho trên máy chủ.
       </p>
     </>
   );
@@ -244,25 +425,49 @@ function RewardList({ points, onRedeem }: RewardListProps) {
 interface ModalLayerProps {
   readonly view: ModalView;
   readonly totals: CartTotals;
-  readonly points: number;
+  readonly loyaltyBalance: LoyaltyStanding | null;
   readonly cardsByProductId: ReadonlyMap<string, MenuProductCard>;
+  readonly currentCustomer: CurrentCustomer | null;
+  readonly authBusy: boolean;
+  readonly authError: string;
+  readonly profileBusy: boolean;
+  readonly profileError: string;
+  readonly passwordBusy: boolean;
+  readonly passwordError: string;
   readonly onClose: () => void;
   readonly onAddMenuItem: (menuItemId: string) => void;
   readonly onPlaceOrder: (customerName: string, method: 'cash' | 'bank') => void;
   readonly onInvalidCheckout: () => void;
   readonly onRedeem: (name: string, cost: number) => void;
+  readonly onLogin: (phone: string, password: string) => void;
+  readonly onRegister: (fullName: string, phone: string, password: string) => void;
+  readonly onUpdateName: (name: string) => void;
+  readonly onChangePassword: (currentPassword: string, newPassword: string) => void;
+  readonly onLogout: () => void;
 }
 
 export function ModalLayer({
   view,
   totals,
-  points,
+  loyaltyBalance,
   cardsByProductId,
+  currentCustomer,
+  authBusy,
+  authError,
+  profileBusy,
+  profileError,
+  passwordBusy,
+  passwordError,
   onClose,
   onAddMenuItem,
   onPlaceOrder,
   onInvalidCheckout,
   onRedeem,
+  onLogin,
+  onRegister,
+  onUpdateName,
+  onChangePassword,
+  onLogout,
 }: ModalLayerProps) {
   if (view.kind === 'variants') {
     const card = cardsByProductId.get(view.productId);
@@ -288,7 +493,7 @@ export function ModalLayer({
   if (view.kind === 'rewards') {
     return (
       <ModalShell title="Đổi điểm lấy món ngon" icon={<IconGift size={20} />} onClose={onClose}>
-        <RewardList points={points} onRedeem={onRedeem} />
+        <RewardList balance={loyaltyBalance?.balance ?? 0} onRedeem={onRedeem} />
       </ModalShell>
     );
   }
@@ -296,13 +501,28 @@ export function ModalLayer({
   if (view.kind === 'login') {
     return (
       <ModalShell title="Tài khoản thành viên" onClose={onClose}>
-        <p>
-          Đăng nhập và quản lý điểm thưởng sẽ được kết nối với Laravel API trong giai đoạn triển
-          khai Backend.
-        </p>
-        <button className="btn btn-yellow" type="button" onClick={onClose}>
-          Đã hiểu
-        </button>
+        <AuthForm busy={authBusy} error={authError} onLogin={onLogin} onRegister={onRegister} />
+      </ModalShell>
+    );
+  }
+
+  if (view.kind === 'profile') {
+    if (currentCustomer === null) {
+      return null;
+    }
+
+    return (
+      <ModalShell title="Hồ sơ của bạn" icon={<IconUser size={18} />} onClose={onClose}>
+        <ProfileForm
+          customer={currentCustomer}
+          profileBusy={profileBusy}
+          profileError={profileError}
+          passwordBusy={passwordBusy}
+          passwordError={passwordError}
+          onUpdateName={onUpdateName}
+          onChangePassword={onChangePassword}
+          onLogout={onLogout}
+        />
       </ModalShell>
     );
   }
