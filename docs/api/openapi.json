@@ -3,7 +3,7 @@
     "info": {
         "title": "Smart Commerce Platform",
         "version": "1.0.0",
-        "description": "Customer storefront and operations API for the Smart Commerce Platform.\n\n**Money.** Amounts are whole Vietnamese \u0111\u1ed3ng transported as decimal\nstrings (`\"45000\"`), because JSON numbers cannot hold a 64-bit integer\nsafely in every client. Never parse them into a float.\n\n**Errors.** Every failure returns the same envelope with a stable\nmachine-readable `code`; branch on that, never on `message`.\n\n**Store scope.** Admin operations require both the role permission and\nan active membership of the target store. Store context comes from the\nroute or the host, never from a query parameter.\n\n**Payments.** MVP settles in `CASH` or `BANK_TRANSFER` only. A generated\nVietQR is not a confirmation of payment: authorized staff confirm the\nactual bank credit."
+        "description": "Customer storefront and operations API for the Smart Commerce Platform.\n\n**Money.** Amounts are whole Vietnamese đồng transported as decimal\nstrings (`\"45000\"`), because JSON numbers cannot hold a 64-bit integer\nsafely in every client. Never parse them into a float.\n\n**Errors.** Every failure returns the same envelope with a stable\nmachine-readable `code`; branch on that, never on `message`.\n\n**Store scope.** Admin operations require both the role permission and\nan active membership of the target store. Store context comes from the\nroute or the host, never from a query parameter.\n\n**Payments.** MVP settles in `CASH` or `BANK_TRANSFER` only. A generated\nVietQR is not a confirmation of payment: authorized staff confirm the\nactual bank credit."
     },
     "servers": [
         {
@@ -65,7 +65,7 @@
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "id": {}
+                                        "id": []
                                     },
                                     "required": [
                                         "id"
@@ -145,7 +145,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -282,7 +282,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         },
                                         "next_cursor": {
                                             "type": "null"
@@ -420,7 +420,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         }
                                     },
                                     "required": [
@@ -625,7 +625,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -855,7 +855,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -1126,7 +1126,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         },
                                         "next_cursor": {
                                             "type": [
@@ -1305,7 +1305,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         }
                                     },
                                     "required": [
@@ -1435,7 +1435,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         }
                                     },
                                     "required": [
@@ -1488,7 +1488,7 @@
                                     "properties": {
                                         "items": {
                                             "type": "array",
-                                            "items": {}
+                                            "items": []
                                         }
                                     },
                                     "required": [
@@ -1672,7 +1672,7 @@
                             "application/json": {
                                 "schema": {
                                     "type": "array",
-                                    "items": {}
+                                    "items": []
                                 }
                             }
                         }
@@ -1803,11 +1803,11 @@
                     },
                     "discrepancies": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     },
                     "events": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     }
                 },
                 "required": [
@@ -1834,7 +1834,7 @@
             },
             "ConfirmPaymentRequest": {
                 "type": "object",
-                "description": "Validates `ConfirmPaymentRequest`.\n\n`amount` is sent explicitly rather than assumed from the order total, so\nconfirming the wrong figure takes a deliberate act and leaves a record of\nit (CLAUDE.md section 6) - this Form Request only checks it is a shape of\nwhole \u0111\u1ed3ng; whether it MATCHES what is owed is the domain entity's decision.",
+                "description": "Validates `ConfirmPaymentRequest`.\n\n`amount` is sent explicitly rather than assumed from the order total, so\nconfirming the wrong figure takes a deliberate act and leaves a record of\nit (CLAUDE.md section 6) - this Form Request only checks it is a shape of\nwhole đồng; whether it MATCHES what is owed is the domain entity's decision.",
                 "properties": {
                     "amount": {
                         "type": "string",
@@ -2031,11 +2031,11 @@
                     },
                     "roles": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     },
                     "store_memberships": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     }
                 },
                 "required": [
@@ -2308,7 +2308,7 @@
                     },
                     "items": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     }
                 },
                 "required": [
@@ -2402,7 +2402,7 @@
                     },
                     "items": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     },
                     "totals": {
                         "type": "object",
@@ -2496,11 +2496,11 @@
                             "array",
                             "null"
                         ],
-                        "items": {}
+                        "items": []
                     },
                     "status_history": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     },
                     "placed_at": {
                         "type": [
@@ -2651,7 +2651,7 @@
                     },
                     "variants": {
                         "type": "array",
-                        "items": {}
+                        "items": []
                     },
                     "modifier_groups": {
                         "type": "array",
@@ -3043,7 +3043,7 @@
             },
             "SetDailyPortionsRequest": {
                 "type": "object",
-                "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty b\u00e1nh m\u00ec has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
+                "description": "Validates the morning prep sheet.\n\nOne line per dish, and the same dish twice is refused rather than resolved:\na sheet that says both forty and sixty bánh mì has no correct answer, and\npicking the last one silently would be a guess about someone's morning.",
                 "properties": {
                     "items": {
                         "type": "array",
