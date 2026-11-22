@@ -11,7 +11,6 @@ import {
   type ReactNode,
 } from 'react';
 
-import { INITIAL_REWARDS, type DemoReward } from '@/data/admin-demo';
 import { ApiError, api } from '@/lib/api-client';
 import {
   createCoupon as createCouponRequest,
@@ -21,6 +20,26 @@ import {
   type CouponDraft,
 } from '@/lib/coupons-api';
 import { loadCustomers as loadCustomersRequest, type AdminCustomer } from '@/lib/customers-api';
+import {
+  createLoyaltyReward as createLoyaltyRewardRequest,
+  loadLoyaltyMember as loadLoyaltyMemberRequest,
+  loadLoyaltyMembers as loadLoyaltyMemberList,
+  loadLoyaltyRewards as loadLoyaltyRewardList,
+  loadLoyaltySettings as loadLoyaltySettingsRequest,
+  loadLoyaltySummary as loadLoyaltySummaryRequest,
+  loyaltyMemberQueryKey,
+  redeemLoyaltyReward as redeemLoyaltyRewardRequest,
+  updateLoyaltyReward as updateLoyaltyRewardRequest,
+  updateLoyaltySettings as updateLoyaltySettingsRequest,
+  LOYALTY_MEMBER_QUERY_DEFAULT,
+  type LoyaltyMember,
+  type LoyaltyMemberDetail,
+  type LoyaltyMemberQuery,
+  type LoyaltyReward,
+  type LoyaltyRewardDraft,
+  type LoyaltySettings,
+  type LoyaltySummary,
+} from '@/lib/loyalty-api';
 import {
   archiveMenuProduct,
   createMenuProduct,
@@ -52,8 +71,11 @@ export type AdminModal =
   | { readonly kind: 'daily-portions' }
   /** Create when `couponId` is absent, edit when it is there. */
   | { readonly kind: 'coupon-form'; readonly couponId?: string }
-  | { readonly kind: 'add-reward' }
+  /** Create when `rewardId` is absent, edit when it is there. */
+  | { readonly kind: 'reward-form'; readonly rewardId?: string }
   | { readonly kind: 'loyalty-settings' }
+  /** Balance, history and the redeem action for one member. */
+  | { readonly kind: 'loyalty-member'; readonly phone: string; readonly name: string }
   | { readonly kind: 'add-product' }
   | { readonly kind: 'delete-product'; readonly productId: string };
 
@@ -66,8 +88,18 @@ interface AdminContextValue {
   readonly orderCounts: OrderStatusCounts;
   readonly products: readonly MenuProduct[];
   readonly coupons: readonly Coupon[];
+  readonly loyaltySummary: LoyaltySummary | null;
+  readonly loyaltyMembers: readonly LoyaltyMember[];
+  readonly loyaltyMembersBusy: boolean;
+  readonly loyaltyMembersError: string;
+  readonly hasMoreLoyaltyMembers: boolean;
+  readonly loyaltyMemberDetail: LoyaltyMemberDetail | null;
+  readonly loyaltyMemberDetailBusy: boolean;
+  readonly loyaltyRewards: readonly LoyaltyReward[];
+  readonly loyaltyRewardsBusy: boolean;
+  readonly loyaltyRewardsError: string;
+  readonly loyaltySettings: LoyaltySettings | null;
   readonly customers: readonly AdminCustomer[];
-  readonly rewards: readonly DemoReward[];
   readonly pendingCount: number;
   readonly modal: AdminModal | null;
   readonly toastMessage: string;
@@ -111,7 +143,18 @@ interface AdminContextValue {
   readonly loadCoupons: () => void;
   readonly createCoupon: (draft: CouponDraft) => void;
   readonly updateCoupon: (couponId: string, draft: CouponDraft) => void;
-  readonly addReward: (name: string, points: number) => void;
+  /** Dashboard tiles. The loyalty screen asks on mount. */
+  readonly loadLoyaltySummary: () => void;
+  /** Resets to the first page under this search. Pass '' to clear it. */
+  readonly loadLoyaltyMembers: (search: string) => void;
+  readonly loadMoreLoyaltyMembers: () => void;
+  readonly loadLoyaltyMemberDetail: (phone: string) => void;
+  readonly redeemLoyaltyReward: (phone: string, rewardId: string, note: string | null) => void;
+  readonly loadLoyaltyRewards: () => void;
+  readonly createLoyaltyReward: (draft: LoyaltyRewardDraft) => void;
+  readonly updateLoyaltyReward: (rewardId: string, draft: LoyaltyRewardDraft) => void;
+  readonly loadLoyaltySettings: () => void;
+  readonly updateLoyaltySettings: (settings: LoyaltySettings) => void;
   /** Reads the guest-customer directory. The customers screen asks on mount. */
   readonly loadCustomers: (search?: string) => void;
   readonly loadMoreCustomers: () => void;
@@ -131,10 +174,11 @@ const ORDER_POLL_MS = 30_000;
 /**
  * Holds the dashboard's state for the whole admin shell.
  *
- * The menu, the orders and the discount codes are real: all three come from
- * the API and survive a reload. Rewards are still the design's sample data,
- * because the loyalty endpoints are designed and not built - that block
- * leaves this file as its module lands.
+ * The menu, the orders, the discount codes and loyalty are real: all four
+ * come from the API and survive a reload. Loyalty's members list is read
+ * fresh from the points ledger rather than stored anywhere of its own - there
+ * is no registered-account module yet, so a member is just a phone number
+ * with a balance (CLAUDE.md section 5).
  *
  * Orders are listed per screen rather than once globally: each screen says
  * what it wants to see through `loadOrders`, and an identical request is not
@@ -147,7 +191,28 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   const [couponsError, setCouponsError] = useState('');
   /** Whether the list has been asked for yet, so a re-mount does not re-ask. */
   const couponsLoaded = useRef(false);
-  const [rewards, setRewards] = useState<readonly DemoReward[]>(INITIAL_REWARDS);
+
+  const [loyaltySummary, setLoyaltySummary] = useState<LoyaltySummary | null>(null);
+  const loyaltySummaryLoaded = useRef(false);
+
+  const [loyaltyMembers, setLoyaltyMembers] = useState<readonly LoyaltyMember[]>([]);
+  const [loyaltyMembersBusy, setLoyaltyMembersBusy] = useState(false);
+  const [loyaltyMembersError, setLoyaltyMembersError] = useState('');
+  const [loyaltyMemberCursor, setLoyaltyMemberCursor] = useState<string | null>(null);
+  /** The search currently on screen, so loading more pages asks for the same slice. */
+  const loyaltyMemberQuery = useRef<LoyaltyMemberQuery>(LOYALTY_MEMBER_QUERY_DEFAULT);
+  const shownLoyaltyMemberQuery = useRef<string | null>(null);
+
+  const [loyaltyMemberDetail, setLoyaltyMemberDetail] = useState<LoyaltyMemberDetail | null>(null);
+  const [loyaltyMemberDetailBusy, setLoyaltyMemberDetailBusy] = useState(false);
+
+  const [loyaltyRewards, setLoyaltyRewards] = useState<readonly LoyaltyReward[]>([]);
+  const [loyaltyRewardsBusy, setLoyaltyRewardsBusy] = useState(false);
+  const [loyaltyRewardsError, setLoyaltyRewardsError] = useState('');
+  const loyaltyRewardsLoaded = useRef(false);
+
+  const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings | null>(null);
+  const loyaltySettingsLoaded = useRef(false);
 
   const [customers, setCustomers] = useState<readonly AdminCustomer[]>([]);
   const [customersBusy, setCustomersBusy] = useState(false);
@@ -507,6 +572,10 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         knownOrderIds.current = new Set();
         setNewOrderIds(new Set());
         couponsLoaded.current = false;
+        loyaltySummaryLoaded.current = false;
+        shownLoyaltyMemberQuery.current = null;
+        loyaltyRewardsLoaded.current = false;
+        loyaltySettingsLoaded.current = false;
         requestOrders(DEFAULT_ORDER_QUERY);
 
         return true;
@@ -535,6 +604,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
         knownOrderIds.current = new Set();
         setNewOrderIds(new Set());
         couponsLoaded.current = false;
+        setLoyaltySummary(null);
+        loyaltySummaryLoaded.current = false;
+        setLoyaltyMembers([]);
+        setLoyaltyMemberCursor(null);
+        shownLoyaltyMemberQuery.current = null;
+        setLoyaltyMemberDetail(null);
+        setLoyaltyRewards([]);
+        loyaltyRewardsLoaded.current = false;
+        setLoyaltySettings(null);
+        loyaltySettingsLoaded.current = false;
         setModal(null);
       });
   }, []);
@@ -791,17 +870,253 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [runCouponWrite],
   );
 
-  const addReward = useCallback(
-    (rawName: string, points: number) => {
-      const name = rawName.trim();
-      if (name === '' || !Number.isInteger(points) || points <= 0) {
-        notify('Vui lòng nhập món và điểm hợp lệ');
+  const loadLoyaltySummary = useCallback((): void => {
+    if (loyaltySummaryLoaded.current) {
+      return;
+    }
+
+    loyaltySummaryLoaded.current = true;
+
+    void (async () => {
+      try {
+        setLoyaltySummary(await loadLoyaltySummaryRequest());
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          loyaltySummaryLoaded.current = false;
+
+          return;
+        }
+        // The dashboard tiles are a nice-to-have; a failure here should not
+        // block the rest of the screen the way a list failure does.
+        loyaltySummaryLoaded.current = false;
+      }
+    })();
+  }, []);
+
+  const runLoyaltyMemberLoad = useCallback(
+    async (query: LoyaltyMemberQuery, cursor?: string): Promise<void> => {
+      setLoyaltyMembersBusy(true);
+
+      try {
+        const page = await loadLoyaltyMemberList({ ...query, cursor });
+        setLoyaltyMembers((current) =>
+          cursor === undefined ? page.items : [...current, ...page.items],
+        );
+        setLoyaltyMemberCursor(page.nextCursor);
+        setLoyaltyMembersError('');
+        setSession('signed-in');
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          setLoyaltyMembers([]);
+          setLoyaltyMemberCursor(null);
+          setLoyaltyMembersError('');
+
+          return;
+        }
+        setLoyaltyMembersError(
+          error instanceof Error ? error.message : 'Không tải được danh sách khách tích điểm.',
+        );
+      } finally {
+        setLoyaltyMembersBusy(false);
+      }
+    },
+    [],
+  );
+
+  const loadLoyaltyMembers = useCallback(
+    (search: string): void => {
+      const query: LoyaltyMemberQuery = { search };
+      const key = loyaltyMemberQueryKey(query);
+
+      if (key === shownLoyaltyMemberQuery.current) {
+        return;
+      }
+
+      shownLoyaltyMemberQuery.current = key;
+      loyaltyMemberQuery.current = query;
+      void runLoyaltyMemberLoad(query);
+    },
+    [runLoyaltyMemberLoad],
+  );
+
+  const loadMoreLoyaltyMembers = useCallback((): void => {
+    if (loyaltyMemberCursor === null) {
+      return;
+    }
+
+    void runLoyaltyMemberLoad(loyaltyMemberQuery.current, loyaltyMemberCursor);
+  }, [loyaltyMemberCursor, runLoyaltyMemberLoad]);
+
+  const loadLoyaltyMemberDetail = useCallback(
+    (phone: string): void => {
+      setLoyaltyMemberDetailBusy(true);
+
+      void (async () => {
+        try {
+          setLoyaltyMemberDetail(await loadLoyaltyMemberRequest(phone));
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            setSession('signed-out');
+            setLoyaltyMemberDetail(null);
+
+            return;
+          }
+          notify(error instanceof Error ? error.message : 'Không tải được lịch sử điểm.');
+        } finally {
+          setLoyaltyMemberDetailBusy(false);
+        }
+      })();
+    },
+    [notify],
+  );
+
+  const redeemLoyaltyReward = useCallback(
+    (phone: string, rewardId: string, note: string | null) => {
+      void (async () => {
+        try {
+          await redeemLoyaltyRewardRequest(phone, rewardId, note);
+          notify('Đã đổi quà cho khách');
+          // Refreshes in place: the dialog stays open, showing the new
+          // balance and the entry that was just recorded.
+          setLoyaltyMemberDetail(await loadLoyaltyMemberRequest(phone));
+          shownLoyaltyMemberQuery.current = null;
+          void runLoyaltyMemberLoad(loyaltyMemberQuery.current);
+          loyaltySummaryLoaded.current = false;
+          loadLoyaltySummary();
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            setSession('signed-out');
+            notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+            return;
+          }
+          notify(error instanceof Error ? error.message : 'Không đổi được quà.');
+        }
+      })();
+    },
+    [notify, runLoyaltyMemberLoad, loadLoyaltySummary],
+  );
+
+  const refreshLoyaltyRewards = useCallback(async (): Promise<void> => {
+    setLoyaltyRewardsBusy(true);
+
+    try {
+      setLoyaltyRewards(await loadLoyaltyRewardList());
+      setLoyaltyRewardsError('');
+      setSession('signed-in');
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setSession('signed-out');
+        setLoyaltyRewards([]);
+        setLoyaltyRewardsError('');
 
         return;
       }
-      setRewards((current) => [...current, { name, points, icon: 'gift', claimed: 0 }]);
-      setModal(null);
-      notify('Đã thêm quà demo');
+      setLoyaltyRewardsError(
+        error instanceof Error ? error.message : 'Không tải được danh sách quà tặng.',
+      );
+    } finally {
+      setLoyaltyRewardsBusy(false);
+    }
+  }, []);
+
+  const loadLoyaltyRewards = useCallback((): void => {
+    if (loyaltyRewardsLoaded.current) {
+      return;
+    }
+
+    loyaltyRewardsLoaded.current = true;
+    void refreshLoyaltyRewards();
+  }, [refreshLoyaltyRewards]);
+
+  const runLoyaltyRewardWrite = useCallback(
+    async (
+      operation: () => Promise<LoyaltyReward>,
+      success: (reward: LoyaltyReward) => string,
+    ): Promise<void> => {
+      setLoyaltyRewardsBusy(true);
+
+      try {
+        const reward = await operation();
+        setModal(null);
+        notify(success(reward));
+        await refreshLoyaltyRewards();
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+          notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+          return;
+        }
+        notify(error instanceof Error ? error.message : 'Không lưu được quà tặng.');
+      } finally {
+        setLoyaltyRewardsBusy(false);
+      }
+    },
+    [notify, refreshLoyaltyRewards],
+  );
+
+  const createLoyaltyReward = useCallback(
+    (draft: LoyaltyRewardDraft) => {
+      void runLoyaltyRewardWrite(
+        () => createLoyaltyRewardRequest(draft),
+        (reward) => `Đã thêm quà ${reward.name}`,
+      );
+    },
+    [runLoyaltyRewardWrite],
+  );
+
+  const updateLoyaltyReward = useCallback(
+    (rewardId: string, draft: LoyaltyRewardDraft) => {
+      void runLoyaltyRewardWrite(
+        () => updateLoyaltyRewardRequest(rewardId, draft),
+        (reward) => `Đã lưu quà ${reward.name}`,
+      );
+    },
+    [runLoyaltyRewardWrite],
+  );
+
+  const loadLoyaltySettings = useCallback((): void => {
+    if (loyaltySettingsLoaded.current) {
+      return;
+    }
+
+    loyaltySettingsLoaded.current = true;
+
+    void (async () => {
+      try {
+        setLoyaltySettings(await loadLoyaltySettingsRequest());
+      } catch (error) {
+        loyaltySettingsLoaded.current = false;
+        if (error instanceof ApiError && error.status === 401) {
+          setSession('signed-out');
+
+          return;
+        }
+        notify(error instanceof Error ? error.message : 'Không tải được cấu hình tích điểm.');
+      }
+    })();
+  }, [notify]);
+
+  const updateLoyaltySettingsAction = useCallback(
+    (settings: LoyaltySettings) => {
+      void (async () => {
+        try {
+          setLoyaltySettings(await updateLoyaltySettingsRequest(settings));
+          setModal(null);
+          notify('Đã lưu cấu hình tích điểm');
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) {
+            setSession('signed-out');
+            notify('Phiên đăng nhập đã hết, vui lòng đăng nhập lại.');
+
+            return;
+          }
+          notify(error instanceof Error ? error.message : 'Không lưu được cấu hình.');
+        }
+      })();
     },
     [notify],
   );
@@ -826,8 +1141,18 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       orderCounts,
       products,
       coupons,
+      loyaltySummary,
+      loyaltyMembers,
+      loyaltyMembersBusy,
+      loyaltyMembersError,
+      hasMoreLoyaltyMembers: loyaltyMemberCursor !== null,
+      loyaltyMemberDetail,
+      loyaltyMemberDetailBusy,
+      loyaltyRewards,
+      loyaltyRewardsBusy,
+      loyaltyRewardsError,
+      loyaltySettings,
       customers,
-      rewards,
       pendingCount,
       modal,
       toastMessage,
@@ -863,7 +1188,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       loadCoupons: requestCoupons,
       createCoupon,
       updateCoupon,
-      addReward,
+      loadLoyaltySummary,
+      loadLoyaltyMembers,
+      loadMoreLoyaltyMembers,
+      loadLoyaltyMemberDetail,
+      redeemLoyaltyReward,
+      loadLoyaltyRewards,
+      createLoyaltyReward,
+      updateLoyaltyReward,
+      loadLoyaltySettings,
+      updateLoyaltySettings: updateLoyaltySettingsAction,
       loadCustomers,
       loadMoreCustomers,
     }),
@@ -872,8 +1206,18 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       orderCounts,
       products,
       coupons,
+      loyaltySummary,
+      loyaltyMembers,
+      loyaltyMembersBusy,
+      loyaltyMembersError,
+      loyaltyMemberCursor,
+      loyaltyMemberDetail,
+      loyaltyMemberDetailBusy,
+      loyaltyRewards,
+      loyaltyRewardsBusy,
+      loyaltyRewardsError,
+      loyaltySettings,
       customers,
-      rewards,
       pendingCount,
       modal,
       toastMessage,
@@ -908,7 +1252,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       requestCoupons,
       createCoupon,
       updateCoupon,
-      addReward,
+      loadLoyaltySummary,
+      loadLoyaltyMembers,
+      loadMoreLoyaltyMembers,
+      loadLoyaltyMemberDetail,
+      redeemLoyaltyReward,
+      loadLoyaltyRewards,
+      createLoyaltyReward,
+      updateLoyaltyReward,
+      loadLoyaltySettings,
+      updateLoyaltySettingsAction,
       loadCustomers,
       loadMoreCustomers,
     ],

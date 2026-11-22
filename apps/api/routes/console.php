@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Catalog\Presentation\Console\PruneProductImagesCommand;
+use App\Modules\Loyalty\Presentation\Console\SyncLoyaltyPointsCommand;
 use App\Shared\Presentation\Console\DispatchOutboxCommand;
 use App\Shared\Presentation\Console\PruneIdempotencyRecordsCommand;
 use Illuminate\Support\Facades\Schedule;
@@ -19,6 +20,14 @@ use Illuminate\Support\Facades\Schedule;
 // Publishes domain events recorded by business transactions. withoutOverlapping
 // keeps a slow run from stacking on the next tick.
 Schedule::command(DispatchOutboxCommand::class)
+    ->everyMinute()
+    ->withoutOverlapping(5)
+    ->runInBackground();
+
+// Awards points for payments settled since the last run. Loyalty deliberately
+// does not react to a payment event (see the migration note), so this sweep
+// is the only way a PAID payment ever turns into points.
+Schedule::command(SyncLoyaltyPointsCommand::class)
     ->everyMinute()
     ->withoutOverlapping(5)
     ->runInBackground();

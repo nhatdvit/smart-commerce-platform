@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Store\Application;
 
+use App\Modules\Store\Domain\Enum\StoreStatus;
 use App\Modules\Store\Infrastructure\Persistence\Model\Store;
 
 /**
@@ -32,5 +33,22 @@ final readonly class StoreDirectory
             ->all();
 
         return $names;
+    }
+
+    /**
+     * Every active store, for a scheduled job that has no single request to
+     * take a store id from and must visit each one in turn - Loyalty's
+     * earning sync is the first caller.
+     *
+     * @return list<string>
+     */
+    public function activeIds(): array
+    {
+        $ids = Store::query()
+            ->where('status', StoreStatus::Active)
+            ->pluck('id')
+            ->all();
+
+        return array_values($ids);
     }
 }

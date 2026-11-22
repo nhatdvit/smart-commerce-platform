@@ -43,8 +43,8 @@ import {
 } from '@/lib/product-form';
 
 import { useAdminData } from './AdminDataProvider';
-import { FoodIcon } from './icons';
-import { StatusBadge } from './primitives';
+import { FoodIcon, IconGift, IconStar } from './icons';
+import { Metric, StatusBadge } from './primitives';
 
 interface ModalFrameProps {
   readonly title: string;
@@ -1004,81 +1004,327 @@ function CouponFormModal({ couponId }: { readonly couponId?: string }) {
   );
 }
 
-function AddRewardModal() {
-  const { addReward } = useAdminData();
-  const [name, setName] = useState('');
-  const [points, setPoints] = useState('100');
+/** Field-level messages, the same shape the coupon and product forms use. */
+interface RewardFieldErrors {
+  name?: string;
+  pointsCost?: string;
+}
+
+function RewardFormModal({ rewardId }: { readonly rewardId?: string }) {
+  const { loyaltyRewards, loyaltyRewardsBusy, createLoyaltyReward, updateLoyaltyReward } =
+    useAdminData();
+  const editing = loyaltyRewards.find((candidate) => candidate.id === rewardId);
+
+  const [name, setName] = useState(editing?.name ?? '');
+  const [pointsCost, setPointsCost] = useState(
+    editing === undefined ? '' : String(editing.pointsCost),
+  );
+  const [isActive, setIsActive] = useState(editing?.isActive ?? true);
+  const [errors, setErrors] = useState<RewardFieldErrors>({});
+
+  // An id that matches nothing: the reward was removed under the open dialog.
+  if (rewardId !== undefined && editing === undefined) {
+    return null;
+  }
+
+  function submit() {
+    const trimmedName = name.trim();
+    const parsedPoints = Number(pointsCost);
+    const nextErrors: RewardFieldErrors = {};
+
+    if (trimmedName === '') {
+      nextErrors.name = 'Vui lòng nhập tên quà tặng.';
+    }
+
+    if (!Number.isInteger(parsedPoints) || parsedPoints < 1) {
+      nextErrors.pointsCost = 'Số điểm đổi phải là số nguyên, lớn hơn 0.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+
+      return;
+    }
+
+    const draft = {
+      name: trimmedName,
+      pointsCost: parsedPoints,
+      icon: editing?.icon ?? 'gift',
+      isActive,
+    };
+
+    if (rewardId === undefined) {
+      createLoyaltyReward(draft);
+    } else {
+      updateLoyaltyReward(rewardId, draft);
+    }
+  }
 
   return (
     <ModalFrame
-      title="Thêm quà đổi điểm"
+      title={rewardId === undefined ? 'Thêm quà đổi điểm' : `Quà ${editing?.name ?? ''}`}
+      onSubmit={submit}
       actions={
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => addReward(name, Number(points))}
-        >
-          Thêm quà
+        <button type="submit" className="btn btn-primary" disabled={loyaltyRewardsBusy}>
+          {rewardId === undefined ? 'Thêm quà' : 'Lưu thay đổi'}
         </button>
       }
     >
-      <label className="form-field">
-        <span>Tên món đổi thưởng</span>
+      <Field label="Tên món đổi thưởng" error={errors.name}>
         <input
-          maxLength={100}
+          autoFocus={rewardId === undefined}
+          maxLength={160}
           placeholder="VD: Trà tắc"
+          aria-invalid={errors.name !== undefined}
           value={name}
           onChange={(event) => setName(event.target.value)}
         />
-      </label>
-      <label className="form-field">
-        <span>Số điểm cần đổi</span>
+      </Field>
+      <Field label="Số điểm cần đổi" error={errors.pointsCost}>
         <input
           type="number"
           min={1}
-          value={points}
-          onChange={(event) => setPoints(event.target.value)}
+          placeholder="100"
+          aria-invalid={errors.pointsCost !== undefined}
+          value={pointsCost}
+          onChange={(event) => setPointsCost(event.target.value)}
         />
-      </label>
+      </Field>
+      {editing === undefined ? null : (
+        <>
+          <label className="form-field form-field-checkbox">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(event) => setIsActive(event.target.checked)}
+            />
+            <span>Đang áp dụng (bỏ chọn để ngừng, không xóa lịch sử đã đổi)</span>
+          </label>
+          <p className="notice">
+            Đã đổi {editing.redeemedCount} lần. Số lượt là ghi nhận của hệ thống, không sửa tay
+            được.
+          </p>
+        </>
+      )}
     </ModalFrame>
   );
 }
 
 function LoyaltySettingsModal() {
-  const { notify, closeModal } = useAdminData();
-  const [rate, setRate] = useState('10000');
+  const { loyaltySettings, updateLoyaltySettings } = useAdminData();
+  const [pointsPerCurrency, setPointsPerCurrency] = useState(
+    loyaltySettings === null ? '10000' : String(loyaltySettings.pointsPerCurrency),
+  );
+  const [threshold, setThreshold] = useState(
+    loyaltySettings === null ? '100' : String(loyaltySettings.loyalTierThresholdPoints),
+  );
+  const [errors, setErrors] = useState<{ rate?: string; threshold?: string }>({});
+
+  if (loyaltySettings === null) {
+    return null;
+  }
 
   function save() {
-    const value = Number(rate);
-    if (!Number.isInteger(value) || value < 1000) {
-      notify('Số tiền tích điểm không hợp lệ');
+    const rate = Number(pointsPerCurrency);
+    const thresholdValue = Number(threshold);
+    const nextErrors: { rate?: string; threshold?: string } = {};
+
+    if (!Number.isInteger(rate) || rate < 1) {
+      nextErrors.rate = 'Số tiền để nhận 1 điểm phải là số nguyên, lớn hơn 0.';
+    }
+
+    if (!Number.isInteger(thresholdValue) || thresholdValue < 0) {
+      nextErrors.threshold = 'Ngưỡng hạng thân thiết không được âm.';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
 
       return;
     }
-    closeModal();
-    notify(`Đã lưu cấu hình demo: ${money(value)} = 1 điểm`);
+
+    updateLoyaltySettings({ pointsPerCurrency: rate, loyalTierThresholdPoints: thresholdValue });
   }
 
   return (
     <ModalFrame
       title="Cấu hình tích điểm"
+      onSubmit={save}
       actions={
-        <button type="button" className="btn btn-primary" onClick={save}>
+        <button type="submit" className="btn btn-primary">
           Lưu cấu hình
         </button>
       }
     >
-      <p>Quy tắc minh họa: mỗi số tiền chi tiêu hợp lệ sẽ được 1 điểm.</p>
-      <label className="form-field">
-        <span>Số tiền để nhận 1 điểm (VND)</span>
+      <p>Điểm được cộng tự động cho mỗi đơn đã thanh toán, qua một tiến trình chạy mỗi phút.</p>
+      <Field label="Số tiền để nhận 1 điểm (VND)" error={errors.rate}>
         <input
           type="number"
-          min={1000}
+          min={1}
           step={1000}
-          value={rate}
-          onChange={(event) => setRate(event.target.value)}
+          value={pointsPerCurrency}
+          onChange={(event) => setPointsPerCurrency(event.target.value)}
         />
-      </label>
+      </Field>
+      <Field
+        label="Ngưỡng điểm lũy kế để lên hạng Thân thiết"
+        error={errors.threshold}
+        hint="Dựa trên điểm lũy kế đã nhận, đổi quà không làm giảm hạng."
+      >
+        <input
+          type="number"
+          min={0}
+          value={threshold}
+          onChange={(event) => setThreshold(event.target.value)}
+        />
+      </Field>
+    </ModalFrame>
+  );
+}
+
+function LoyaltyMemberModal({ phone, name }: { readonly phone: string; readonly name: string }) {
+  const {
+    loyaltyRewards,
+    loyaltyMemberDetail,
+    loyaltyMemberDetailBusy,
+    loadLoyaltyMemberDetail,
+    redeemLoyaltyReward,
+  } = useAdminData();
+  const activeRewards = loyaltyRewards.filter((reward) => reward.isActive);
+  const [rewardId, setRewardId] = useState(activeRewards[0]?.id ?? '');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    loadLoyaltyMemberDetail(phone);
+    // Deliberately keyed on `phone` alone: `loadLoyaltyMemberDetail` is a
+    // stable callback, and a redeem already refreshes the detail itself.
+  }, [phone, loadLoyaltyMemberDetail]);
+
+  useEffect(() => {
+    if (rewardId === '' && activeRewards[0] !== undefined) {
+      setRewardId(activeRewards[0].id);
+    }
+  }, [activeRewards, rewardId]);
+
+  const selected = activeRewards.find((reward) => reward.id === rewardId);
+  const canRedeem =
+    selected !== undefined &&
+    loyaltyMemberDetail !== null &&
+    loyaltyMemberDetail.balance >= selected.pointsCost;
+
+  return (
+    <ModalFrame title={`${name} · ${phone}`}>
+      {loyaltyMemberDetail === null ? (
+        <p>{loyaltyMemberDetailBusy ? 'Đang tải...' : 'Không tải được dữ liệu khách.'}</p>
+      ) : (
+        <>
+          <div className="metrics">
+            <Metric
+              title="Điểm lũy kế"
+              value={loyaltyMemberDetail.lifetimeEarnedPoints}
+              icon={<IconStar size={16} />}
+              color="#fff3d9"
+              foot="Không giảm khi đổi quà"
+            />
+            <Metric
+              title="Điểm hiện có"
+              value={loyaltyMemberDetail.balance}
+              icon={<IconGift size={16} />}
+              color="#e9f8f0"
+              foot="Có thể dùng để đổi quà"
+            />
+          </div>
+
+          {activeRewards.length === 0 ? (
+            <p className="notice">Chưa có quà nào đang áp dụng để đổi.</p>
+          ) : (
+            <div className="form-row">
+              <Field label="Đổi quà">
+                <select value={rewardId} onChange={(event) => setRewardId(event.target.value)}>
+                  {activeRewards.map((reward) => (
+                    <option key={reward.id} value={reward.id}>
+                      {reward.name} — {reward.pointsCost} điểm
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Ghi chú (tùy chọn)">
+                <input
+                  maxLength={500}
+                  placeholder="VD: Mang đi"
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+
+          {activeRewards.length === 0 ? null : (
+            <div className="modal-actions" style={{ justifyContent: 'flex-start', paddingTop: 0 }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!canRedeem}
+                onClick={() => {
+                  if (selected === undefined) {
+                    return;
+                  }
+                  redeemLoyaltyReward(phone, selected.id, note.trim() === '' ? null : note.trim());
+                  setNote('');
+                }}
+              >
+                Xác nhận đổi quà
+              </button>
+              {selected !== undefined && !canRedeem ? (
+                <span className="field-error" role="alert">
+                  Khách chỉ còn {loyaltyMemberDetail.balance} điểm, không đủ {selected.pointsCost}{' '}
+                  điểm.
+                </span>
+              ) : null}
+            </div>
+          )}
+
+          <div className="panel-title">
+            <h3>Lịch sử điểm</h3>
+          </div>
+          {loyaltyMemberDetail.history.length === 0 ? (
+            <p className="notice">Chưa có lịch sử nào.</p>
+          ) : (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>THỜI GIAN</th>
+                    <th>LOẠI</th>
+                    <th>ĐIỂM</th>
+                    <th>CHI TIẾT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loyaltyMemberDetail.history.map((entry) => (
+                    <tr key={entry.id}>
+                      <td>{new Date(entry.createdAt).toLocaleString('vi-VN')}</td>
+                      <td>
+                        <span className={`status ${entry.type === 'EARN' ? 'ready' : 'preparing'}`}>
+                          {entry.type === 'EARN' ? 'Tích điểm' : 'Đổi quà'}
+                        </span>
+                      </td>
+                      <td>{entry.points > 0 ? `+${entry.points}` : entry.points}</td>
+                      <td>
+                        {entry.type === 'EARN'
+                          ? 'Đơn đã thanh toán'
+                          : `${entry.rewardName ?? 'Quà đã xóa'}${
+                              entry.actorName === null ? '' : ` · ${entry.actorName}`
+                            }${entry.note === null ? '' : ` · ${entry.note}`}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
     </ModalFrame>
   );
 }
@@ -1129,8 +1375,13 @@ export function AdminModals() {
       {modal.kind === 'coupon-form' ? (
         <CouponFormModal key={modal.couponId ?? 'new'} couponId={modal.couponId} />
       ) : null}
-      {modal.kind === 'add-reward' ? <AddRewardModal /> : null}
+      {modal.kind === 'reward-form' ? (
+        <RewardFormModal key={modal.rewardId ?? 'new'} rewardId={modal.rewardId} />
+      ) : null}
       {modal.kind === 'loyalty-settings' ? <LoyaltySettingsModal /> : null}
+      {modal.kind === 'loyalty-member' ? (
+        <LoyaltyMemberModal key={modal.phone} phone={modal.phone} name={modal.name} />
+      ) : null}
       {modal.kind === 'add-product' ? <ProductFormModal /> : null}
     </div>
   );
