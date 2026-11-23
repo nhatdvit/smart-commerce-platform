@@ -253,6 +253,11 @@ function ProductImageField({
   );
 }
 
+/** True once the order's payment is settled - nothing left to collect here. */
+function isSettledPayment(status: AdminOrderDetail['paymentStatus']): boolean {
+  return status === 'PAID' || status === 'PARTIALLY_REFUNDED' || status === 'REFUNDED';
+}
+
 /**
  * One order in full, and the moves a staff member can make from here.
  *
@@ -263,9 +268,13 @@ function ProductImageField({
  * Which buttons appear mirrors the server's state machine, and the server
  * still decides: it validates the move against the committed status under a
  * row lock, so a stale dialog gets a conflict rather than a surprise.
+ *
+ * Its own frame rather than `ModalFrame`: this is the one dialog wide enough
+ * to need a two-column layout, and the only one with a close button in the
+ * header instead of just the footer.
  */
 function OrderModal({ orderId }: { orderId: string }) {
-  const { moveOrder, ordersBusy } = useAdminData();
+  const { moveOrder, ordersBusy, closeModal, openModal } = useAdminData();
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [loadError, setLoadError] = useState('');
   const [askingReason, setAskingReason] = useState(false);
@@ -293,23 +302,37 @@ function OrderModal({ orderId }: { orderId: string }) {
     };
   }, [orderId]);
 
-  if (loadError !== '') {
+  if (loadError !== '' || order === null) {
     return (
-      <ModalFrame title="Đơn hàng">
-        <p role="alert">{loadError}</p>
-      </ModalFrame>
-    );
-  }
-
-  if (order === null) {
-    return (
-      <ModalFrame title="Đơn hàng">
-        <p>Đang tải chi tiết đơn...</p>
-      </ModalFrame>
+      <div className="modal order-detail-modal">
+        <div className="modal-head">
+          <div>
+            <div className="eyebrow">ĐƠN HÀNG</div>
+            <h2>{loadError === '' ? 'Đang tải...' : 'Không tải được đơn hàng'}</h2>
+          </div>
+          <button type="button" className="icon-btn" aria-label="Đóng" onClick={closeModal}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-content">
+          <p role={loadError === '' ? undefined : 'alert'}>
+            {loadError === '' ? 'Đang tải chi tiết đơn...' : loadError}
+          </p>
+        </div>
+      </div>
     );
   }
 
   const next = forwardStatus(order.status);
+  const needsPayment = order.paymentId !== null && !isSettledPayment(order.paymentStatus);
+  // No money was ever collected, so there is nothing a refund policy needs
+  // to look at - a real anomaly (a payment row with no method at all) reads
+  // the same way, honestly, rather than as a settled transaction.
+  const cancelledWithNothingOwed =
+    order.status === 'CANCELLED' &&
+    (order.paymentStatus === null ||
+      order.paymentStatus === 'PENDING' ||
+      order.paymentStatus === 'FAILED');
 
   // The order is passed in rather than read from the closure: TypeScript does
   // not carry the null check above into a function declaration, and an
@@ -327,152 +350,251 @@ function OrderModal({ orderId }: { orderId: string }) {
   }
 
   return (
-    <ModalFrame
-      title={`Đơn hàng ${order.code}`}
-      actions={
-        <>
-          {canCancel(order.status) && !askingReason ? (
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => setAskingReason(true)}
-              disabled={ordersBusy}
-            >
-              Hủy đơn
-            </button>
-          ) : null}
-          {askingReason ? (
-            <button
-              type="button"
-              className="btn btn-danger"
-              onClick={() => cancelOrder(order)}
-              disabled={ordersBusy}
-            >
-              Xác nhận hủy
-            </button>
-          ) : null}
-          {next === undefined ? null : (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => moveOrder(order.id, next)}
-              disabled={ordersBusy}
-            >
-              Chuyển sang: {ORDER_STATUS_LABELS[next]}
-            </button>
-          )}
-        </>
-      }
-    >
-      <div className="order-detail">
-        <div className="order-detail-row">
-          <StatusBadge status={order.status} />
-          <span>{FULFILLMENT_LABELS[order.fulfillment]}</span>
-          <span>Giờ nhận {timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)}</span>
+    <div className="modal order-detail-modal">
+      <div className="modal-head">
+        <div>
+          <div className="eyebrow">ĐẶT LÚC {timeLabel(order.placedAt ?? order.createdAt)}</div>
+          <h2>Đơn hàng {order.code}</h2>
         </div>
+        <button type="button" className="icon-btn" aria-label="Đóng" onClick={closeModal}>
+          ✕
+        </button>
+      </div>
 
-        <dl className="order-facts">
-          <dt>Khách</dt>
-          <dd>
-            {order.contactName} · {order.contactPhone}
-          </dd>
+      <div className="order-detail-layout">
+        <div className="order-detail-main">
+          <div className="order-customer-bar">
+            <div className="order-person">
+              <span className="detail-round-icon" aria-hidden="true">
+                ♙
+              </span>
+              <div>
+                <strong>{order.contactName}</strong>
+                <a href={`tel:${order.contactPhone.replace(/\s/g, '')}`}>{order.contactPhone}</a>
+              </div>
+            </div>
+            <div className="order-pickup">
+              <span className="detail-round-icon" aria-hidden="true">
+                ▣
+              </span>
+              <div>
+                <small>Nhận hàng</small>
+                <strong>
+                  {timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)} ·{' '}
+                  {FULFILLMENT_LABELS[order.fulfillment]}
+                </strong>
+              </div>
+            </div>
+          </div>
+
           {order.deliveryAddress === null ? null : (
-            <>
-              <dt>Giao tới</dt>
-              <dd>{order.deliveryAddress}</dd>
-            </>
+            <p className="order-delivery-address">Giao tới: {order.deliveryAddress}</p>
           )}
-          <dt>Thanh toán</dt>
-          <dd>
-            {order.paymentMethod === null
-              ? 'Chưa ghi nhận thanh toán'
-              : `${PAYMENT_METHOD_LABELS[order.paymentMethod]} · ${
-                  order.paymentStatus === null
-                    ? 'không rõ'
-                    : PAYMENT_STATUS_LABELS[order.paymentStatus]
-                }`}
-            {order.paidAt === null ? '' : ` · đã thu ${dateTimeLabel(order.paidAt)}`}
-            {order.paymentStatus === 'PENDING' && order.paymentExpiresAt !== null
-              ? ` · hết hạn ${dateTimeLabel(order.paymentExpiresAt)}`
-              : ''}
-          </dd>
-          {order.note === null ? null : (
-            <>
-              <dt>Ghi chú</dt>
-              <dd>{order.note}</dd>
-            </>
-          )}
-        </dl>
 
-        <table className="order-lines">
-          <tbody>
+          <div className="order-status-pair">
+            <div className="order-status-card order-status-blue">
+              <span className="detail-status-icon" aria-hidden="true">
+                ⬡
+              </span>
+              <div>
+                <small>Trạng thái đơn</small>
+                <StatusBadge status={order.status} />
+              </div>
+            </div>
+            <div className="order-status-card order-status-gold">
+              <span className="detail-status-icon" aria-hidden="true">
+                ▤
+              </span>
+              <div>
+                <small>Thanh toán</small>
+                {order.paymentMethod === null ? (
+                  <span className="status waiting">Chưa ghi nhận</span>
+                ) : (
+                  <span
+                    className={
+                      isSettledPayment(order.paymentStatus) ? 'status done' : 'status waiting'
+                    }
+                  >
+                    {order.paymentStatus === null
+                      ? 'Không rõ'
+                      : PAYMENT_STATUS_LABELS[order.paymentStatus]}
+                  </span>
+                )}
+                <span className="order-payment-method">
+                  {order.paymentMethod === null ? '—' : PAYMENT_METHOD_LABELS[order.paymentMethod]}
+                  {order.paidAt === null ? '' : ` · đã thu ${dateTimeLabel(order.paidAt)}`}
+                  {order.paymentStatus === 'PENDING' && order.paymentExpiresAt !== null
+                    ? ` · hết hạn ${dateTimeLabel(order.paymentExpiresAt)}`
+                    : ''}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="detail-section-heading">
+            <span aria-hidden="true">♧</span>
+            <h3>Sản phẩm đã đặt</h3>
+          </div>
+          <div className="detail-items">
             {order.lines.map((line) => (
-              <tr key={line.id}>
-                <td>
-                  {line.quantity} × {line.name}
-                  {line.note === null ? null : <em> ({line.note})</em>}
-                </td>
-                <td>{money(line.lineTotal)}</td>
-              </tr>
+              <div className="detail-product" key={line.id}>
+                <span className="detail-product-thumb" aria-hidden="true">
+                  🍽️
+                </span>
+                <div className="detail-product-name">
+                  <strong>{line.name}</strong>
+                  <small>
+                    {money(line.unitPrice)} / sản phẩm
+                    {line.note === null ? '' : ` · ${line.note}`}
+                  </small>
+                </div>
+                <span className="detail-product-qty">× {line.quantity}</span>
+                <strong className="detail-product-price">{money(line.lineTotal)}</strong>
+              </div>
             ))}
             {order.discount === 0 ? null : (
-              <tr>
-                <td>Giảm giá</td>
-                <td>-{money(order.discount)}</td>
-              </tr>
+              <div className="detail-product">
+                <div className="detail-product-name">
+                  <strong>Giảm giá</strong>
+                </div>
+                <strong className="detail-product-price">-{money(order.discount)}</strong>
+              </div>
             )}
             {order.deliveryFee === 0 ? null : (
-              <tr>
-                <td>Phí giao hàng</td>
-                <td>{money(order.deliveryFee)}</td>
-              </tr>
+              <div className="detail-product">
+                <div className="detail-product-name">
+                  <strong>Phí giao hàng</strong>
+                </div>
+                <strong className="detail-product-price">{money(order.deliveryFee)}</strong>
+              </div>
             )}
-            <tr className="order-total">
-              <td>Tổng tiền</td>
-              <td>{money(order.total)}</td>
-            </tr>
-          </tbody>
-        </table>
+          </div>
 
-        {order.status === 'PENDING_PAYMENT' ? (
-          <p className="notice">
-            Đơn chờ chuyển khoản chỉ vào hàng đợi khi nhân viên xác nhận đã nhận được tiền thật ở
-            màn hình Thanh toán. Ảnh chụp hay thao tác “tôi đã chuyển” không phải bằng chứng.
-          </p>
-        ) : null}
+          <div className="detail-total">
+            <strong>Tổng thanh toán</strong>
+            <b>{money(order.total)}</b>
+          </div>
 
+          {order.status !== 'PENDING_PAYMENT' ? null : (
+            <p className="detail-cancel-note">
+              ⓘ Đơn chờ chuyển khoản chỉ vào hàng đợi khi nhân viên xác nhận đã nhận được tiền thật
+              ở màn hình Thanh toán. Ảnh chụp hay thao tác "tôi đã chuyển" không phải bằng chứng.
+            </p>
+          )}
+
+          {!cancelledWithNothingOwed ? null : (
+            <p className="detail-cancel-note">
+              ⓘ Đơn đã hủy trước khi thu tiền. Không phát sinh công nợ hoặc hoàn tiền.
+            </p>
+          )}
+
+          {askingReason ? (
+            <Field label="Lý do hủy đơn" error={reasonError === '' ? undefined : reasonError}>
+              <input
+                autoFocus
+                maxLength={255}
+                placeholder="VD: Khách đổi ý"
+                value={reason}
+                onChange={(event) => {
+                  setReason(event.target.value);
+                  setReasonError('');
+                }}
+              />
+            </Field>
+          ) : null}
+        </div>
+
+        <aside className="order-detail-side">
+          <div className="detail-section-heading side-heading">
+            <span aria-hidden="true">◈</span>
+            <h3>Tiến trình đơn hàng</h3>
+          </div>
+          {order.history.length === 0 ? (
+            <p className="panel-note">Chưa có lịch sử nào được ghi nhận.</p>
+          ) : (
+            <div className="order-timeline">
+              {order.history.map((event, index) => (
+                <div
+                  className={`order-timeline-step is-done${event.to === 'CANCELLED' || event.to === 'EXPIRED' ? ' is-cancelled' : ''}`}
+                  key={`${event.to}-${index}`}
+                >
+                  <span className="timeline-dot" aria-hidden="true">
+                    {event.to === 'CANCELLED' || event.to === 'EXPIRED' ? '×' : '✓'}
+                  </span>
+                  <div>
+                    <strong>{ORDER_STATUS_LABELS[event.to]}</strong>
+                    <small>
+                      {dateTimeLabel(event.at)}
+                      {/* No actor means the system moved it - an expiry job, say. */}
+                      {event.actorName === null ? ' · Hệ thống' : ` · ${event.actorName}`}
+                    </small>
+                    {event.reason === null ? null : <small>{event.reason}</small>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="detail-side-notes">
+            <div className="detail-section-heading">
+              <span aria-hidden="true">♢</span>
+              <h3>Ghi chú</h3>
+            </div>
+            <p>{order.note ?? 'Không có ghi chú'}</p>
+          </div>
+        </aside>
+      </div>
+
+      <div className="modal-actions">
+        <button type="button" className="btn" onClick={closeModal}>
+          Đóng
+        </button>
+        {!canCancel(order.status) || askingReason ? null : (
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => setAskingReason(true)}
+            disabled={ordersBusy}
+          >
+            Hủy đơn
+          </button>
+        )}
         {askingReason ? (
-          <Field label="Lý do hủy đơn" error={reasonError === '' ? undefined : reasonError}>
-            <input
-              autoFocus
-              maxLength={255}
-              placeholder="VD: Khách đổi ý"
-              value={reason}
-              onChange={(event) => {
-                setReason(event.target.value);
-                setReasonError('');
-              }}
-            />
-          </Field>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => cancelOrder(order)}
+            disabled={ordersBusy}
+          >
+            Xác nhận hủy
+          </button>
         ) : null}
-
-        {order.history.length === 0 ? null : (
-          <ol className="order-timeline">
-            {order.history.map((event, index) => (
-              <li key={`${event.to}-${index}`}>
-                <b>{ORDER_STATUS_LABELS[event.to]}</b>
-                <span>
-                  {dateTimeLabel(event.at)}
-                  {/* No actor means the system moved it - an expiry job, say. */}
-                  {event.actorName === null ? ' · hệ thống' : ` · ${event.actorName}`}
-                </span>
-                {event.reason === null ? null : <em>{event.reason}</em>}
-              </li>
-            ))}
-          </ol>
+        {!needsPayment ? null : (
+          <button
+            type="button"
+            className="btn"
+            disabled={ordersBusy}
+            onClick={() => {
+              if (order.paymentId !== null) {
+                openModal({ kind: 'payment', paymentId: order.paymentId });
+              }
+            }}
+          >
+            Xác nhận thu tiền
+          </button>
+        )}
+        {next === undefined ? null : (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => moveOrder(order.id, next)}
+            disabled={ordersBusy}
+          >
+            Chuyển sang: {ORDER_STATUS_LABELS[next]}
+          </button>
         )}
       </div>
-    </ModalFrame>
+    </div>
   );
 }
 

@@ -167,6 +167,8 @@ interface AdminContextValue {
   /** Asks for the list a screen shows. Identical repeats are not re-fetched. */
   readonly loadOrders: (query: OrderQuery) => void;
   readonly loadMoreOrders: () => void;
+  /** Re-reads the list currently on screen, bypassing the identical-request skip - the manual "↻" a screen offers alongside the 30-second poll. */
+  readonly refreshOrders: () => void;
   readonly moveOrder: (orderId: string, toStatus: OrderStatus, reason?: string) => void;
   /** Stops the highlight: one order, or all of them when no id is given. */
   readonly markOrdersSeen: (orderId?: string) => void;
@@ -562,6 +564,10 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
     void runOrderLoad(orderQuery.current, orderCursor);
   }, [orderCursor, runOrderLoad]);
+
+  const refreshOrders = useCallback((): void => {
+    void runOrderLoad(orderQuery.current);
+  }, [runOrderLoad]);
 
   useEffect(() => {
     void refreshMenu();
@@ -1527,6 +1533,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       signOut,
       loadOrders: requestOrders,
       loadMoreOrders,
+      refreshOrders,
       moveOrder,
       markOrdersSeen,
       createProduct,
@@ -1613,6 +1620,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
       signOut,
       requestOrders,
       loadMoreOrders,
+      refreshOrders,
       moveOrder,
       markOrdersSeen,
       createProduct,
