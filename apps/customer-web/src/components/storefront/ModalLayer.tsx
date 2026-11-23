@@ -113,6 +113,7 @@ interface CheckoutFormProps {
   readonly totals: CartTotals;
   readonly busy: boolean;
   readonly error: string;
+  readonly currentCustomer: CurrentCustomer | null;
   readonly onPlace: (
     contactName: string,
     contactPhone: string,
@@ -123,9 +124,10 @@ interface CheckoutFormProps {
   readonly onInvalid: () => void;
 }
 
-function CheckoutForm({ totals, busy, error, onPlace, onInvalid }: CheckoutFormProps) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+/** Prefilled from the signed-in customer's own profile, still editable - someone else may be picking up the order. */
+function CheckoutForm({ totals, busy, error, currentCustomer, onPlace, onInvalid }: CheckoutFormProps) {
+  const [name, setName] = useState(currentCustomer?.name ?? '');
+  const [phone, setPhone] = useState(currentCustomer?.phone ?? '');
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('PICKUP');
   const [address, setAddress] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('CASH');
@@ -627,6 +629,7 @@ export function ModalLayer({
           totals={totals}
           busy={checkoutBusy}
           error={checkoutError}
+          currentCustomer={currentCustomer}
           onPlace={onPlaceOrder}
           onInvalid={onInvalidCheckout}
         />
