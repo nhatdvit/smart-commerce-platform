@@ -4916,6 +4916,14 @@ components:
           $ref: '#/components/schemas/Money'
         observed_amount:
           $ref: '#/components/schemas/Money'
+        disposition:
+          description: |
+            What becomes of the excess - set only when type is OVERPAID
+            (§6, decision dated 2026-11-24); null for every other type.
+          oneOf:
+            - type: string
+              enum: [KEEP, REFUND, DEBT]
+            - type: 'null'
         note:
           type: [string, 'null']
         recorded_by:
@@ -5055,6 +5063,14 @@ components:
         note:
           type: [string, 'null']
           maxLength: 500
+        overpayment_disposition:
+          type: [string, 'null']
+          enum: [KEEP, REFUND, DEBT, null]
+          description: |
+            What becomes of the excess, when `amount` exceeds what is owed
+            (§6, decision dated 2026-11-24). Required in that case once
+            `accept_discrepancy` is set; refused with `PAYMENT_AMOUNT_MISMATCH`
+            otherwise. Ignored when `amount` is not an overpayment.
 
     FlagPaymentRequest:
       type: object

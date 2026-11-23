@@ -158,6 +158,7 @@ final class EloquentPaymentRepository implements PaymentRepository
             'type' => $discrepancy->type->value,
             'expected_amount' => $discrepancy->expectedAmount?->amount,
             'observed_amount' => $discrepancy->observedAmount?->amount,
+            'disposition' => $discrepancy->disposition?->value,
             'note' => $discrepancy->note,
             'recorded_by' => $discrepancy->recordedBy,
             'recorded_at' => $discrepancy->recordedAt ?? now()->toImmutable(),
@@ -272,6 +273,7 @@ final class EloquentPaymentRepository implements PaymentRepository
                 $discrepancy->recorded_by,
                 $discrepancy->recorded_by === null ? null : ($names[$discrepancy->recorded_by] ?? null),
                 $discrepancy->recorded_at,
+                $discrepancy->disposition,
             ),
         )->all());
 

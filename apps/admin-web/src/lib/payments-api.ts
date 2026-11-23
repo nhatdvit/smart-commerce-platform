@@ -77,10 +77,16 @@ export const DISCREPANCY_TYPE_LABELS: Readonly<Record<DiscrepancyType, string>> 
   CANCELLED_ORDER_PAID: 'Đơn đã hủy nhưng có tiền về',
 };
 
+export const OVERPAYMENT_DISPOSITIONS = ['KEEP', 'REFUND', 'DEBT'] as const;
+
+export type OverpaymentDisposition = (typeof OVERPAYMENT_DISPOSITIONS)[number];
+
 export interface PaymentDiscrepancy {
   readonly type: DiscrepancyType;
   readonly expectedAmount: number | null;
   readonly observedAmount: number | null;
+  /** Set only when type is OVERPAID (CLAUDE.md §6, decision dated 2026-11-24). */
+  readonly disposition: OverpaymentDisposition | null;
   readonly note: string | null;
   readonly recordedBy: string | null;
   readonly recordedAt: string | null;
@@ -145,6 +151,8 @@ export interface ConfirmPaymentInput {
   readonly bankTransactionReference?: string | null;
   readonly acceptDiscrepancy?: boolean;
   readonly note?: string | null;
+  /** Required only when `amount` exceeds what is owed (CLAUDE.md §6, 2026-11-24). */
+  readonly overpaymentDisposition?: OverpaymentDisposition | null;
 }
 
 export interface FlagPaymentInput {
@@ -174,10 +182,17 @@ function toDiscrepancyType(value: string): DiscrepancyType {
   return DISCREPANCY_TYPES.find((type) => type === value) ?? 'UNKNOWN_REFERENCE';
 }
 
+function toDisposition(value: string | null): OverpaymentDisposition | null {
+  return value === null
+    ? null
+    : (OVERPAYMENT_DISPOSITIONS.find((disposition) => disposition === value) ?? null);
+}
+
 interface ApiPaymentDiscrepancy {
   readonly type: string;
   readonly expected_amount: ApiMoney | null;
   readonly observed_amount: ApiMoney | null;
+  readonly disposition: string | null;
   readonly note: string | null;
   readonly recorded_by: string | null;
   readonly recorded_at: string | null;
@@ -242,6 +257,7 @@ function toPayment(payment: ApiAdminPayment): AdminPayment {
       type: toDiscrepancyType(discrepancy.type),
       expectedAmount: toAmount(discrepancy.expected_amount),
       observedAmount: toAmount(discrepancy.observed_amount),
+      disposition: toDisposition(discrepancy.disposition),
       note: discrepancy.note,
       recordedBy: discrepancy.recorded_by,
       recordedAt: discrepancy.recorded_at,
@@ -319,6 +335,7 @@ export async function confirmPayment(
       bank_transaction_reference: input.bankTransactionReference ?? null,
       accept_discrepancy: input.acceptDiscrepancy ?? false,
       note: input.note ?? null,
+      overpayment_disposition: input.overpaymentDisposition ?? null,
     },
     { 'Idempotency-Key': newIdempotencyKey() },
   );

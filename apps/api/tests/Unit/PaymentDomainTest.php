@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Payment\Domain\Entity\BankAccount;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Domain\Enum\DiscrepancyType;
+use App\Modules\Payment\Domain\Enum\OverpaymentDisposition;
 use App\Modules\Payment\Domain\Enum\PaymentMethod;
 use App\Modules\Payment\Domain\Enum\PaymentStatus;
 use App\Modules\Payment\Domain\ValueObject\KnownBank;
@@ -141,6 +142,22 @@ it('flags an exception without changing the payment status', function (): void {
         ->and($discrepancy->expectedAmount?->amount)->toBe(100_000)
         ->and($discrepancy->recordedBy)->toBe('cashier-1')
         ->and($discrepancy->recordedByName)->toBe('Thu ngân Demo');
+});
+
+it('carries an overpayment disposition on the discrepancy it records', function (): void {
+    $existing = payment(status: PaymentStatus::Pending, amount: 100_000);
+
+    $discrepancy = $existing->flag(
+        DiscrepancyType::Overpaid,
+        Money::vnd(102_000),
+        null,
+        'cashier-1',
+        'Thu ngân Demo',
+        new DateTimeImmutable('2026-11-24 07:10:00'),
+        OverpaymentDisposition::Keep,
+    );
+
+    expect($discrepancy->disposition)->toBe(OverpaymentDisposition::Keep);
 });
 
 it('can flag a payment that is already paid, for a duplicate transfer', function (): void {

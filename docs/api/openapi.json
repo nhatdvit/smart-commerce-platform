@@ -2897,6 +2897,19 @@
                             "null"
                         ],
                         "maxLength": 500
+                    },
+                    "overpayment_disposition": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Whether this is actually required - the amount turns out to\nexceed what is owed - depends on the payment this request has\nno way to load, so that half of the rule lives in\nConfirmPayment::handle() instead; this only checks the shape.",
+                        "enum": [
+                            "KEEP",
+                            "REFUND",
+                            "DEBT",
+                            null
+                        ]
                     }
                 },
                 "required": [

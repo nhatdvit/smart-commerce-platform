@@ -62,6 +62,7 @@ final class AdminPaymentResource extends JsonResource
                     'type' => $discrepancy->type->value,
                     'expected_amount' => $discrepancy->expectedAmount?->jsonSerialize(),
                     'observed_amount' => $discrepancy->observedAmount?->jsonSerialize(),
+                    'disposition' => $discrepancy->disposition?->value,
                     'note' => $discrepancy->note,
                     'recorded_by' => $discrepancy->recordedByName,
                     'recorded_at' => IsoTimestamp::of($discrepancy->recordedAt),

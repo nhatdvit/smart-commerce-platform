@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payment\Domain\Entity;
 
 use App\Modules\Payment\Domain\Enum\DiscrepancyType;
+use App\Modules\Payment\Domain\Enum\OverpaymentDisposition;
 use App\Modules\Payment\Domain\Enum\PaymentMethod;
 use App\Modules\Payment\Domain\Enum\PaymentStatus;
 use App\Shared\Domain\Exception\BusinessRuleViolation;
@@ -249,6 +250,7 @@ final readonly class Payment
         string $actorId,
         ?string $actorName,
         DateTimeImmutable $at,
+        ?OverpaymentDisposition $disposition = null,
     ): PaymentDiscrepancy {
         return new PaymentDiscrepancy(
             $type,
@@ -258,6 +260,7 @@ final readonly class Payment
             $actorId,
             $actorName,
             $at,
+            $disposition,
         );
     }
 
