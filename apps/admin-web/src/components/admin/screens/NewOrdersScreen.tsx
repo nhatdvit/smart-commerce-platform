@@ -98,11 +98,16 @@ function QueueRow({
     >
       <div className="order-row-top">
         <strong>{order.code}</strong>
-        {urgent ? <span className="tag tag-red">⚡ Ưu tiên</span> : <StatusBadge status={order.status} />}
+        {urgent ? (
+          <span className="tag tag-red">⚡ Ưu tiên</span>
+        ) : (
+          <StatusBadge status={order.status} />
+        )}
       </div>
       <div className="order-row-customer">{order.contactName}</div>
       <div className="order-row-sub">
-        🕒 Nhận {timeLabel(order.placedAt ?? order.createdAt)} · {FULFILLMENT_LABELS[order.fulfillment]}
+        🕒 Nhận {timeLabel(order.placedAt ?? order.createdAt)} ·{' '}
+        {FULFILLMENT_LABELS[order.fulfillment]}
         <br />
         {itemsSummary(order.items)}
       </div>
@@ -196,7 +201,9 @@ function QueueDetail({ orderId }: { readonly orderId: string }) {
           {order.paymentMethod === null
             ? 'Chưa ghi nhận thanh toán'
             : `${PAYMENT_METHOD_LABELS[order.paymentMethod]} · ${
-                order.paymentStatus === null ? 'không rõ' : PAYMENT_STATUS_LABELS[order.paymentStatus]
+                order.paymentStatus === null
+                  ? 'không rõ'
+                  : PAYMENT_STATUS_LABELS[order.paymentStatus]
               }`}
         </dd>
         {order.note === null ? null : (
@@ -248,11 +255,21 @@ function QueueDetail({ orderId }: { readonly orderId: string }) {
 
       <div className="order-board-actions">
         {askingReason ? (
-          <button type="button" className="btn" disabled={ordersBusy} onClick={() => setAskingReason(false)}>
+          <button
+            type="button"
+            className="btn"
+            disabled={ordersBusy}
+            onClick={() => setAskingReason(false)}
+          >
             Quay lại
           </button>
         ) : canCancel(order.status) ? (
-          <button type="button" className="btn btn-danger" disabled={ordersBusy} onClick={() => setAskingReason(true)}>
+          <button
+            type="button"
+            className="btn btn-danger"
+            disabled={ordersBusy}
+            onClick={() => setAskingReason(true)}
+          >
             ✕ Từ chối
           </button>
         ) : null}
@@ -262,7 +279,12 @@ function QueueDetail({ orderId }: { readonly orderId: string }) {
             Xác nhận từ chối
           </button>
         ) : next === 'CONFIRMED' ? (
-          <button type="button" className="btn btn-primary" disabled={ordersBusy} onClick={() => moveOrder(order.id, 'CONFIRMED')}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={ordersBusy}
+            onClick={() => moveOrder(order.id, 'CONFIRMED')}
+          >
             ✓ Xác nhận đơn
           </button>
         ) : null}
@@ -461,7 +483,9 @@ export function NewOrdersScreen() {
           <section className="panel order-board-detail">
             <div className="panel-title">
               <h3>Chi tiết đơn hàng</h3>
-              {selectedId === null ? <span className="panel-note">Chọn một đơn bên trái</span> : null}
+              {selectedId === null ? (
+                <span className="panel-note">Chọn một đơn bên trái</span>
+              ) : null}
             </div>
             {selectedId === null ? (
               <div className="empty">✓ Đã xử lý hết đơn chờ xác nhận.</div>
