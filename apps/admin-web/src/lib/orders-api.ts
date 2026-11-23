@@ -140,6 +140,8 @@ export interface AdminOrderDetail extends AdminOrder {
   readonly contactEmail: string | null;
   readonly deliveryAddress: string | null;
   readonly note: string | null;
+  /** Null when the order has no payment row at all; see `paymentMethod`. */
+  readonly paymentId: string | null;
   readonly lines: readonly OrderLine[];
   readonly subtotal: number;
   readonly discount: number;
@@ -346,6 +348,7 @@ function toDetail(order: ApiOrder): AdminOrderDetail {
       lineTotal: toAmount(item.line_total),
       note: item.note,
     })),
+    paymentId: payment?.id ?? null,
     paymentMethod: toPaymentMethod(payment?.method ?? null),
     paymentStatus: toPaymentStatus(payment?.status ?? null),
     paidAt: payment?.paid_at ?? null,
