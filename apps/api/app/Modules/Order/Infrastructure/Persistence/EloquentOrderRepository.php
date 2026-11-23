@@ -54,66 +54,12 @@ final class EloquentOrderRepository implements OrderRepository
 
     public function paginate(string $storeId, OrderCriteria $criteria): array
     {
-        $limit = max(1, min($criteria->limit, self::MAX_LIMIT));
+        return $this->paginateQuery($storeId, $criteria, null);
+    }
 
-        $query = $this->baseQuery($storeId);
-
-        if ($criteria->statuses !== []) {
-            $query->whereIn('status', array_map(
-                static fn (OrderStatus $status): string => $status->value,
-                $criteria->statuses,
-            ));
-        }
-
-        if ($criteria->fulfillmentType !== null) {
-            $query->where('fulfillment_type', $criteria->fulfillmentType->value);
-        }
-
-        // Exact, because this is the code a customer read out over the phone -
-        // a partial match would hand staff somebody else's order.
-        if ($criteria->orderCode !== null && trim($criteria->orderCode) !== '') {
-            $query->where('order_code', trim($criteria->orderCode));
-        }
-
-        // Inclusive lower bound, exclusive upper, as the contract documents.
-        // An order still waiting for a transfer has no placed_at and is
-        // therefore outside any placed-at window, which is the honest answer.
-        if ($criteria->placedFrom !== null) {
-            $query->where('placed_at', '>=', $criteria->placedFrom);
-        }
-
-        if ($criteria->placedTo !== null) {
-            $query->where('placed_at', '<', $criteria->placedTo);
-        }
-
-        if ($criteria->search !== null && trim($criteria->search) !== '') {
-            $this->applySearch($query, trim($criteria->search));
-        }
-
-        // Cursor pagination over the primary key, not an offset: UUIDv7 keys
-        // are time-ordered, so the key order IS the chronological order and a
-        // page cannot shift under a client while new orders arrive
-        // (CLAUDE.md section 8).
-        $after = $this->decodeCursor($criteria->cursor);
-
-        if ($after !== null) {
-            $query->where('id', $criteria->oldestFirst ? '>' : '<', $after);
-        }
-
-        $rows = $query
-            ->orderBy('id', $criteria->oldestFirst ? 'asc' : 'desc')
-            ->limit($limit + 1)
-            ->get();
-
-        $hasMore = $rows->count() > $limit;
-        $page = $hasMore ? $rows->take($limit) : $rows;
-        $last = $page->last();
-
-        return [
-            'items' => array_values($page->map(fn (OrderModel $row): Order => $this->toEntity($row))->all()),
-            'next_cursor' => $hasMore && $last instanceof OrderModel ? $this->encodeCursor($last->id) : null,
-            'has_more' => $hasMore,
-        ];
+    public function paginateForCustomer(string $storeId, string $customerId, OrderCriteria $criteria): array
+    {
+        return $this->paginateQuery($storeId, $criteria, $customerId);
     }
 
     public function findForUpdate(string $storeId, string $orderId): ?Order
@@ -198,6 +144,77 @@ final class EloquentOrderRepository implements OrderRepository
         }
 
         return $counts;
+    }
+
+    /**
+     * @return array{items: list<Order>, next_cursor: string|null, has_more: bool}
+     */
+    private function paginateQuery(string $storeId, OrderCriteria $criteria, ?string $customerId): array
+    {
+        $limit = max(1, min($criteria->limit, self::MAX_LIMIT));
+
+        $query = $this->baseQuery($storeId);
+
+        if ($customerId !== null) {
+            $query->where('customer_id', $customerId);
+        }
+
+        if ($criteria->statuses !== []) {
+            $query->whereIn('status', array_map(
+                static fn (OrderStatus $status): string => $status->value,
+                $criteria->statuses,
+            ));
+        }
+
+        if ($criteria->fulfillmentType !== null) {
+            $query->where('fulfillment_type', $criteria->fulfillmentType->value);
+        }
+
+        // Exact, because this is the code a customer read out over the phone -
+        // a partial match would hand staff somebody else's order.
+        if ($criteria->orderCode !== null && trim($criteria->orderCode) !== '') {
+            $query->where('order_code', trim($criteria->orderCode));
+        }
+
+        // Inclusive lower bound, exclusive upper, as the contract documents.
+        // An order still waiting for a transfer has no placed_at and is
+        // therefore outside any placed-at window, which is the honest answer.
+        if ($criteria->placedFrom !== null) {
+            $query->where('placed_at', '>=', $criteria->placedFrom);
+        }
+
+        if ($criteria->placedTo !== null) {
+            $query->where('placed_at', '<', $criteria->placedTo);
+        }
+
+        if ($criteria->search !== null && trim($criteria->search) !== '') {
+            $this->applySearch($query, trim($criteria->search));
+        }
+
+        // Cursor pagination over the primary key, not an offset: UUIDv7 keys
+        // are time-ordered, so the key order IS the chronological order and a
+        // page cannot shift under a client while new orders arrive
+        // (CLAUDE.md section 8).
+        $after = $this->decodeCursor($criteria->cursor);
+
+        if ($after !== null) {
+            $query->where('id', $criteria->oldestFirst ? '>' : '<', $after);
+        }
+
+        $rows = $query
+            ->orderBy('id', $criteria->oldestFirst ? 'asc' : 'desc')
+            ->limit($limit + 1)
+            ->get();
+
+        $hasMore = $rows->count() > $limit;
+        $page = $hasMore ? $rows->take($limit) : $rows;
+        $last = $page->last();
+
+        return [
+            'items' => array_values($page->map(fn (OrderModel $row): Order => $this->toEntity($row))->all()),
+            'next_cursor' => $hasMore && $last instanceof OrderModel ? $this->encodeCursor($last->id) : null,
+            'has_more' => $hasMore,
+        ];
     }
 
     /**

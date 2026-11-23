@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
  * @property string $store_id
  * @property string $order_code
  * @property string|null $customer_id
+ * @property string|null $guest_access_token_hash
  * @property string $contact_name
  * @property string $contact_phone
  * @property string|null $contact_email
@@ -69,6 +70,17 @@ final class Order extends Model
         'total_amount',
         'currency',
         'placed_at',
+    ];
+
+    /**
+     * Never mass-assigned, the same convention as `User::$password_hash`: it
+     * is set once, deliberately, via `forceFill()` at checkout - never a
+     * column a later update could silently overwrite.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'guest_access_token_hash',
     ];
 
     /**

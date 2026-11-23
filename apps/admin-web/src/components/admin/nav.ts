@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 
 import {
+  IconBell,
   IconBoxes,
   IconDashboard,
   IconMenuBook,
@@ -32,7 +33,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     title: 'TỔNG QUAN',
     items: [
       { href: '/', Icon: IconDashboard, label: 'Tổng quan' },
-      { href: '/orders', Icon: IconReceipt, label: 'Đơn hàng', badge: 'pending' },
+      { href: '/orders/new', Icon: IconBell, label: 'Đơn hàng mới', badge: 'pending' },
+      { href: '/orders', Icon: IconReceipt, label: 'Đơn hàng' },
       { href: '/menu', Icon: IconMenuBook, label: 'Thực đơn & món ăn' },
       { href: '/inventory', Icon: IconBoxes, label: 'Số suất & tồn kho' },
     ],
