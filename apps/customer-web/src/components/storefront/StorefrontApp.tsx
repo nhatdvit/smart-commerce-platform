@@ -202,6 +202,10 @@ export function StorefrontApp() {
           passwordError={store.passwordError}
           checkoutBusy={store.checkoutBusy}
           checkoutError={store.checkoutError}
+          myOrders={store.myOrders}
+          myOrdersBusy={store.myOrdersBusy}
+          myOrdersError={store.myOrdersError}
+          myOrdersHasMore={store.myOrdersHasMore}
           onClose={store.closeLayers}
           onAddMenuItem={(menuItemId) => {
             store.addMenuItem(menuItemId);
@@ -216,6 +220,8 @@ export function StorefrontApp() {
           onRegister={(fullName, phone, password) => void store.register(fullName, phone, password)}
           onUpdateName={(name) => void store.updateProfile(name)}
           onChangePassword={(current, next) => void store.changePassword(current, next)}
+          onOpenOrders={store.openOrderHistory}
+          onLoadMoreOrders={store.loadMoreOrders}
           onLogout={store.logout}
         />
       )}

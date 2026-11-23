@@ -342,6 +342,66 @@ it('returns cash pickup instructions for a cash order', function (): void {
         ->assertJsonPath('cash.collect_at', 'PICKUP_COUNTER');
 });
 
+it("lists the signed-in customer's own orders, newest first", function (): void {
+    [$storeId, $itemId] = readyStore();
+    $customer = User::factory()->phoneOnly()->create(['phone' => '0909555010']);
+
+    $first = $this->actingAs($customer, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    $second = $this->actingAs($customer, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    config(['sanctum.stateful' => ['localhost']]);
+
+    $response = $this->actingAs($customer, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->getJson('/api/v1/customer/orders')
+        ->assertOk()
+        ->assertJsonCount(2, 'items');
+
+    expect($response->json('items.0.id'))->toBe($second->json('order.id'))
+        ->and($response->json('items.1.id'))->toBe($first->json('order.id'))
+        ->and($response->json('items.0.order_code'))->toBe($second->json('order.order_code'))
+        ->and($response->json('items.0.total.amount'))->toBe('60000')
+        ->and($response->json('has_more'))->toBeFalse();
+});
+
+it("never lists another signed-in customer's orders", function (): void {
+    [$storeId, $itemId] = readyStore();
+    $owner = User::factory()->phoneOnly()->create(['phone' => '0909555011']);
+    $other = User::factory()->phoneOnly()->create(['phone' => '0909555012']);
+
+    $this->actingAs($owner, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    config(['sanctum.stateful' => ['localhost']]);
+
+    $this->actingAs($other, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->getJson('/api/v1/customer/orders')
+        ->assertOk()
+        ->assertJsonCount(0, 'items');
+});
+
+it('refuses an unauthenticated caller listing orders', function (): void {
+    [$storeId] = readyStore();
+    config(['sanctum.stateful' => ['localhost']]);
+
+    $this->withHeaders(CHECKOUT_HEADERS)
+        ->getJson('/api/v1/customer/orders')
+        ->assertUnauthorized();
+});
+
 it('lists CASH and BANK_TRANSFER, reporting which this store has enabled', function (): void {
     $store = Store::factory()->create();
     config(['commerce.default_store_slug' => $store->slug]);

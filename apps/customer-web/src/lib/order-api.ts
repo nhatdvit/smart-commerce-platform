@@ -193,6 +193,85 @@ export async function createOrder(
   return toConfirmation(data);
 }
 
+interface ApiOrderLinePreview {
+  readonly product_name: string;
+  readonly variant_name: string;
+  readonly quantity: number;
+}
+
+interface ApiOrderSummary {
+  readonly id: string;
+  readonly order_code: string;
+  readonly status: string;
+  readonly payment_status: string | null;
+  readonly payment_method: PaymentMethod | null;
+  readonly fulfillment_type: FulfillmentType;
+  readonly total: ApiMoney;
+  readonly item_count: number;
+  readonly unit_count: number;
+  readonly items: readonly ApiOrderLinePreview[];
+  readonly placed_at: string | null;
+  readonly created_at: string;
+}
+
+interface ApiMyOrderPage {
+  readonly items: readonly ApiOrderSummary[];
+  readonly next_cursor: string | null;
+  readonly has_more: boolean;
+}
+
+export interface OrderLinePreview {
+  readonly productName: string;
+  readonly variantName: string;
+  readonly quantity: number;
+}
+
+export interface MyOrderSummary {
+  readonly id: string;
+  readonly orderCode: string;
+  readonly status: string;
+  readonly paymentStatus: string | null;
+  readonly paymentMethod: PaymentMethod | null;
+  readonly fulfillmentType: FulfillmentType;
+  readonly total: number;
+  readonly items: readonly OrderLinePreview[];
+  readonly placedAt: string | null;
+  readonly createdAt: string;
+}
+
+export interface MyOrdersPage {
+  readonly items: readonly MyOrderSummary[];
+  readonly nextCursor: string | null;
+  readonly hasMore: boolean;
+}
+
+/** A signed-in customer's own order history - `GET /customer/orders`, newest first. */
+export async function listMyOrders(cursor?: string): Promise<MyOrdersPage> {
+  const query = cursor === undefined ? '' : `?cursor=${encodeURIComponent(cursor)}`;
+  const data = await api.get<ApiMyOrderPage>(`/customer/orders${query}`);
+
+  return {
+    items: data.items.map((order) => ({
+      id: order.id,
+      orderCode: order.order_code,
+      status: order.status,
+      paymentStatus: order.payment_status,
+      paymentMethod: order.payment_method,
+      fulfillmentType: order.fulfillment_type,
+      total: toAmount(order.total),
+      items: order.items.map((item) => ({
+        productName: item.product_name,
+        variantName: item.variant_name,
+        quantity: item.quantity,
+      })),
+      placedAt: order.placed_at,
+      createdAt: order.created_at,
+    })),
+    nextCursor: data.next_cursor,
+    hasMore: data.has_more,
+  };
+}
+
 export interface PaymentMethodOption {
   readonly method: PaymentMethod;
   readonly enabled: boolean;

@@ -10,8 +10,10 @@ use App\Modules\Order\Domain\Contract\OrderRepository;
 use App\Modules\Order\Domain\Entity\Order;
 use App\Modules\Order\Infrastructure\Persistence\Model\Order as OrderModel;
 use App\Modules\Order\Presentation\Http\Request\CreateOrderRequest;
+use App\Modules\Order\Presentation\Http\Request\ListMyOrdersRequest;
 use App\Modules\Order\Presentation\Http\Resource\OrderPaymentResource;
 use App\Modules\Order\Presentation\Http\Resource\OrderResource;
+use App\Modules\Order\Presentation\Http\Resource\OrderSummaryResource;
 use App\Modules\Payment\Application\Contract\ProvidesOrderPaymentDetails;
 use App\Modules\Store\Application\StoreContext;
 use App\Shared\Domain\Exception\BusinessRuleViolation;
@@ -63,6 +65,33 @@ final class CustomerOrderController extends Controller
             'payment' => (new OrderPaymentResource($payment, $found->fulfillmentType))->resolve(),
             'guest_order_token' => $result->guestAccessToken,
         ], 201);
+    }
+
+    /**
+     * A signed-in customer's own order history, newest first.
+     *
+     * `auth:sanctum` on the route guarantees a customer id - a guest has no
+     * durable identity to list orders by, only the one-time token for the
+     * single order they just placed.
+     */
+    public function mine(ListMyOrdersRequest $request, StoreContext $storeContext): JsonResponse
+    {
+        $storeId = $storeContext->require()->id;
+        $customerId = $this->authenticatedCustomerId($request);
+
+        if ($customerId === null) {
+            throw new RuntimeException('auth:sanctum let an unauthenticated request reach mine()');
+        }
+
+        $page = $this->orders->paginateForCustomer($storeId, $customerId, $request->toCriteria());
+
+        return new JsonResponse([
+            'items' => OrderSummaryResource::collection(
+                $this->view->forOrders($storeId, $page['items']),
+            )->resolve(),
+            'next_cursor' => $page['next_cursor'],
+            'has_more' => $page['has_more'],
+        ]);
     }
 
     public function show(string $order, Request $request, StoreContext $storeContext): JsonResponse

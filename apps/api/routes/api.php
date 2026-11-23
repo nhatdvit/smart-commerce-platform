@@ -107,6 +107,15 @@ Route::get('/customer/loyalty', [CustomerLoyaltyController::class, 'show'])
     ->name('api.customer.loyalty.show');
 
 /*
+ * A signed-in customer's own order history. auth:sanctum here, unlike the
+ * /orders routes below: a guest has no durable identity to list by, only
+ * the one-time token for the single order they just placed.
+ */
+Route::get('/customer/orders', [CustomerOrderController::class, 'mine'])
+    ->middleware(['auth:sanctum', 'store.resolve'])
+    ->name('api.customer.orders.index');
+
+/*
  * Operations dashboard: catalog master data and menus.
  *
  * Every route carries all three guards. store.resolve takes the store from the
