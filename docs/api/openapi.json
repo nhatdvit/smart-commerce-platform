@@ -2040,6 +2040,120 @@
                 }
             }
         },
+        "/orders": {
+            "post": {
+                "operationId": "orders.create",
+                "tags": [
+                    "CustomerOrder"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateOrderRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "order": {
+                                            "type": "array",
+                                            "items": []
+                                        },
+                                        "payment": {
+                                            "type": "array",
+                                            "items": []
+                                        },
+                                        "guest_order_token": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "order",
+                                        "payment",
+                                        "guest_order_token"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
+        "/orders/{order}": {
+            "get": {
+                "operationId": "orders.show",
+                "tags": [
+                    "CustomerOrder"
+                ],
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`OrderResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OrderResource"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/orders/{order}/payment": {
+            "get": {
+                "operationId": "orders.payment",
+                "tags": [
+                    "CustomerOrder"
+                ],
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`OrderPaymentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OrderPaymentResource"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/media/products/{store}/{file}": {
             "get": {
                 "operationId": "media.product-image",
@@ -2297,6 +2411,35 @@
                                         "timezone",
                                         "served_from",
                                         "served_until",
+                                        "items"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/payment-methods": {
+            "get": {
+                "operationId": "payment-methods.index",
+                "tags": [
+                    "PublicPaymentMethod"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": []
+                                        }
+                                    },
+                                    "required": [
                                         "items"
                                     ]
                                 }
@@ -2767,6 +2910,117 @@
                 ],
                 "title": "CouponResource"
             },
+            "CreateOrderRequest": {
+                "type": "object",
+                "description": "Validates the implemented `CreateOrderRequest`: line items given directly\nrather than a `cart_id` - see {@see \\App\\Modules\\Order\\Application\\Action\\CreateOrder}\nfor why there is no Cart to reference yet.",
+                "properties": {
+                    "fulfillment_type": {
+                        "type": "string",
+                        "enum": [
+                            "PICKUP",
+                            "DELIVERY"
+                        ]
+                    },
+                    "payment_method": {
+                        "type": "string",
+                        "enum": [
+                            "CASH",
+                            "BANK_TRANSFER"
+                        ]
+                    },
+                    "contact": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "maxLength": 150
+                            },
+                            "phone": {
+                                "type": "string",
+                                "maxLength": 20
+                            },
+                            "email": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "format": "email",
+                                "maxLength": 254
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "phone"
+                        ]
+                    },
+                    "delivery_address_line": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "scheduled_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "menu_item_id": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                },
+                                "quantity": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 20
+                                },
+                                "note": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "maxLength": 255
+                                }
+                            },
+                            "required": [
+                                "menu_item_id",
+                                "quantity"
+                            ]
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                    },
+                    "expected_total_amount": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "A decimal string, matching Money's own transport format - never\nan input to pricing, only a consent check against it.",
+                        "pattern": "^\\d+$"
+                    }
+                },
+                "required": [
+                    "fulfillment_type",
+                    "payment_method",
+                    "contact",
+                    "items"
+                ],
+                "title": "CreateOrderRequest"
+            },
             "CurrentUserResource": {
                 "type": "object",
                 "properties": {
@@ -3216,6 +3470,188 @@
                     "items"
                 ],
                 "title": "MenuResource"
+            },
+            "OrderPaymentResource": {
+                "type": "object",
+                "properties": {
+                    "payment": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "method": {
+                                "type": "string",
+                                "enum": [
+                                    "CASH",
+                                    "BANK_TRANSFER"
+                                ]
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "PENDING",
+                                    "PROCESSING",
+                                    "PAID",
+                                    "FAILED",
+                                    "PARTIALLY_REFUNDED",
+                                    "REFUNDED"
+                                ]
+                            },
+                            "amount": {
+                                "type": "object",
+                                "properties": {
+                                    "amount": {
+                                        "type": "string"
+                                    },
+                                    "currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "amount",
+                                    "currency"
+                                ]
+                            },
+                            "expires_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "paid_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "method",
+                            "status",
+                            "amount",
+                            "expires_at",
+                            "paid_at"
+                        ]
+                    },
+                    "bank_transfer": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "transfer_reference": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "amount": {
+                                "type": "object",
+                                "properties": {
+                                    "amount": {
+                                        "type": "string"
+                                    },
+                                    "currency": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "amount",
+                                    "currency"
+                                ]
+                            },
+                            "bank": {
+                                "type": "object",
+                                "properties": {
+                                    "bin": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "account_number": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "account_name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "bin",
+                                    "name",
+                                    "account_number",
+                                    "account_name"
+                                ]
+                            },
+                            "qr_payload": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "description": "Rendered client-side from the payload; no server-rendered\nimage exists in this slice."
+                            },
+                            "qr_image_url": {
+                                "type": "null"
+                            },
+                            "expires_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "transfer_reference",
+                            "amount",
+                            "bank",
+                            "qr_payload",
+                            "qr_image_url",
+                            "expires_at"
+                        ]
+                    },
+                    "cash": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "collect_at": {
+                                "type": "string",
+                                "enum": [
+                                    "ON_DELIVERY",
+                                    "PICKUP_COUNTER"
+                                ]
+                            },
+                            "note": {
+                                "type": "null"
+                            }
+                        },
+                        "required": [
+                            "collect_at",
+                            "note"
+                        ]
+                    }
+                },
+                "required": [
+                    "payment",
+                    "bank_transfer",
+                    "cash"
+                ],
+                "title": "OrderPaymentResource"
             },
             "OrderResource": {
                 "type": "object",

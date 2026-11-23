@@ -835,6 +835,29 @@ footer {
 .logout-button {
   width: 100%;
 }
+.qr-section {
+  text-align: center;
+}
+.qr-section .form-row {
+  text-align: left;
+}
+.qr-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.qr-code {
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+}
+.qr-placeholder {
+  width: 220px;
+  height: 220px;
+  margin: 0 auto 12px;
+  background: #eef1f5;
+  border-radius: 10px;
+}
 .modal-total {
   font-size: 21px;
   font-weight: 900;

@@ -200,13 +200,17 @@ export function StorefrontApp() {
           profileError={store.profileError}
           passwordBusy={store.passwordBusy}
           passwordError={store.passwordError}
+          checkoutBusy={store.checkoutBusy}
+          checkoutError={store.checkoutError}
           onClose={store.closeLayers}
           onAddMenuItem={(menuItemId) => {
             store.addMenuItem(menuItemId);
             store.closeLayers();
           }}
-          onPlaceOrder={store.placeDemoOrder}
-          onInvalidCheckout={() => store.toast('Vui lòng nhập tên và số điện thoại hợp lệ')}
+          onPlaceOrder={(contactName, contactPhone, fulfillmentType, paymentMethod, deliveryAddressLine) =>
+            void store.placeOrder(contactName, contactPhone, fulfillmentType, paymentMethod, deliveryAddressLine)
+          }
+          onInvalidCheckout={() => store.toast('Vui lòng nhập đầy đủ thông tin hợp lệ')}
           onRedeem={store.redeemReward}
           onLogin={(phone, password) => void store.login(phone, password)}
           onRegister={(fullName, phone, password) => void store.register(fullName, phone, password)}

@@ -21,6 +21,13 @@ import {
   type MenuItem,
   type MenuProductCard,
 } from '@/lib/menu-api';
+import {
+  type FulfillmentType as OrderFulfillmentType,
+  type OrderConfirmation,
+  type PaymentMethod as OrderPaymentMethod,
+  createOrder,
+  newIdempotencyKey,
+} from '@/lib/order-api';
 
 /**
  * Which section of the menu is showing.
@@ -57,12 +64,7 @@ export type ModalView =
   | { readonly kind: 'rewards' }
   | { readonly kind: 'login' }
   | { readonly kind: 'profile' }
-  | {
-      readonly kind: 'order-placed';
-      readonly customerName: string;
-      readonly method: 'cash' | 'bank';
-      readonly earnedPoints: number;
-    };
+  | { readonly kind: 'order-confirmed'; readonly confirmation: OrderConfirmation };
 
 const CART_KEY = 'pq-v5-cart';
 const FAVORITES_KEY = 'pq-v5-favorites';
@@ -123,11 +125,13 @@ function discountFor(code: string, subtotal: number): number {
 /**
  * All storefront interaction state.
  *
- * The menu is real: `GET /menus/today`, revalidated on every page load. Cart,
- * coupon and loyalty values stay in the browser exactly as the delivered
- * prototype did - they are presentation state only, and a real checkout (not
- * built yet) would have the server revalidate price, availability and totals
- * again rather than trust them (CLAUDE.md section 6).
+ * The menu, checkout and a signed-in customer's own profile/loyalty are
+ * real. The cart itself (which lines, what quantity) stays in the browser -
+ * there is no persisted Cart module yet - and the demo coupon still applies
+ * only to the number shown here, never to what checkout actually charges:
+ * the server reprices every line from the live menu and knows nothing of a
+ * coupon yet (CLAUDE.md section 6, and `CreateOrder`'s own doc comment on
+ * the backend).
  */
 export function useStorefront() {
   const [items, setItems] = useState<readonly MenuItem[]>([]);
@@ -249,6 +253,8 @@ export function useStorefront() {
 
   const [modal, setModal] = useState<ModalView | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -421,20 +427,50 @@ export function useStorefront() {
   }, [totals.count, toast]);
 
   /**
-   * Demo order: clears the cart and shows a simulated points preview. No
-   * server call, so it must not touch the real signed-in balance - only a
-   * real PAID order ever earns real points (CLAUDE.md section 6).
+   * Real checkout: `POST /orders`. The server reprices every line from the
+   * live menu itself (CLAUDE.md section 6) - `expectedTotalAmount` is only
+   * the subtotal, matching what the server will compute with no discount,
+   * delivery fee or tax applied yet, so a stale cart surfaces as
+   * PRICE_CHANGED rather than silently charging a different total. The
+   * demo coupon above is not sent: there is no coupon-pricing action to
+   * call yet (see CreateOrder's own doc comment on the backend).
    */
-  const placeDemoOrder = useCallback(
-    (customerName: string, method: 'cash' | 'bank') => {
-      const earnedPoints = Math.floor(totals.total / 10000);
-      setCart({});
-      setCoupon('');
-      setCouponInput('');
-      setModal({ kind: 'order-placed', customerName, method, earnedPoints });
-      toast('Đã tạo đơn hàng demo');
+  const placeOrder = useCallback(
+    async (
+      contactName: string,
+      contactPhone: string,
+      fulfillmentType: OrderFulfillmentType,
+      paymentMethod: OrderPaymentMethod,
+      deliveryAddressLine?: string,
+    ) => {
+      setCheckoutBusy(true);
+      setCheckoutError('');
+      try {
+        const confirmation = await createOrder(
+          {
+            fulfillmentType,
+            paymentMethod,
+            contactName,
+            contactPhone,
+            deliveryAddressLine,
+            items: lines.map((line) => ({ menuItemId: line.key, quantity: line.quantity })),
+            expectedTotalAmount: totals.subtotal,
+          },
+          newIdempotencyKey(),
+        );
+
+        setCart({});
+        setCoupon('');
+        setCouponInput('');
+        setModal({ kind: 'order-confirmed', confirmation });
+        toast('Đặt hàng thành công!');
+      } catch (error) {
+        setCheckoutError(authErrorMessage(error));
+      } finally {
+        setCheckoutBusy(false);
+      }
     },
-    [totals.total, toast],
+    [lines, totals.subtotal, toast],
   );
 
   /** Demo redemption: a local-only preview against the real balance, never sent to the server. */
@@ -538,6 +574,7 @@ export function useStorefront() {
     setAuthError('');
     setProfileError('');
     setPasswordError('');
+    setCheckoutError('');
   }, []);
 
   const visibleCards = useMemo(() => {
@@ -576,6 +613,8 @@ export function useStorefront() {
     passwordBusy,
     passwordError,
     loyaltyBalance,
+    checkoutBusy,
+    checkoutError,
     setCouponInput,
     setCategoryFilter,
     setSearch,
@@ -588,7 +627,7 @@ export function useStorefront() {
     toggleFavorite,
     applyCoupon,
     openCheckout,
-    placeDemoOrder,
+    placeOrder,
     redeemReward,
     closeLayers,
     toast,

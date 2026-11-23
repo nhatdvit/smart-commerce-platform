@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Payment;
 
 use App\Modules\Payment\Application\Action\GenerateBankTransferInstructions;
+use App\Modules\Payment\Application\Contract\ProvidesOrderPaymentDetails;
 use App\Modules\Payment\Application\Contract\ProvidesPaymentSummaries;
 use App\Modules\Payment\Domain\Contract\BankAccountRepository;
 use App\Modules\Payment\Domain\Contract\PaymentMethodRepository;
 use App\Modules\Payment\Domain\Contract\PaymentRepository;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Infrastructure\Persistence\EloquentBankAccountRepository;
+use App\Modules\Payment\Infrastructure\Persistence\EloquentOrderPaymentDetailsProvider;
 use App\Modules\Payment\Infrastructure\Persistence\EloquentPaymentMethodRepository;
 use App\Modules\Payment\Infrastructure\Persistence\EloquentPaymentRepository;
 use App\Modules\Payment\Infrastructure\Persistence\EloquentPaymentSummaryProvider;
@@ -36,6 +38,7 @@ final class PaymentServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(ProvidesPaymentSummaries::class, EloquentPaymentSummaryProvider::class);
+        $this->app->singleton(ProvidesOrderPaymentDetails::class, EloquentOrderPaymentDetailsProvider::class);
         $this->app->singleton(PaymentRepository::class, EloquentPaymentRepository::class);
         $this->app->singleton(BankAccountRepository::class, EloquentBankAccountRepository::class);
         $this->app->singleton(PaymentMethodRepository::class, EloquentPaymentMethodRepository::class);

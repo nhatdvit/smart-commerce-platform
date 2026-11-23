@@ -1,10 +1,12 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
+import QRCode from 'qrcode';
 
 import type { CurrentCustomer, LoyaltyStanding } from '@/lib/auth-api';
 import type { MenuProductCard } from '@/lib/menu-api';
 import { money } from '@/lib/money';
+import type { FulfillmentType, OrderConfirmation, PaymentMethod } from '@/lib/order-api';
 
 import {
   FoodIcon,
@@ -107,49 +109,53 @@ function VariantPicker({ card, onConfirm }: VariantPickerProps) {
   );
 }
 
-/** Local date in `yyyy-mm-dd`, for the `min` and default of the pickup date input. */
-function localDate(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
 interface CheckoutFormProps {
   readonly totals: CartTotals;
-  readonly onPlace: (customerName: string, method: 'cash' | 'bank') => void;
+  readonly busy: boolean;
+  readonly error: string;
+  readonly onPlace: (
+    contactName: string,
+    contactPhone: string,
+    fulfillmentType: FulfillmentType,
+    paymentMethod: PaymentMethod,
+    deliveryAddressLine?: string,
+  ) => void;
   readonly onInvalid: () => void;
 }
 
-function CheckoutForm({ totals, onPlace, onInvalid }: CheckoutFormProps) {
+function CheckoutForm({ totals, busy, error, onPlace, onInvalid }: CheckoutFormProps) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [method, setMethod] = useState<'cash' | 'bank'>('cash');
-
-  // The date inputs default to tomorrow, as the design does. Computed on first
-  // render of a client-only layer, so there is no server/client disagreement.
-  const [dates] = useState(() => {
-    const today = new Date();
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    return { min: localDate(today), value: localDate(tomorrow) };
-  });
+  const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('PICKUP');
+  const [address, setAddress] = useState('');
+  const [method, setMethod] = useState<PaymentMethod>('CASH');
 
   function submit() {
+    if (busy) {
+      return;
+    }
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
-    if (trimmedName.length < 2 || !/^[0-9+().\s-]{9,15}$/.test(trimmedPhone)) {
+    const trimmedAddress = address.trim();
+    const validContact = trimmedName.length >= 2 && /^[0-9+().\s-]{9,15}$/.test(trimmedPhone);
+    const validAddress = fulfillmentType === 'PICKUP' || trimmedAddress.length >= 5;
+
+    if (!validContact || !validAddress) {
       onInvalid();
 
       return;
     }
-    onPlace(trimmedName, method);
+    onPlace(
+      trimmedName,
+      trimmedPhone,
+      fulfillmentType,
+      method,
+      fulfillmentType === 'DELIVERY' ? trimmedAddress : undefined,
+    );
   }
 
   return (
     <>
-      <p className="modal-note">Đơn hàng demo — chưa kết nối thanh toán thực tế.</p>
       <div className="form-row">
         <label htmlFor="customerName">Tên người nhận *</label>
         <input
@@ -171,41 +177,46 @@ function CheckoutForm({ totals, onPlace, onInvalid }: CheckoutFormProps) {
           onChange={(event) => setPhone(event.target.value)}
         />
       </div>
-      <div className="form-grid">
-        <div className="form-row">
-          <label htmlFor="pickupDate">Ngày nhận</label>
-          <input type="date" id="pickupDate" min={dates.min} defaultValue={dates.value} />
-        </div>
-        <div className="form-row">
-          <label htmlFor="pickupTime">Giờ nhận</label>
-          <select id="pickupTime" defaultValue="07:00">
-            <option>06:30</option>
-            <option>07:00</option>
-            <option>07:30</option>
-            <option>08:00</option>
-            <option>08:30</option>
-            <option>09:00</option>
-          </select>
-        </div>
+      <div className="form-row">
+        <label htmlFor="fulfillmentType">Hình thức nhận hàng</label>
+        <select
+          id="fulfillmentType"
+          value={fulfillmentType}
+          onChange={(event) =>
+            setFulfillmentType(event.target.value === 'DELIVERY' ? 'DELIVERY' : 'PICKUP')
+          }
+        >
+          <option value="PICKUP">Nhận tại quán</option>
+          <option value="DELIVERY">Giao hàng</option>
+        </select>
       </div>
+      {fulfillmentType === 'DELIVERY' ? (
+        <div className="form-row">
+          <label htmlFor="deliveryAddress">Địa chỉ giao hàng *</label>
+          <input
+            id="deliveryAddress"
+            maxLength={255}
+            placeholder="Số nhà, đường, phường/xã..."
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+          />
+        </div>
+      ) : null}
       <div className="form-row">
         <label htmlFor="payMethod">Phương thức thanh toán</label>
         <select
           id="payMethod"
           value={method}
-          onChange={(event) => setMethod(event.target.value === 'bank' ? 'bank' : 'cash')}
+          onChange={(event) => setMethod(event.target.value === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'CASH')}
         >
-          <option value="cash">Tiền mặt khi nhận hàng</option>
-          <option value="bank">Chuyển khoản VietQR (demo)</option>
+          <option value="CASH">Tiền mặt khi nhận hàng</option>
+          <option value="BANK_TRANSFER">Chuyển khoản VietQR</option>
         </select>
       </div>
-      <div className="form-row">
-        <label htmlFor="orderNote">Ghi chú</label>
-        <textarea id="orderNote" rows={2} placeholder="Ít cay, không hành..." />
-      </div>
-      <div className="modal-total">{money(totals.total)}</div>
-      <button className="btn btn-yellow" type="button" onClick={submit}>
-        Xác nhận đặt món →
+      {error === '' ? null : <p className="notice">{error}</p>}
+      <div className="modal-total">{money(totals.subtotal)}</div>
+      <button className="btn btn-yellow" type="button" disabled={busy} onClick={submit}>
+        {busy ? 'Đang xử lý...' : 'Xác nhận đặt món →'}
       </button>
     </>
   );
@@ -407,6 +418,99 @@ function ProfileForm({
   );
 }
 
+/** Renders an EMVCo/VietQR payload client-side - the server sends the payload, never an image. */
+function QrCode({ payload }: { readonly payload: string }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    QRCode.toDataURL(payload, { width: 220, margin: 1 })
+      .then((url) => {
+        if (!cancelled) {
+          setDataUrl(url);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [payload]);
+
+  if (dataUrl === null) {
+    return <div className="qr-placeholder" aria-hidden="true" />;
+  }
+
+  return <img className="qr-code" src={dataUrl} alt="Mã QR chuyển khoản VietQR" width={220} height={220} />;
+}
+
+interface OrderConfirmedProps {
+  readonly confirmation: OrderConfirmation;
+  readonly onClose: () => void;
+}
+
+function OrderConfirmed({ confirmation, onClose }: OrderConfirmedProps) {
+  const { bankTransfer, cash } = confirmation;
+
+  return (
+    <>
+      <p>
+        Cảm ơn <strong>{confirmation.contactName}</strong>! Đơn <strong>{confirmation.orderCode}</strong>{' '}
+        đã được ghi nhận.
+      </p>
+
+      {bankTransfer !== null ? (
+        <div className="profile-section qr-section">
+          {bankTransfer.qrPayload === null ? null : (
+            <div className="qr-wrap">
+              <QrCode payload={bankTransfer.qrPayload} />
+            </div>
+          )}
+          <p className="modal-note">Quét mã bằng app ngân hàng, hoặc chuyển khoản thủ công:</p>
+          <div className="form-row">
+            <label>Ngân hàng</label>
+            <input value={bankTransfer.bankName ?? bankTransfer.bankBin ?? ''} disabled />
+          </div>
+          <div className="form-row">
+            <label>Số tài khoản</label>
+            <input value={bankTransfer.accountNumber ?? ''} disabled />
+          </div>
+          <div className="form-row">
+            <label>Chủ tài khoản</label>
+            <input value={bankTransfer.accountName ?? ''} disabled />
+          </div>
+          <div className="form-row">
+            <label>Nội dung chuyển khoản</label>
+            <input value={bankTransfer.transferReference} disabled />
+          </div>
+          <div className="modal-total">{money(bankTransfer.amount)}</div>
+          <p className="modal-note">
+            Sau khi chuyển khoản, nhân viên cửa hàng sẽ xác nhận thủ công khi nhận được tiền - mã QR
+            không phải là bằng chứng đã thanh toán.
+          </p>
+        </div>
+      ) : null}
+
+      {cash !== null ? (
+        <p className="modal-note">
+          {cash.collectAt === 'ON_DELIVERY'
+            ? 'Thanh toán tiền mặt khi nhận hàng giao tới.'
+            : 'Thanh toán tiền mặt khi nhận hàng tại quán.'}
+        </p>
+      ) : null}
+
+      <p className="modal-note">
+        Trạng thái đơn: <strong>{confirmation.status}</strong> · Thanh toán:{' '}
+        <strong>{confirmation.paymentStatus}</strong>
+      </p>
+      <button className="btn btn-yellow" type="button" onClick={onClose}>
+        Hoàn tất
+      </button>
+    </>
+  );
+}
+
 interface RewardListProps {
   readonly balance: number;
   readonly onRedeem: (name: string, cost: number) => void;
@@ -458,9 +562,17 @@ interface ModalLayerProps {
   readonly profileError: string;
   readonly passwordBusy: boolean;
   readonly passwordError: string;
+  readonly checkoutBusy: boolean;
+  readonly checkoutError: string;
   readonly onClose: () => void;
   readonly onAddMenuItem: (menuItemId: string) => void;
-  readonly onPlaceOrder: (customerName: string, method: 'cash' | 'bank') => void;
+  readonly onPlaceOrder: (
+    contactName: string,
+    contactPhone: string,
+    fulfillmentType: FulfillmentType,
+    paymentMethod: PaymentMethod,
+    deliveryAddressLine?: string,
+  ) => void;
   readonly onInvalidCheckout: () => void;
   readonly onRedeem: (name: string, cost: number) => void;
   readonly onLogin: (phone: string, password: string) => void;
@@ -482,6 +594,8 @@ export function ModalLayer({
   profileError,
   passwordBusy,
   passwordError,
+  checkoutBusy,
+  checkoutError,
   onClose,
   onAddMenuItem,
   onPlaceOrder,
@@ -509,7 +623,13 @@ export function ModalLayer({
   if (view.kind === 'checkout') {
     return (
       <ModalShell title="Xác nhận đặt hàng" onClose={onClose}>
-        <CheckoutForm totals={totals} onPlace={onPlaceOrder} onInvalid={onInvalidCheckout} />
+        <CheckoutForm
+          totals={totals}
+          busy={checkoutBusy}
+          error={checkoutError}
+          onPlace={onPlaceOrder}
+          onInvalid={onInvalidCheckout}
+        />
       </ModalShell>
     );
   }
@@ -552,30 +672,8 @@ export function ModalLayer({
   }
 
   return (
-    <ModalShell
-      title="Đã ghi nhận đơn hàng demo"
-      icon={<IconCheckCircle size={20} />}
-      onClose={onClose}
-    >
-      <p>
-        Cảm ơn <strong>{view.customerName}</strong>! Đơn của bạn đã được lưu mô phỏng trên trình
-        duyệt.
-      </p>
-      <p>
-        Phương thức:{' '}
-        <strong>
-          {view.method === 'cash' ? 'Tiền mặt' : 'Chuyển khoản VietQR (chưa kết nối ngân hàng)'}
-        </strong>
-      </p>
-      <p>
-        Điểm thưởng mô phỏng vừa nhận: <strong>+{view.earnedPoints} điểm</strong>.
-      </p>
-      <p className="modal-note">
-        Bản demo không tạo giao dịch thật, không xác nhận thanh toán hoặc đặt hàng trên máy chủ.
-      </p>
-      <button className="btn btn-yellow" type="button" onClick={onClose}>
-        Hoàn tất
-      </button>
+    <ModalShell title="Đặt hàng thành công" icon={<IconCheckCircle size={20} />} onClose={onClose}>
+      <OrderConfirmed confirmation={view.confirmation} onClose={onClose} />
     </ModalShell>
   );
 }
