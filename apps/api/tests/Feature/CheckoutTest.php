@@ -419,7 +419,7 @@ it('lets a guest cancel their own PLACED order with the issued token', function 
     expect(Order::query()->findOrFail($created->json('order.id'))->status->value)->toBe('CANCELLED');
 });
 
-it("lets a signed-in customer cancel their own order without a reason", function (): void {
+it('lets a signed-in customer cancel their own order without a reason', function (): void {
     [$storeId, $itemId] = readyStore();
     $customer = User::factory()->phoneOnly()->create(['phone' => '0909555020']);
 

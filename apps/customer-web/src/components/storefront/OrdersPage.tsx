@@ -128,7 +128,9 @@ export function OrdersPage() {
       try {
         const status = await cancelOrder(order.id);
         setOrders((current) =>
-          current.map((existing) => (existing.id === order.id ? { ...existing, status } : existing)),
+          current.map((existing) =>
+            existing.id === order.id ? { ...existing, status } : existing,
+          ),
         );
         showToast('Đã hủy đơn hàng.');
       } catch (error) {
@@ -151,7 +153,9 @@ export function OrdersPage() {
       setReorderingId(order.id);
       try {
         const detail = await getOrder(order.id);
-        const byVariant = new Map(todayItems.map((item) => [`${item.productId}:${item.variantId}`, item]));
+        const byVariant = new Map(
+          todayItems.map((item) => [`${item.productId}:${item.variantId}`, item]),
+        );
 
         let added = 0;
         let unavailable = 0;
@@ -206,7 +210,9 @@ export function OrdersPage() {
       {customer === null || customer === undefined ? null : (
         <>
           {ordersError !== '' ? <p className="notice">{ordersError}</p> : null}
-          {ordersBusy && orders.length === 0 ? <p className="modal-note">Đang tải đơn hàng...</p> : null}
+          {ordersBusy && orders.length === 0 ? (
+            <p className="modal-note">Đang tải đơn hàng...</p>
+          ) : null}
           {!ordersBusy && orders.length === 0 && ordersError === '' ? (
             <p className="modal-note">Bạn chưa đặt đơn hàng nào.</p>
           ) : null}
@@ -260,7 +266,11 @@ export function OrdersPage() {
         </>
       )}
 
-      <div className={toastMessage === '' ? 'toast' : 'toast show'} role="status" aria-live="polite">
+      <div
+        className={toastMessage === '' ? 'toast' : 'toast show'}
+        role="status"
+        aria-live="polite"
+      >
         {toastMessage}
       </div>
     </main>

@@ -128,7 +128,14 @@ interface CheckoutFormProps {
 }
 
 /** Prefilled from the signed-in customer's own profile, still editable - someone else may be picking up the order. */
-function CheckoutForm({ totals, busy, error, currentCustomer, onPlace, onInvalid }: CheckoutFormProps) {
+function CheckoutForm({
+  totals,
+  busy,
+  error,
+  currentCustomer,
+  onPlace,
+  onInvalid,
+}: CheckoutFormProps) {
   const [name, setName] = useState(currentCustomer?.name ?? '');
   const [phone, setPhone] = useState(currentCustomer?.phone ?? '');
   const [fulfillmentType, setFulfillmentType] = useState<FulfillmentType>('PICKUP');
@@ -212,7 +219,9 @@ function CheckoutForm({ totals, busy, error, currentCustomer, onPlace, onInvalid
         <select
           id="payMethod"
           value={method}
-          onChange={(event) => setMethod(event.target.value === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'CASH')}
+          onChange={(event) =>
+            setMethod(event.target.value === 'BANK_TRANSFER' ? 'BANK_TRANSFER' : 'CASH')
+          }
         >
           <option value="CASH">Tiền mặt khi nhận hàng</option>
           <option value="BANK_TRANSFER">Chuyển khoản VietQR</option>
@@ -451,7 +460,15 @@ function QrCode({ payload }: { readonly payload: string }) {
     return <div className="qr-placeholder" aria-hidden="true" />;
   }
 
-  return <img className="qr-code" src={dataUrl} alt="Mã QR chuyển khoản VietQR" width={220} height={220} />;
+  return (
+    <img
+      className="qr-code"
+      src={dataUrl}
+      alt="Mã QR chuyển khoản VietQR"
+      width={220}
+      height={220}
+    />
+  );
 }
 
 interface OrderConfirmedProps {
@@ -465,8 +482,8 @@ function OrderConfirmed({ confirmation, onClose }: OrderConfirmedProps) {
   return (
     <>
       <p>
-        Cảm ơn <strong>{confirmation.contactName}</strong>! Đơn <strong>{confirmation.orderCode}</strong>{' '}
-        đã được ghi nhận.
+        Cảm ơn <strong>{confirmation.contactName}</strong>! Đơn{' '}
+        <strong>{confirmation.orderCode}</strong> đã được ghi nhận.
       </p>
 
       {bankTransfer !== null ? (
@@ -512,7 +529,8 @@ function OrderConfirmed({ confirmation, onClose }: OrderConfirmedProps) {
       ) : null}
 
       <p className="modal-note">
-        Trạng thái đơn: <strong>{ORDER_STATUS_LABELS[confirmation.status] ?? confirmation.status}</strong>
+        Trạng thái đơn:{' '}
+        <strong>{ORDER_STATUS_LABELS[confirmation.status] ?? confirmation.status}</strong>
       </p>
       <button className="btn btn-yellow" type="button" onClick={onClose}>
         Hoàn tất

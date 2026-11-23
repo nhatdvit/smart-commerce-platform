@@ -45,7 +45,11 @@ interface ApiOrder {
   readonly order_code: string;
   readonly status: string;
   readonly fulfillment_type: FulfillmentType;
-  readonly contact: { readonly name: string; readonly phone: string; readonly email: string | null };
+  readonly contact: {
+    readonly name: string;
+    readonly phone: string;
+    readonly email: string | null;
+  };
   readonly delivery_address_line: string | null;
   readonly items: readonly ApiOrderItem[];
   readonly totals: {
@@ -188,7 +192,9 @@ export async function createOrder(
     expected_total_amount: String(input.expectedTotalAmount),
   };
 
-  const data = await api.post<ApiOrderCreated>('/orders', body, { 'Idempotency-Key': idempotencyKey });
+  const data = await api.post<ApiOrderCreated>('/orders', body, {
+    'Idempotency-Key': idempotencyKey,
+  });
 
   return toConfirmation(data);
 }
@@ -348,7 +354,9 @@ interface ApiPaymentMethodOption {
 }
 
 export async function loadPaymentMethods(): Promise<readonly PaymentMethodOption[]> {
-  const data = await api.get<{ readonly items: readonly ApiPaymentMethodOption[] }>('/payment-methods');
+  const data = await api.get<{ readonly items: readonly ApiPaymentMethodOption[] }>(
+    '/payment-methods',
+  );
 
   return data.items.map((item) => ({
     method: item.method,

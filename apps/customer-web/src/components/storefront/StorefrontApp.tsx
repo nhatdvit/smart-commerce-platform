@@ -207,8 +207,20 @@ export function StorefrontApp() {
             store.addMenuItem(menuItemId);
             store.closeLayers();
           }}
-          onPlaceOrder={(contactName, contactPhone, fulfillmentType, paymentMethod, deliveryAddressLine) =>
-            void store.placeOrder(contactName, contactPhone, fulfillmentType, paymentMethod, deliveryAddressLine)
+          onPlaceOrder={(
+            contactName,
+            contactPhone,
+            fulfillmentType,
+            paymentMethod,
+            deliveryAddressLine,
+          ) =>
+            void store.placeOrder(
+              contactName,
+              contactPhone,
+              fulfillmentType,
+              paymentMethod,
+              deliveryAddressLine,
+            )
           }
           onInvalidCheckout={() => store.toast('Vui lòng nhập đầy đủ thông tin hợp lệ')}
           onRedeem={store.redeemReward}
