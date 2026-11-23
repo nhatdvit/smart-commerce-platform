@@ -89,14 +89,19 @@ async function ensureCsrfCookie(): Promise<void> {
   await csrfRequest;
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  extraHeaders?: Readonly<Record<string, string>>,
+): Promise<T> {
   const mutating = MUTATING.has(method);
 
   if (mutating) {
     await ensureCsrfCookie();
   }
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
 
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -129,7 +134,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  get: <T>(path: string): Promise<T> => request<T>('GET', path),
-  post: <T>(path: string, body?: unknown): Promise<T> => request<T>('POST', path, body),
+  get: <T>(path: string, headers?: Readonly<Record<string, string>>): Promise<T> =>
+    request<T>('GET', path, undefined, headers),
+  post: <T>(path: string, body?: unknown, headers?: Readonly<Record<string, string>>): Promise<T> =>
+    request<T>('POST', path, body, headers),
   put: <T>(path: string, body?: unknown): Promise<T> => request<T>('PUT', path, body),
 };

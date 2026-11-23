@@ -41,6 +41,20 @@ interface OrderRepository
     public function paginate(string $storeId, OrderCriteria $criteria): array;
 
     /**
+     * A page of one customer's own orders in this store, newest first by
+     * default (unlike {@see paginate}, where the oldest open order is the
+     * most urgent one) - a customer reading their own history wants to see
+     * what they just placed, not an operations queue.
+     *
+     * The customer id is its own parameter, never a field on the criteria,
+     * for the same reason the store id is: there must be no way to build a
+     * call that forgets to scope it.
+     *
+     * @return array{items: list<Order>, next_cursor: string|null, has_more: bool}
+     */
+    public function paginateForCustomer(string $storeId, string $customerId, OrderCriteria $criteria): array;
+
+    /**
      * The same order, read inside the caller's transaction with the row locked.
      *
      * Two staff members advancing one order at the same moment is an ordinary

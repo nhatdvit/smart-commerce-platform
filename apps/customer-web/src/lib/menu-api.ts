@@ -58,6 +58,7 @@ interface ApiTodayMenu {
 export interface MenuItem {
   readonly id: string;
   readonly productId: string;
+  readonly variantId: string;
   readonly productName: string;
   readonly description: string | null;
   readonly imageUrl: string | null;
@@ -88,6 +89,7 @@ function toMenuItem(item: ApiMenuItem): MenuItem {
   return {
     id: item.id,
     productId: item.product.id,
+    variantId: item.variant.id,
     productName: item.product.name,
     description: item.product.description,
     imageUrl: item.product.image_url,

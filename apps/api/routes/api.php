@@ -15,8 +15,10 @@ use App\Modules\Menu\Presentation\Http\Controller\AdminMenuItemController;
 use App\Modules\Menu\Presentation\Http\Controller\PublicMenuController;
 use App\Modules\Order\Presentation\Http\Controller\AdminCustomerController;
 use App\Modules\Order\Presentation\Http\Controller\AdminOrderController;
+use App\Modules\Order\Presentation\Http\Controller\CustomerOrderController;
 use App\Modules\Payment\Presentation\Http\Controller\AdminPaymentController;
 use App\Modules\Payment\Presentation\Http\Controller\AdminStorePaymentSettingsController;
+use App\Modules\Payment\Presentation\Http\Controller\PublicPaymentMethodController;
 use App\Modules\Pricing\Presentation\Http\Controller\AdminCouponController;
 use App\Modules\Store\Presentation\Http\Controller\AdminStoreContextController;
 use Illuminate\Http\Request;
@@ -28,16 +30,19 @@ use Illuminate\Support\Facades\Route;
  * Built so far: the metadata endpoints, the session endpoints (including
  * customer self-registration by phone), a signed-in customer's own profile/
  * password/loyalty-standing endpoints, the public today's-menu endpoint that
- * drives the customer storefront's home screen, and the admin catalog, menu,
- * order, discount-code and payment endpoints that drive the operations
- * dashboard. The rest of CLAUDE.md section 8 arrives with its module:
+ * drives the customer storefront's home screen, checkout (`POST /orders` and
+ * the two reads after it - see CustomerOrderController), and the admin
+ * catalog, menu, order, discount-code and payment endpoints that drive the
+ * operations dashboard. The rest of CLAUDE.md section 8 arrives with its
+ * module:
  *
  *   GET    /stores/{id}                        Store
  *   GET    /products, /products/{id}           Catalog (public)
  *   POST   /carts, /carts/{id}/items           Cart
- *   POST   /orders                             Order   (Idempotency-Key required)
- *   GET    /orders/{id}, /orders/{id}/payment  Order, Payment  (customer-facing)
- *   GET    /payment-methods                    Payment (customer-facing)
+ *
+ * `POST /orders` does not reference a cart: no Cart module exists yet, so it
+ * takes line items directly - see CreateOrder's own doc comment for why that
+ * is the smallest complete slice rather than a cart-id placeholder.
  *
  * Admin routes are store-scoped. The convention, enforced by middleware, is:
  *
@@ -102,6 +107,15 @@ Route::get('/customer/loyalty', [CustomerLoyaltyController::class, 'show'])
     ->name('api.customer.loyalty.show');
 
 /*
+ * A signed-in customer's own order history. auth:sanctum here, unlike the
+ * /orders routes below: a guest has no durable identity to list by, only
+ * the one-time token for the single order they just placed.
+ */
+Route::get('/customer/orders', [CustomerOrderController::class, 'mine'])
+    ->middleware(['auth:sanctum', 'store.resolve'])
+    ->name('api.customer.orders.index');
+
+/*
  * Operations dashboard: catalog master data and menus.
  *
  * Every route carries all three guards. store.resolve takes the store from the
@@ -128,6 +142,45 @@ Route::get('/media/products/{store}/{file}', [ProductImageController::class, 'sh
 Route::get('/menus/today', [PublicMenuController::class, 'today'])
     ->middleware('store.resolve')
     ->name('api.menus.today');
+
+/*
+ * This store's accepted payment methods - public, so the checkout screen can
+ * show (and explain) its choices before anyone signs in.
+ */
+Route::get('/payment-methods', [PublicPaymentMethodController::class, 'index'])
+    ->middleware('store.resolve')
+    ->name('api.payment-methods.index');
+
+/*
+ * Checkout, and the two reads a customer needs afterwards. Reachable by a
+ * guest or a signed-in customer alike - never auth:sanctum - see
+ * CustomerOrderController's own doc comment for how each is authorized.
+ * Idempotency-Key is required on creation (CLAUDE.md section 6): a retried
+ * submit must never place the same order twice.
+ */
+Route::post('/orders', [CustomerOrderController::class, 'store'])
+    ->middleware(['store.resolve', 'idempotent:order.create', 'throttle:commerce-write'])
+    ->name('api.orders.create');
+
+Route::get('/orders/{order}', [CustomerOrderController::class, 'show'])
+    ->whereUuid('order')
+    ->middleware('store.resolve')
+    ->name('api.orders.show');
+
+Route::get('/orders/{order}/payment', [CustomerOrderController::class, 'payment'])
+    ->whereUuid('order')
+    ->middleware('store.resolve')
+    ->name('api.orders.payment');
+
+/*
+ * Self-service cancel, allowed only before PREPARING (CancelOrder's own doc
+ * comment). No idempotency key: a retried cancel on an already-cancelled
+ * order simply answers the same 409 a staff transition does.
+ */
+Route::post('/orders/{order}/cancel', [CustomerOrderController::class, 'cancel'])
+    ->whereUuid('order')
+    ->middleware(['store.resolve', 'throttle:commerce-write'])
+    ->name('api.orders.cancel');
 
 Route::middleware(['auth:sanctum', 'store.resolve'])
     ->prefix('admin')
