@@ -2683,6 +2683,39 @@ nav button > span {
 .payment-history-details .order-timeline {
   margin-top: 10px;
 }
+.payment-evidence-block {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 14px 15px;
+  margin: 15px 0;
+}
+.payment-evidence-block .detail-section-heading {
+  margin: 0 0 10px;
+}
+.payment-evidence-block .notice {
+  margin: 10px 0 0;
+}
+.payment-evidence-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.payment-receipt-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.payment-receipt-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: white;
+  border: 1px solid var(--line);
+}
+.payment-receipt-thumb.is-loading {
+  background: var(--line);
+}
 @media (max-width: 800px) {
   .payment-confirm-layout {
     grid-template-columns: 1fr;

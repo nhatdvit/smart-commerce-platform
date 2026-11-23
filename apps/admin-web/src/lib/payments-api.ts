@@ -10,6 +10,7 @@
  */
 
 import { ApiError, api, newIdempotencyKey } from './api-client';
+import { adminEnv } from './env';
 
 export const PAYMENT_METHODS = ['CASH', 'BANK_TRANSFER'] as const;
 
@@ -126,6 +127,10 @@ export interface AdminPayment {
   readonly confirmedBy: string | null;
   readonly confirmedAt: string | null;
   readonly expiresAt: string | null;
+  /** When the customer themselves clicked "I have transferred" - a notification, never proof. */
+  readonly customerReportedAt: string | null;
+  /** Whether a receipt photo is attached; fetch it from the dedicated receipt endpoint. */
+  readonly hasCustomerReceipt: boolean;
   readonly needsAttention: boolean;
   readonly discrepancies: readonly PaymentDiscrepancy[];
   readonly events: readonly PaymentEvent[];
@@ -223,6 +228,8 @@ interface ApiAdminPayment {
   readonly confirmed_by: string | null;
   readonly confirmed_at: string | null;
   readonly expires_at: string | null;
+  readonly customer_reported_at: string | null;
+  readonly has_customer_receipt: boolean;
   readonly needs_attention: boolean;
   readonly discrepancies: readonly ApiPaymentDiscrepancy[];
   readonly events: readonly ApiPaymentEvent[];
@@ -252,6 +259,8 @@ function toPayment(payment: ApiAdminPayment): AdminPayment {
     confirmedBy: payment.confirmed_by,
     confirmedAt: payment.confirmed_at,
     expiresAt: payment.expires_at,
+    customerReportedAt: payment.customer_reported_at,
+    hasCustomerReceipt: payment.has_customer_receipt,
     needsAttention: payment.needs_attention,
     discrepancies: payment.discrepancies.map((discrepancy) => ({
       type: toDiscrepancyType(discrepancy.type),
@@ -313,6 +322,31 @@ export async function loadPayments(query: PaymentListQuery = {}): Promise<Paymen
 
 export async function loadPayment(paymentId: string): Promise<AdminPayment> {
   return toPayment(await api.get<ApiAdminPayment>(`/admin/payments/${paymentId}`));
+}
+
+/**
+ * Fetches the customer's uploaded receipt as a local, viewable URL.
+ *
+ * A fetch with credentials rather than a plain `<img src>`, for the same
+ * reason every other read in this file goes through `api`: the endpoint is
+ * authenticated and store-scoped (CLAUDE.md section 8), not a public media
+ * file the way a product photo is. The caller is responsible for revoking
+ * the returned URL (`URL.revokeObjectURL`) once it is no longer shown.
+ */
+export async function loadPaymentReceiptUrl(paymentId: string): Promise<string> {
+  const response = await fetch(`${adminEnv.apiBaseUrl}/admin/payments/${paymentId}/receipt`, {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, {
+      status_code: response.status,
+      code: 'RESOURCE_NOT_FOUND',
+      message: 'Không tải được ảnh biên lai.',
+    });
+  }
+
+  return URL.createObjectURL(await response.blob());
 }
 
 /**

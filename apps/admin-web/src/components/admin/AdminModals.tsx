@@ -26,6 +26,7 @@ import {
   PAYMENT_METHOD_LABELS as SETTLEMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS as SETTLEMENT_STATUS_LABELS,
   loadPayment,
+  loadPaymentReceiptUrl,
   paymentStatusTone,
   regeneratePaymentQr,
   type AdminPayment,
@@ -1527,6 +1528,63 @@ function PaymentQrImage({ payload }: { readonly payload: string }) {
 }
 
 /**
+ * The customer's uploaded receipt photo, fetched once (it is authenticated
+ * and store-scoped, never a public URL - see `loadPaymentReceiptUrl`'s own
+ * note) and opened full-size in a new tab on request. Never treated as
+ * anything but a reference image for staff to look at.
+ */
+function CustomerReceiptThumb({ paymentId }: { readonly paymentId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    let objectUrl: string | null = null;
+    setUrl(null);
+    setFailed(false);
+
+    void loadPaymentReceiptUrl(paymentId)
+      .then((loaded) => {
+        if (current) {
+          objectUrl = loaded;
+          setUrl(loaded);
+        } else {
+          URL.revokeObjectURL(loaded);
+        }
+      })
+      .catch(() => {
+        if (current) {
+          setFailed(true);
+        }
+      });
+
+    return () => {
+      current = false;
+      if (objectUrl !== null) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [paymentId]);
+
+  if (failed) {
+    return <p className="cell-sub warn">Không tải được ảnh biên lai.</p>;
+  }
+
+  if (url === null) {
+    return <div className="payment-receipt-thumb is-loading" aria-hidden="true" />;
+  }
+
+  return (
+    <span className="payment-receipt-preview">
+      <img src={url} alt="Ảnh biên lai khách gửi" className="payment-receipt-thumb" />
+      <a href={url} target="_blank" rel="noreferrer" className="btn">
+        Xem ảnh lớn
+      </a>
+    </span>
+  );
+}
+
+/**
  * One payment: its reconciliation facts, then the two things staff can do
  * about it.
  *
@@ -1934,6 +1992,29 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
               >
                 Tạo lại mã QR
               </button>
+            </div>
+          )}
+
+          {payment.customerReportedAt === null ? null : (
+            <div className="payment-evidence-block">
+              <div className="detail-section-heading">
+                <span aria-hidden="true">◈</span>
+                <h3>Bằng chứng từ khách hàng</h3>
+              </div>
+              <div className="payment-evidence-row">
+                {payment.hasCustomerReceipt ? (
+                  <CustomerReceiptThumb paymentId={payment.id} />
+                ) : (
+                  <p className="cell-sub">Khách chưa gửi ảnh biên lai.</p>
+                )}
+                <p className="cell-sub">
+                  Khách báo đã chuyển khoản lúc {dateTime(payment.customerReportedAt)}
+                </p>
+              </div>
+              <p className="notice">
+                Đây chỉ là thông báo từ khách, không phải bằng chứng thanh toán. Vẫn tự kiểm tra
+                ngân hàng và nhập đúng số tiền thực nhận bên dưới.
+              </p>
             </div>
           )}
 

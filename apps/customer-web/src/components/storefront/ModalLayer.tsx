@@ -7,7 +7,12 @@ import QRCode from 'qrcode';
 import type { CurrentCustomer, LoyaltyStanding } from '@/lib/auth-api';
 import type { MenuProductCard } from '@/lib/menu-api';
 import { money } from '@/lib/money';
-import type { FulfillmentType, OrderConfirmation, PaymentMethod } from '@/lib/order-api';
+import {
+  reportTransfer,
+  type FulfillmentType,
+  type OrderConfirmation,
+  type PaymentMethod,
+} from '@/lib/order-api';
 import { ORDER_STATUS_LABELS } from '@/lib/order-status-labels';
 
 import {
@@ -471,6 +476,66 @@ function QrCode({ payload }: { readonly payload: string }) {
   );
 }
 
+/**
+ * "I have transferred", with an optional receipt photo - a notification for
+ * staff, never proof (CLAUDE.md section 6, decision dated 2026-11-24): the
+ * order stays exactly where it was until a staff member confirms the real
+ * bank credit themselves. This form has no "paid" state to reach.
+ */
+function TransferReportForm({
+  orderId,
+  guestOrderToken,
+}: {
+  readonly orderId: string;
+  readonly guestOrderToken: string | null;
+}) {
+  const [receipt, setReceipt] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [reportedAt, setReportedAt] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  if (reportedAt !== null) {
+    return (
+      <p className="modal-note transfer-reported" role="status">
+        ✓ Đã gửi thông báo cho cửa hàng lúc{' '}
+        {new Date(reportedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}.
+        Nhân viên sẽ kiểm tra và xác nhận sau khi thấy tiền thật trong ngân hàng.
+      </p>
+    );
+  }
+
+  function submit() {
+    setSubmitting(true);
+    setError('');
+
+    void reportTransfer(orderId, guestOrderToken, receipt)
+      .then((at) => setReportedAt(at ?? new Date().toISOString()))
+      .catch(() => setError('Không gửi được thông báo. Vui lòng thử lại.'))
+      .finally(() => setSubmitting(false));
+  }
+
+  return (
+    <div className="transfer-report">
+      <label className="transfer-report-upload">
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
+        />
+        {receipt === null ? 'Tải ảnh biên lai (không bắt buộc)' : receipt.name}
+      </label>
+      {error === '' ? null : (
+        <p className="modal-note" role="alert">
+          {error}
+        </p>
+      )}
+      <button type="button" className="btn btn-outline" disabled={submitting} onClick={submit}>
+        {submitting ? 'Đang gửi...' : 'Tôi đã chuyển khoản'}
+      </button>
+    </div>
+  );
+}
+
 interface OrderConfirmedProps {
   readonly confirmation: OrderConfirmation;
   readonly onClose: () => void;
@@ -517,6 +582,10 @@ function OrderConfirmed({ confirmation, onClose }: OrderConfirmedProps) {
             Sau khi chuyển khoản, nhân viên cửa hàng sẽ xác nhận thủ công khi nhận được tiền - mã QR
             không phải là bằng chứng đã thanh toán.
           </p>
+          <TransferReportForm
+            orderId={confirmation.orderId}
+            guestOrderToken={confirmation.guestOrderToken}
+          />
         </div>
       ) : null}
 
