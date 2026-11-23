@@ -294,7 +294,7 @@ export function OrdersScreen() {
               </span>
             </div>
             <div className="table-wrap">
-              <table className="orders-table">
+              <table className="data-table orders-table">
                 <thead>
                   <tr>
                     <th>ĐƠN HÀNG</th>
