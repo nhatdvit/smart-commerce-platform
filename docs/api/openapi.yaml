@@ -4950,7 +4950,7 @@ components:
       description: |
         A payment as staff see it, with the order it belongs to and the trail of
         who did what.
-      required: [id, order_id, order_code, method, status, amount]
+      required: [id, order_id, order_code, customer_name, method, status, amount]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -4958,6 +4958,12 @@ components:
           $ref: '#/components/schemas/Uuid'
         order_code:
           type: string
+        customer_name:
+          type: string
+          description: |
+            A snapshot of the order's contact name, copied at payment creation -
+            never a live join to the order (the same reason order_code is a
+            snapshot too).
         store_id:
           $ref: '#/components/schemas/Uuid'
         method:

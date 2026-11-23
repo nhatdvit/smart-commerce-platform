@@ -38,6 +38,7 @@ final class AdminPaymentResource extends JsonResource
             'id' => $payment->id,
             'order_id' => $payment->orderId,
             'order_code' => $payment->orderCode,
+            'customer_name' => $payment->customerName,
             'store_id' => $payment->storeId,
             'method' => $payment->method->value,
             'status' => $payment->status->value,

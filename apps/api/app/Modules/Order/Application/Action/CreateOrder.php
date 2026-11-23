@@ -173,6 +173,7 @@ final readonly class CreateOrder
                 $storeId,
                 (string) $order->id,
                 $orderCode,
+                $contact->name,
                 $input->paymentMethod,
                 $totals->total,
                 $input->paymentMethod === PaymentMethod::BankTransfer

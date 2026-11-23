@@ -28,6 +28,7 @@ final class PaymentFactory extends Factory
             // Overwritten by on(); present so a bare create() in a test that
             // does not care about the order still satisfies the NOT NULL.
             'order_code' => sprintf('SCP-%s-%s', now()->format('Ymd'), Str::upper(Str::random(6))),
+            'customer_name' => 'Khách hàng demo',
             'method' => PaymentMethod::Cash,
             'status' => PaymentStatus::Pending,
             'amount' => 0,

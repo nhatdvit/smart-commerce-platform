@@ -99,6 +99,7 @@ export interface AdminPayment {
   readonly id: string;
   readonly orderId: string;
   readonly orderCode: string;
+  readonly customerName: string;
   readonly storeId: string | null;
   readonly method: PaymentMethod;
   readonly status: PaymentStatus;
@@ -194,6 +195,7 @@ interface ApiAdminPayment {
   readonly id: string;
   readonly order_id: string;
   readonly order_code: string;
+  readonly customer_name: string;
   readonly store_id: string | null;
   readonly method: string;
   readonly status: string;
@@ -222,6 +224,7 @@ function toPayment(payment: ApiAdminPayment): AdminPayment {
     id: payment.id,
     orderId: payment.order_id,
     orderCode: payment.order_code,
+    customerName: payment.customer_name,
     storeId: payment.store_id,
     method: toMethod(payment.method),
     status: toStatus(payment.status),

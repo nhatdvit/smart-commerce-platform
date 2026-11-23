@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
  * @property string $store_id
  * @property string $order_id
  * @property string $order_code
+ * @property string $customer_name
  * @property PaymentMethod $method
  * @property PaymentStatus $status
  * @property int $amount
@@ -58,6 +59,7 @@ final class Payment extends Model
         'store_id',
         'order_id',
         'order_code',
+        'customer_name',
         'method',
         'status',
         'amount',
