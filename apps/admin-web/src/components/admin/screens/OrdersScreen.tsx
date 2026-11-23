@@ -7,20 +7,23 @@ import { itemsSummary, timeLabel, type AdminOrder, type OrderStatus } from '@/li
 
 import { useAdminData } from '../AdminDataProvider';
 import { IconCheckCircle, IconClock, IconDownload, IconReceipt, IconXCircle } from '../icons';
-import { PageHeading, StatusBadge } from '../primitives';
+import { PageHeading } from '../primitives';
 
 type StatusGroup = 'all' | 'placed' | 'working' | 'completed' | 'cancelled';
 
 /**
  * The design's four buckets, mapped onto the real eight-status machine.
  *
- * `PENDING_PAYMENT` is deliberately absent from every bucket here - it is not
- * something staff confirm from this screen, it is settled on the Payments
- * screen against the real bank credit (CLAUDE.md section 6). A transfer order
- * only joins "Chờ xác nhận" once that happens and it becomes `PLACED`.
+ * `PENDING_PAYMENT` reads as "chờ xác nhận" here, alongside `PLACED`: a
+ * customer still waiting for anything from the shop is the same bucket to a
+ * glance, even though only `PLACED` can actually be confirmed from this
+ * screen (the forward-status button understands that distinction; the badge
+ * does not need to). Keeping it out of every bucket left the four totals
+ * short of the real count and a status on screen that matched none of the
+ * four tabs - confusing rather than simple, the opposite of the point.
  */
 const GROUP_STATUSES: Readonly<Record<Exclude<StatusGroup, 'all'>, readonly OrderStatus[]>> = {
-  placed: ['PLACED'],
+  placed: ['PENDING_PAYMENT', 'PLACED'],
   working: ['CONFIRMED', 'PREPARING', 'READY'],
   completed: ['COMPLETED'],
   cancelled: ['CANCELLED', 'EXPIRED'],
@@ -29,10 +32,42 @@ const GROUP_STATUSES: Readonly<Record<Exclude<StatusGroup, 'all'>, readonly Orde
 const GROUP_LABELS: Readonly<Record<StatusGroup, string>> = {
   all: 'Tất cả',
   placed: 'Chờ xác nhận',
-  working: 'Đang xử lý',
+  working: 'Đã xác nhận',
   completed: 'Hoàn thành',
   cancelled: 'Đã hủy',
 };
+
+const GROUP_TONE: Readonly<Record<Exclude<StatusGroup, 'all'>, string>> = {
+  placed: 'waiting',
+  working: 'preparing',
+  completed: 'done',
+  cancelled: 'cancelled',
+};
+
+function groupFor(status: OrderStatus): Exclude<StatusGroup, 'all'> {
+  if (status === 'PENDING_PAYMENT' || status === 'PLACED') {
+    return 'placed';
+  }
+  if (status === 'COMPLETED') {
+    return 'completed';
+  }
+  if (status === 'CANCELLED' || status === 'EXPIRED') {
+    return 'cancelled';
+  }
+
+  return 'working';
+}
+
+/**
+ * The simplified, four-word status this screen shows - never the real eight-
+ * value label. The order detail dialog still shows the real one: a line cook
+ * needs to tell `PREPARING` from `READY`, a queue row does not.
+ */
+function SimpleStatusBadge({ status }: { readonly status: OrderStatus }) {
+  const group = groupFor(status);
+
+  return <span className={`status ${GROUP_TONE[group]}`}>{GROUP_LABELS[group]}</span>;
+}
 
 type SortOption = 'newest' | 'pickup' | 'oldest';
 
@@ -94,8 +129,6 @@ export function OrdersScreen() {
     loadOrders,
     loadMoreOrders,
     refreshOrders,
-    newOrderIds,
-    markOrdersSeen,
     notify,
     openModal,
   } = useAdminData();
@@ -137,7 +170,7 @@ export function OrdersScreen() {
     return copy;
   }, [orders, sort]);
 
-  const placedCount = orderCounts.PLACED ?? 0;
+  const placedCount = (orderCounts.PENDING_PAYMENT ?? 0) + (orderCounts.PLACED ?? 0);
   const workingCount =
     (orderCounts.CONFIRMED ?? 0) + (orderCounts.PREPARING ?? 0) + (orderCounts.READY ?? 0);
   // Completed and cancelled totals are not something the server counts
@@ -150,8 +183,6 @@ export function OrdersScreen() {
     (order) => order.status === 'CANCELLED' || order.status === 'EXPIRED',
   ).length;
   const more = hasMoreOrders ? '+' : '';
-
-  const newOnScreen = orders.filter((order) => newOrderIds.has(order.id)).length;
 
   return (
     <>
@@ -262,20 +293,8 @@ export function OrdersScreen() {
                 {displayed.length} đơn hàng{hasMoreOrders ? '+' : ''}
               </span>
             </div>
-            {newOnScreen === 0 ? null : (
-              <div className="new-banner" role="status">
-                <span>
-                  {newOnScreen === 1
-                    ? 'Có 1 đơn mới chưa xử lý.'
-                    : `Có ${newOnScreen} đơn mới chưa xử lý.`}
-                </span>
-                <button type="button" className="table-action" onClick={() => markOrdersSeen()}>
-                  Đánh dấu đã xem
-                </button>
-              </div>
-            )}
             <div className="table-wrap">
-              <table className="orders-table">
+              <table className="data-table orders-table">
                 <thead>
                   <tr>
                     <th>ĐƠN HÀNG</th>
@@ -295,10 +314,8 @@ export function OrdersScreen() {
                     </tr>
                   ) : (
                     displayed.map((order) => {
-                      const isNew = newOrderIds.has(order.id);
-
                       return (
-                        <tr key={order.id} className={isNew ? 'is-new' : undefined}>
+                        <tr key={order.id}>
                           <td>
                             <div className="order-id-cell">
                               <span className="order-thumb">
@@ -306,11 +323,6 @@ export function OrdersScreen() {
                               </span>
                               <span>
                                 <strong>{order.code}</strong>
-                                {isNew ? (
-                                  <span className="new-pill" role="status">
-                                    Mới
-                                  </span>
-                                ) : null}
                                 <br />
                                 <span className="cell-sub">{itemsSummary(order.items)}</span>
                               </span>
@@ -326,7 +338,7 @@ export function OrdersScreen() {
                           </td>
                           <td className="amount">{money(order.total)}</td>
                           <td>
-                            <StatusBadge status={order.status} />
+                            <SimpleStatusBadge status={order.status} />
                           </td>
                           <td>
                             {order.paymentMethod === null ? (
