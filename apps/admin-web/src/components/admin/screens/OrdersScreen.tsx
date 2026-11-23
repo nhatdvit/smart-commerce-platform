@@ -255,6 +255,12 @@ export function OrdersScreen() {
           </div>
         ) : (
           <div className="panel order-table-panel">
+            <div className="panel-title order-table-title">
+              <h3>Danh sách đơn hàng</h3>
+              <span className="panel-note">
+                {displayed.length} đơn hàng{hasMoreOrders ? '+' : ''}
+              </span>
+            </div>
             {newOnScreen === 0 ? null : (
               <div className="new-banner" role="status">
                 <span>
@@ -298,19 +304,23 @@ export function OrdersScreen() {
                                 <IconReceipt size={18} />
                               </span>
                               <span>
-                                <strong>#{order.code}</strong>
+                                <strong>{order.code}</strong>
                                 {isNew ? (
                                   <span className="new-pill" role="status">
                                     Mới
                                   </span>
                                 ) : null}
-                                <small>{itemsSummary(order.items)}</small>
+                                <br />
+                                <span className="cell-sub">{itemsSummary(order.items)}</span>
                               </span>
                             </div>
                           </td>
                           <td>
                             <strong>{order.contactName}</strong>
-                            <small>{timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)} · Hôm nay</small>
+                            <br />
+                            <span className="cell-sub">
+                              {timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)} · Hôm nay
+                            </span>
                           </td>
                           <td className="amount">{money(order.total)}</td>
                           <td>
@@ -324,16 +334,17 @@ export function OrdersScreen() {
                                 <span className={order.paymentStatus === 'PAID' ? 'status done' : 'status waiting'}>
                                   {order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
                                 </span>
-                                <small className="cell-sub">
+                                <br />
+                                <span className="cell-sub">
                                   {order.paymentMethod === 'BANK_TRANSFER' ? 'Chuyển khoản VietQR' : 'Tiền mặt'}
-                                </small>
+                                </span>
                               </>
                             )}
                           </td>
                           <td>
                             <button
                               type="button"
-                              className="table-action detail-action"
+                              className="row-btn detail-action"
                               onClick={() => openModal({ kind: 'order', orderId: order.id })}
                             >
                               Chi tiết <span>→</span>

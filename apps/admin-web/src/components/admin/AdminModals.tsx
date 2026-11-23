@@ -352,7 +352,7 @@ function OrderModal({ orderId }: { orderId: string }) {
       <div className="modal-head">
         <div>
           <div className="eyebrow">ĐẶT LÚC {timeLabel(order.placedAt ?? order.createdAt)}</div>
-          <h2>Đơn hàng #{order.code}</h2>
+          <h2>Đơn hàng {order.code}</h2>
         </div>
         <button type="button" className="icon-btn" aria-label="Đóng" onClick={closeModal}>
           ✕
