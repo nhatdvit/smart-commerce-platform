@@ -272,6 +272,67 @@ export async function listMyOrders(cursor?: string): Promise<MyOrdersPage> {
   };
 }
 
+interface ApiOrderDetailItem {
+  readonly product_id: string;
+  readonly variant_id: string;
+  readonly product_name: string;
+  readonly variant_name: string;
+  readonly quantity: number;
+}
+
+interface ApiOrderDetail {
+  readonly id: string;
+  readonly order_code: string;
+  readonly status: string;
+  readonly items: readonly ApiOrderDetailItem[];
+}
+
+export interface OrderDetailLine {
+  readonly productId: string;
+  readonly variantId: string;
+  readonly productName: string;
+  readonly variantName: string;
+  readonly quantity: number;
+}
+
+export interface OrderDetail {
+  readonly id: string;
+  readonly orderCode: string;
+  readonly status: string;
+  readonly items: readonly OrderDetailLine[];
+}
+
+/** The full order, including `product_id`/`variant_id` per line - what "Đặt lại" needs to match against today's live menu. */
+export async function getOrder(orderId: string): Promise<OrderDetail> {
+  const data = await api.get<ApiOrderDetail>(`/orders/${orderId}`);
+
+  return {
+    id: data.id,
+    orderCode: data.order_code,
+    status: data.status,
+    items: data.items.map((item) => ({
+      productId: item.product_id,
+      variantId: item.variant_id,
+      productName: item.product_name,
+      variantName: item.variant_name,
+      quantity: item.quantity,
+    })),
+  };
+}
+
+/**
+ * Self-service cancel - only before the kitchen starts (`CancelOrder`'s own
+ * doc comment on the backend). The server is the one source of truth for
+ * whether this succeeded; this only returns the new status for the caller to
+ * reflect locally.
+ */
+export async function cancelOrder(orderId: string, reason?: string): Promise<string> {
+  const body = reason === undefined || reason.trim() === '' ? {} : { reason: reason.trim() };
+  const data = await api.post<{ readonly status: string }>(`/orders/${orderId}/cancel`, body);
+
+  return data.status;
+}
+
 export interface PaymentMethodOption {
   readonly method: PaymentMethod;
   readonly enabled: boolean;

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Modules\Order\Presentation\Http\Controller;
 
+use App\Modules\Order\Application\Action\CancelOrder;
 use App\Modules\Order\Application\Action\CreateOrder;
 use App\Modules\Order\Application\ComposeOrderView;
 use App\Modules\Order\Domain\Contract\OrderRepository;
 use App\Modules\Order\Domain\Entity\Order;
 use App\Modules\Order\Infrastructure\Persistence\Model\Order as OrderModel;
+use App\Modules\Order\Presentation\Http\Request\CancelOrderRequest;
 use App\Modules\Order\Presentation\Http\Request\CreateOrderRequest;
 use App\Modules\Order\Presentation\Http\Request\ListMyOrdersRequest;
 use App\Modules\Order\Presentation\Http\Resource\OrderPaymentResource;
@@ -116,6 +118,31 @@ final class CustomerOrderController extends Controller
         }
 
         return (new OrderPaymentResource($payment, $found->fulfillmentType))->response();
+    }
+
+    /**
+     * A customer or guest cancelling their own order - before the kitchen has
+     * started, by the rule {@see CancelOrder} enforces.
+     */
+    public function cancel(
+        string $order,
+        CancelOrderRequest $request,
+        StoreContext $storeContext,
+        CancelOrder $cancelOrder,
+    ): JsonResponse {
+        $storeId = $storeContext->require()->id;
+        // Ownership is checked the same way a read is - owner session or the
+        // matching guest token - before the cancel action ever locks the row.
+        $this->findAuthorized($order, $request, $storeId);
+
+        $cancelled = $cancelOrder->handle(
+            $storeId,
+            $order,
+            $this->authenticatedCustomerId($request),
+            $request->reason(),
+        );
+
+        return (new OrderResource($this->view->forOrder($storeId, $cancelled)))->response();
     }
 
     private function authenticatedCustomerId(Request $request): ?string

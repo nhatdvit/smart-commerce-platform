@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { ApiError } from '@/lib/api-client';
+import { apiErrorMessage as authErrorMessage } from '@/lib/api-error-message';
 import {
   type CurrentCustomer,
   type LoyaltyStanding,
@@ -14,6 +14,7 @@ import {
   registerCustomer,
   updateOwnProfile,
 } from '@/lib/auth-api';
+import { type CartState, readCart, writeCart } from '@/lib/cart-storage';
 import {
   MenuApiError,
   groupIntoCards,
@@ -23,11 +24,9 @@ import {
 } from '@/lib/menu-api';
 import {
   type FulfillmentType as OrderFulfillmentType,
-  type MyOrderSummary,
   type OrderConfirmation,
   type PaymentMethod as OrderPaymentMethod,
   createOrder,
-  listMyOrders,
   newIdempotencyKey,
 } from '@/lib/order-api';
 
@@ -43,7 +42,7 @@ export type CategoryFilter = string;
 
 /** Cart key: the menu item id - the exact sellable unit a cart line references. */
 export type CartKey = string;
-export type CartState = Readonly<Record<CartKey, number>>;
+export type { CartState };
 
 export interface CartLine {
   readonly key: CartKey;
@@ -66,10 +65,8 @@ export type ModalView =
   | { readonly kind: 'rewards' }
   | { readonly kind: 'login' }
   | { readonly kind: 'profile' }
-  | { readonly kind: 'orders' }
   | { readonly kind: 'order-confirmed'; readonly confirmation: OrderConfirmation };
 
-const CART_KEY = 'pq-v5-cart';
 const FAVORITES_KEY = 'pq-v5-favorites';
 const COUPON_CODES = ['SANG10', 'GIAM5K'] as const;
 
@@ -84,34 +81,8 @@ function readStored(key: string): unknown {
   }
 }
 
-function asCart(value: unknown): CartState {
-  if (typeof value !== 'object' || value === null) {
-    return {};
-  }
-
-  const cart: Record<CartKey, number> = {};
-  for (const [key, quantity] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof quantity === 'number' && Number.isFinite(quantity) && quantity > 0) {
-      cart[key] = Math.floor(quantity);
-    }
-  }
-
-  return cart;
-}
-
 function asFavorites(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
-}
-
-/** The first field message from a 422, falling back to the envelope's own message. */
-function authErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    const [firstFieldError] = Object.values(error.fieldErrors());
-
-    return firstFieldError ?? error.message;
-  }
-
-  return 'Có lỗi xảy ra, vui lòng thử lại.';
 }
 
 function discountFor(code: string, subtotal: number): number {
@@ -258,18 +229,13 @@ export function useStorefront() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
-  const [myOrders, setMyOrders] = useState<readonly MyOrderSummary[]>([]);
-  const [myOrdersBusy, setMyOrdersBusy] = useState(false);
-  const [myOrdersError, setMyOrdersError] = useState('');
-  const [myOrdersCursor, setMyOrdersCursor] = useState<string | null>(null);
-  const [myOrdersHasMore, setMyOrdersHasMore] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Restore after mount: the server render has no localStorage, so reading it
   // during render would make the first client paint disagree with the markup.
   useEffect(() => {
-    setCart(asCart(readStored(CART_KEY)));
+    setCart(readCart());
     setFavorites(asFavorites(readStored(FAVORITES_KEY)));
     setHydrated(true);
   }, []);
@@ -278,8 +244,8 @@ export function useStorefront() {
     if (!hydrated) {
       return;
     }
+    writeCart(cart);
     try {
-      window.localStorage.setItem(CART_KEY, JSON.stringify(cart));
       window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
     } catch {
       // Storage unavailable: the session keeps working in memory.
@@ -434,37 +400,6 @@ export function useStorefront() {
     setModal({ kind: 'checkout' });
   }, [totals.count, toast]);
 
-  /** Opens the order-history view and loads its first page fresh every time - a customer's orders can change between visits. */
-  const openOrderHistory = useCallback(() => {
-    setModal({ kind: 'orders' });
-    setMyOrdersBusy(true);
-    setMyOrdersError('');
-    listMyOrders()
-      .then((page) => {
-        setMyOrders(page.items);
-        setMyOrdersCursor(page.nextCursor);
-        setMyOrdersHasMore(page.hasMore);
-      })
-      .catch((error: unknown) => setMyOrdersError(authErrorMessage(error)))
-      .finally(() => setMyOrdersBusy(false));
-  }, []);
-
-  const loadMoreOrders = useCallback(() => {
-    if (myOrdersBusy || !myOrdersHasMore || myOrdersCursor === null) {
-      return;
-    }
-    setMyOrdersBusy(true);
-    setMyOrdersError('');
-    listMyOrders(myOrdersCursor)
-      .then((page) => {
-        setMyOrders((current) => [...current, ...page.items]);
-        setMyOrdersCursor(page.nextCursor);
-        setMyOrdersHasMore(page.hasMore);
-      })
-      .catch((error: unknown) => setMyOrdersError(authErrorMessage(error)))
-      .finally(() => setMyOrdersBusy(false));
-  }, [myOrdersBusy, myOrdersHasMore, myOrdersCursor]);
-
   /**
    * Real checkout: `POST /orders`. The server reprices every line from the
    * live menu itself (CLAUDE.md section 6) - `expectedTotalAmount` is only
@@ -615,7 +550,6 @@ export function useStorefront() {
     setProfileError('');
     setPasswordError('');
     setCheckoutError('');
-    setMyOrdersError('');
   }, []);
 
   const visibleCards = useMemo(() => {
@@ -656,10 +590,6 @@ export function useStorefront() {
     loyaltyBalance,
     checkoutBusy,
     checkoutError,
-    myOrders,
-    myOrdersBusy,
-    myOrdersError,
-    myOrdersHasMore,
     setCouponInput,
     setCategoryFilter,
     setSearch,
@@ -673,8 +603,6 @@ export function useStorefront() {
     applyCoupon,
     openCheckout,
     placeOrder,
-    openOrderHistory,
-    loadMoreOrders,
     redeemReward,
     closeLayers,
     toast,

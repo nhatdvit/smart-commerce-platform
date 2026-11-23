@@ -2224,6 +2224,49 @@
                 }
             }
         },
+        "/orders/{order}/cancel": {
+            "post": {
+                "operationId": "orders.cancel",
+                "summary": "A customer or guest cancelling their own order - before the kitchen has\nstarted, by the rule {@see CancelOrder} enforces",
+                "tags": [
+                    "CustomerOrder"
+                ],
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CancelOrderRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`OrderResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OrderResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/media/products/{store}/{file}": {
             "get": {
                 "operationId": "media.product-image",
@@ -2782,6 +2825,20 @@
                     "events"
                 ],
                 "title": "AdminPaymentResource"
+            },
+            "CancelOrderRequest": {
+                "type": "object",
+                "description": "The optional `{reason}` body a customer may send when cancelling their own order.",
+                "properties": {
+                    "reason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    }
+                },
+                "title": "CancelOrderRequest"
             },
             "ChangePasswordRequest": {
                 "type": "object",

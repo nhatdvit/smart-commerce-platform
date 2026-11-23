@@ -172,6 +172,16 @@ Route::get('/orders/{order}/payment', [CustomerOrderController::class, 'payment'
     ->middleware('store.resolve')
     ->name('api.orders.payment');
 
+/*
+ * Self-service cancel, allowed only before PREPARING (CancelOrder's own doc
+ * comment). No idempotency key: a retried cancel on an already-cancelled
+ * order simply answers the same 409 a staff transition does.
+ */
+Route::post('/orders/{order}/cancel', [CustomerOrderController::class, 'cancel'])
+    ->whereUuid('order')
+    ->middleware(['store.resolve', 'throttle:commerce-write'])
+    ->name('api.orders.cancel');
+
 Route::middleware(['auth:sanctum', 'store.resolve'])
     ->prefix('admin')
     ->name('api.admin.')

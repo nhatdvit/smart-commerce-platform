@@ -402,6 +402,93 @@ it('refuses an unauthenticated caller listing orders', function (): void {
         ->assertUnauthorized();
 });
 
+it('lets a guest cancel their own PLACED order with the issued token', function (): void {
+    [$storeId, $itemId] = readyStore();
+
+    $created = $this->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    $this->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('X-Guest-Order-Token', $created->json('guest_order_token'))
+        ->postJson('/api/v1/orders/'.$created->json('order.id').'/cancel', ['reason' => 'Đổi ý'])
+        ->assertOk()
+        ->assertJsonPath('status', 'CANCELLED');
+
+    expect(Order::query()->findOrFail($created->json('order.id'))->status->value)->toBe('CANCELLED');
+});
+
+it("lets a signed-in customer cancel their own order without a reason", function (): void {
+    [$storeId, $itemId] = readyStore();
+    $customer = User::factory()->phoneOnly()->create(['phone' => '0909555020']);
+
+    $created = $this->actingAs($customer, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    $this->actingAs($customer, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->postJson('/api/v1/orders/'.$created->json('order.id').'/cancel')
+        ->assertOk()
+        ->assertJsonPath('status', 'CANCELLED');
+});
+
+it('refuses to cancel an order once the kitchen has started preparing it', function (): void {
+    [$storeId, $itemId] = readyStore();
+    $customer = User::factory()->phoneOnly()->create(['phone' => '0909555021']);
+
+    $created = $this->actingAs($customer, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    $order = Order::query()->findOrFail($created->json('order.id'));
+    $order->forceFill(['status' => 'PREPARING'])->save();
+
+    $this->actingAs($customer, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->postJson('/api/v1/orders/'.$created->json('order.id').'/cancel')
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'INVALID_STATE_TRANSITION');
+
+    expect($order->refresh()->status->value)->toBe('PREPARING');
+});
+
+it("refuses to cancel another customer's order", function (): void {
+    [$storeId, $itemId] = readyStore();
+    $owner = User::factory()->phoneOnly()->create(['phone' => '0909555022']);
+    $other = User::factory()->phoneOnly()->create(['phone' => '0909555023']);
+
+    $created = $this->actingAs($owner, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    $this->actingAs($other, 'web')
+        ->withHeaders(CHECKOUT_HEADERS)
+        ->postJson('/api/v1/orders/'.$created->json('order.id').'/cancel')
+        ->assertStatus(404);
+});
+
+it('refuses to cancel with a guest token for the wrong order', function (): void {
+    [$storeId, $itemId] = readyStore();
+
+    $created = $this->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($itemId))
+        ->assertCreated();
+
+    $this->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('X-Guest-Order-Token', 'not-the-real-token')
+        ->postJson('/api/v1/orders/'.$created->json('order.id').'/cancel')
+        ->assertStatus(404);
+});
+
 it('lists CASH and BANK_TRANSFER, reporting which this store has enabled', function (): void {
     $store = Store::factory()->create();
     config(['commerce.default_store_slug' => $store->slug]);

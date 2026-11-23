@@ -248,6 +248,8 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
+  /* `.btn` also styles the "Đơn hàng của tôi" link - no underline on an <a>. */
+  text-decoration: none;
 }
 .btn-yellow {
   background: linear-gradient(180deg, #ffe45b, #ffc600);
@@ -912,6 +914,39 @@ footer {
 }
 .order-row-foot small {
   color: var(--muted);
+}
+.order-row-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+.order-row-actions .btn {
+  flex: 1;
+  padding: 9px 14px;
+  font-size: 13.5px;
+  justify-content: center;
+}
+.orders-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 60px;
+}
+.orders-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.orders-page-head h1 {
+  font-size: 20px;
+  margin: 0;
+}
+.brand-link {
+  color: var(--navy);
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
 }
 .modal-total {
   font-size: 21px;

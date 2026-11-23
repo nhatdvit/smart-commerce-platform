@@ -789,6 +789,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
 
   /orders/{order}/payment:
     get:

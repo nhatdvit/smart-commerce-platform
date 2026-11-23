@@ -1,17 +1,14 @@
 'use client';
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
+import Link from 'next/link';
 import QRCode from 'qrcode';
 
 import type { CurrentCustomer, LoyaltyStanding } from '@/lib/auth-api';
 import type { MenuProductCard } from '@/lib/menu-api';
 import { money } from '@/lib/money';
-import type {
-  FulfillmentType,
-  MyOrderSummary,
-  OrderConfirmation,
-  PaymentMethod,
-} from '@/lib/order-api';
+import type { FulfillmentType, OrderConfirmation, PaymentMethod } from '@/lib/order-api';
+import { ORDER_STATUS_LABELS } from '@/lib/order-status-labels';
 
 import {
   FoodIcon,
@@ -42,30 +39,6 @@ const DEMO_REWARDS: readonly {
   { name: 'Bánh mì pate trứng', icon: 'banh-mi', points: 200 },
   { name: 'Chả ốc 250g', icon: 'gift', points: 500 },
 ];
-
-/** Matches admin-web's `ORDER_STATUS_LABELS` wording, so a customer and a staff member read the same word. */
-const ORDER_STATUS_LABELS: Readonly<Record<string, string>> = {
-  PENDING_PAYMENT: 'Chờ chuyển khoản',
-  PLACED: 'Chờ xác nhận',
-  CONFIRMED: 'Đã xác nhận',
-  PREPARING: 'Đang chuẩn bị',
-  READY: 'Sẵn sàng',
-  COMPLETED: 'Hoàn thành',
-  CANCELLED: 'Đã hủy',
-  EXPIRED: 'Hết hạn',
-};
-
-const ORDER_DATE_FORMAT = new Intl.DateTimeFormat('vi-VN', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-function formatOrderDate(iso: string): string {
-  return ORDER_DATE_FORMAT.format(new Date(iso));
-}
 
 interface ModalShellProps {
   readonly title: string;
@@ -348,7 +321,6 @@ interface ProfileFormProps {
   readonly passwordError: string;
   readonly onUpdateName: (name: string) => void;
   readonly onChangePassword: (currentPassword: string, newPassword: string) => void;
-  readonly onOpenOrders: () => void;
   readonly onLogout: () => void;
 }
 
@@ -361,7 +333,6 @@ function ProfileForm({
   passwordError,
   onUpdateName,
   onChangePassword,
-  onOpenOrders,
   onLogout,
 }: ProfileFormProps) {
   const [name, setName] = useState(customer.name);
@@ -382,9 +353,9 @@ function ProfileForm({
         </div>
       </div>
 
-      <button type="button" className="btn btn-outline btn-centered" onClick={onOpenOrders}>
+      <Link href="/orders" className="btn btn-outline btn-centered">
         <IconBag size={17} /> Đơn hàng của tôi
-      </button>
+      </Link>
 
       <div className="form-row">
         <label htmlFor="profileName">Họ và tên</label>
@@ -550,54 +521,6 @@ function OrderConfirmed({ confirmation, onClose }: OrderConfirmedProps) {
   );
 }
 
-interface OrderHistoryListProps {
-  readonly orders: readonly MyOrderSummary[];
-  readonly busy: boolean;
-  readonly error: string;
-  readonly hasMore: boolean;
-  readonly onLoadMore: () => void;
-}
-
-/** A signed-in customer's own past orders - `GET /customer/orders`, loaded by `onOpenOrders` each time this view opens. */
-function OrderHistoryList({ orders, busy, error, hasMore, onLoadMore }: OrderHistoryListProps) {
-  if (error !== '') {
-    return <p className="notice">{error}</p>;
-  }
-
-  if (busy && orders.length === 0) {
-    return <p className="modal-note">Đang tải đơn hàng...</p>;
-  }
-
-  if (orders.length === 0) {
-    return <p className="modal-note">Bạn chưa đặt đơn hàng nào.</p>;
-  }
-
-  return (
-    <>
-      {orders.map((order) => (
-        <div className="profile-section order-row" key={order.id}>
-          <div className="order-row-head">
-            <strong>{order.orderCode}</strong>
-            <span>{ORDER_STATUS_LABELS[order.status] ?? order.status}</span>
-          </div>
-          <p className="modal-note">
-            {order.items.map((item) => `${item.productName} ×${item.quantity}`).join(', ')}
-          </p>
-          <div className="order-row-foot">
-            <small>{formatOrderDate(order.placedAt ?? order.createdAt)}</small>
-            <strong>{money(order.total)}</strong>
-          </div>
-        </div>
-      ))}
-      {hasMore ? (
-        <button type="button" className="btn btn-outline btn-centered" disabled={busy} onClick={onLoadMore}>
-          {busy ? 'Đang tải...' : 'Tải thêm'}
-        </button>
-      ) : null}
-    </>
-  );
-}
-
 interface RewardListProps {
   readonly balance: number;
   readonly onRedeem: (name: string, cost: number) => void;
@@ -651,10 +574,6 @@ interface ModalLayerProps {
   readonly passwordError: string;
   readonly checkoutBusy: boolean;
   readonly checkoutError: string;
-  readonly myOrders: readonly MyOrderSummary[];
-  readonly myOrdersBusy: boolean;
-  readonly myOrdersError: string;
-  readonly myOrdersHasMore: boolean;
   readonly onClose: () => void;
   readonly onAddMenuItem: (menuItemId: string) => void;
   readonly onPlaceOrder: (
@@ -670,8 +589,6 @@ interface ModalLayerProps {
   readonly onRegister: (fullName: string, phone: string, password: string) => void;
   readonly onUpdateName: (name: string) => void;
   readonly onChangePassword: (currentPassword: string, newPassword: string) => void;
-  readonly onOpenOrders: () => void;
-  readonly onLoadMoreOrders: () => void;
   readonly onLogout: () => void;
 }
 
@@ -689,10 +606,6 @@ export function ModalLayer({
   passwordError,
   checkoutBusy,
   checkoutError,
-  myOrders,
-  myOrdersBusy,
-  myOrdersError,
-  myOrdersHasMore,
   onClose,
   onAddMenuItem,
   onPlaceOrder,
@@ -702,8 +615,6 @@ export function ModalLayer({
   onRegister,
   onUpdateName,
   onChangePassword,
-  onOpenOrders,
-  onLoadMoreOrders,
   onLogout,
 }: ModalLayerProps) {
   if (view.kind === 'variants') {
@@ -765,22 +676,7 @@ export function ModalLayer({
           passwordError={passwordError}
           onUpdateName={onUpdateName}
           onChangePassword={onChangePassword}
-          onOpenOrders={onOpenOrders}
           onLogout={onLogout}
-        />
-      </ModalShell>
-    );
-  }
-
-  if (view.kind === 'orders') {
-    return (
-      <ModalShell title="Đơn hàng của tôi" icon={<IconBag size={18} />} onClose={onClose}>
-        <OrderHistoryList
-          orders={myOrders}
-          busy={myOrdersBusy}
-          error={myOrdersError}
-          hasMore={myOrdersHasMore}
-          onLoadMore={onLoadMoreOrders}
         />
       </ModalShell>
     );
