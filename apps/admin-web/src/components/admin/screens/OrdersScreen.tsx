@@ -138,7 +138,8 @@ export function OrdersScreen() {
   }, [orders, sort]);
 
   const placedCount = orderCounts.PLACED ?? 0;
-  const workingCount = (orderCounts.CONFIRMED ?? 0) + (orderCounts.PREPARING ?? 0) + (orderCounts.READY ?? 0);
+  const workingCount =
+    (orderCounts.CONFIRMED ?? 0) + (orderCounts.PREPARING ?? 0) + (orderCounts.READY ?? 0);
   // Completed and cancelled totals are not something the server counts
   // (CLAUDE.md: counting every order a store has ever served would grow
   // without bound and answer a question nobody asked) - this is what is
@@ -319,7 +320,8 @@ export function OrdersScreen() {
                             <strong>{order.contactName}</strong>
                             <br />
                             <span className="cell-sub">
-                              {timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)} · Hôm nay
+                              {timeLabel(order.scheduledAt ?? order.placedAt ?? order.createdAt)} ·
+                              Hôm nay
                             </span>
                           </td>
                           <td className="amount">{money(order.total)}</td>
@@ -331,12 +333,22 @@ export function OrdersScreen() {
                               <span className="cell-sub warn">Chưa ghi nhận thanh toán</span>
                             ) : (
                               <>
-                                <span className={order.paymentStatus === 'PAID' ? 'status done' : 'status waiting'}>
-                                  {order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                                <span
+                                  className={
+                                    order.paymentStatus === 'PAID'
+                                      ? 'status done'
+                                      : 'status waiting'
+                                  }
+                                >
+                                  {order.paymentStatus === 'PAID'
+                                    ? 'Đã thanh toán'
+                                    : 'Chưa thanh toán'}
                                 </span>
                                 <br />
                                 <span className="cell-sub">
-                                  {order.paymentMethod === 'BANK_TRANSFER' ? 'Chuyển khoản VietQR' : 'Tiền mặt'}
+                                  {order.paymentMethod === 'BANK_TRANSFER'
+                                    ? 'Chuyển khoản VietQR'
+                                    : 'Tiền mặt'}
                                 </span>
                               </>
                             )}
@@ -360,7 +372,12 @@ export function OrdersScreen() {
 
             {hasMoreOrders ? (
               <div className="load-more">
-                <button type="button" className="btn" onClick={loadMoreOrders} disabled={ordersBusy}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={loadMoreOrders}
+                  disabled={ordersBusy}
+                >
                   Tải thêm đơn
                 </button>
               </div>

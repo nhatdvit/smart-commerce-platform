@@ -330,7 +330,9 @@ function OrderModal({ orderId }: { orderId: string }) {
   // the same way, honestly, rather than as a settled transaction.
   const cancelledWithNothingOwed =
     order.status === 'CANCELLED' &&
-    (order.paymentStatus === null || order.paymentStatus === 'PENDING' || order.paymentStatus === 'FAILED');
+    (order.paymentStatus === null ||
+      order.paymentStatus === 'PENDING' ||
+      order.paymentStatus === 'FAILED');
 
   // The order is passed in rather than read from the closure: TypeScript does
   // not carry the null check above into a function declaration, and an
@@ -408,8 +410,14 @@ function OrderModal({ orderId }: { orderId: string }) {
                 {order.paymentMethod === null ? (
                   <span className="status waiting">Chưa ghi nhận</span>
                 ) : (
-                  <span className={isSettledPayment(order.paymentStatus) ? 'status done' : 'status waiting'}>
-                    {order.paymentStatus === null ? 'Không rõ' : PAYMENT_STATUS_LABELS[order.paymentStatus]}
+                  <span
+                    className={
+                      isSettledPayment(order.paymentStatus) ? 'status done' : 'status waiting'
+                    }
+                  >
+                    {order.paymentStatus === null
+                      ? 'Không rõ'
+                      : PAYMENT_STATUS_LABELS[order.paymentStatus]}
                   </span>
                 )}
                 <span className="order-payment-method">
