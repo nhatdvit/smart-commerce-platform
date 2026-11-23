@@ -470,22 +470,24 @@ function OrderConfirmed({ confirmation, onClose }: OrderConfirmedProps) {
             </div>
           )}
           <p className="modal-note">Quét mã bằng app ngân hàng, hoặc chuyển khoản thủ công:</p>
-          <div className="form-row">
-            <label>Ngân hàng</label>
-            <input value={bankTransfer.bankName ?? bankTransfer.bankBin ?? ''} disabled />
-          </div>
-          <div className="form-row">
-            <label>Số tài khoản</label>
-            <input value={bankTransfer.accountNumber ?? ''} disabled />
-          </div>
-          <div className="form-row">
-            <label>Chủ tài khoản</label>
-            <input value={bankTransfer.accountName ?? ''} disabled />
-          </div>
-          <div className="form-row">
-            <label>Nội dung chuyển khoản</label>
-            <input value={bankTransfer.transferReference} disabled />
-          </div>
+          <dl className="qr-details">
+            <div className="qr-detail-row">
+              <dt>Ngân hàng</dt>
+              <dd>{bankTransfer.bankName ?? bankTransfer.bankBin ?? '—'}</dd>
+            </div>
+            <div className="qr-detail-row">
+              <dt>Số tài khoản</dt>
+              <dd>{bankTransfer.accountNumber ?? '—'}</dd>
+            </div>
+            <div className="qr-detail-row">
+              <dt>Chủ tài khoản</dt>
+              <dd>{bankTransfer.accountName ?? '—'}</dd>
+            </div>
+            <div className="qr-detail-row">
+              <dt>Nội dung CK</dt>
+              <dd>{bankTransfer.transferReference}</dd>
+            </div>
+          </dl>
           <div className="modal-total">{money(bankTransfer.amount)}</div>
           <p className="modal-note">
             Sau khi chuyển khoản, nhân viên cửa hàng sẽ xác nhận thủ công khi nhận được tiền - mã QR

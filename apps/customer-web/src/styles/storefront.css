@@ -838,13 +838,10 @@ footer {
 .qr-section {
   text-align: center;
 }
-.qr-section .form-row {
-  text-align: left;
-}
 .qr-wrap {
   display: flex;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .qr-code {
   border-radius: 10px;
@@ -854,9 +851,39 @@ footer {
 .qr-placeholder {
   width: 220px;
   height: 220px;
-  margin: 0 auto 12px;
+  margin: 0 auto 10px;
   background: #eef1f5;
   border-radius: 10px;
+}
+.qr-details {
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 10px auto 0;
+  max-width: 280px;
+  overflow: hidden;
+}
+.qr-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+}
+.qr-detail-row:last-child {
+  border-bottom: none;
+}
+.qr-detail-row dt {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.qr-detail-row dd {
+  margin: 0;
+  font-weight: 700;
+  text-align: right;
+  word-break: break-word;
 }
 .modal-total {
   font-size: 21px;
