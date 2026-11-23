@@ -13,9 +13,12 @@ use App\Modules\Order\Infrastructure\Persistence\Model\Order as OrderModel;
 use App\Modules\Order\Presentation\Http\Request\CancelOrderRequest;
 use App\Modules\Order\Presentation\Http\Request\CreateOrderRequest;
 use App\Modules\Order\Presentation\Http\Request\ListMyOrdersRequest;
+use App\Modules\Order\Presentation\Http\Request\ReportCustomerTransferRequest;
 use App\Modules\Order\Presentation\Http\Resource\OrderPaymentResource;
 use App\Modules\Order\Presentation\Http\Resource\OrderResource;
 use App\Modules\Order\Presentation\Http\Resource\OrderSummaryResource;
+use App\Modules\Payment\Application\Action\ReportCustomerTransfer;
+use App\Modules\Payment\Application\Action\UploadPaymentReceipt;
 use App\Modules\Payment\Application\Contract\ProvidesOrderPaymentDetails;
 use App\Modules\Store\Application\StoreContext;
 use App\Shared\Domain\Exception\BusinessRuleViolation;
@@ -118,6 +121,58 @@ final class CustomerOrderController extends Controller
         }
 
         return (new OrderPaymentResource($payment, $found->fulfillmentType))->response();
+    }
+
+    /**
+     * A customer or guest saying "I have transferred", for their own order.
+     *
+     * Ownership is checked exactly like `payment()` - owner session or the
+     * matching guest token - before anything is recorded. Never a status
+     * change: {@see ReportCustomerTransfer} only ever writes a timestamp and
+     * an optional receipt path (CLAUDE.md section 6, decision dated
+     * 2026-11-24). A receipt upload failing does not lose the report itself;
+     * the click is recorded with whatever receipt (if any) made it through.
+     */
+    public function reportTransfer(
+        string $order,
+        ReportCustomerTransferRequest $request,
+        StoreContext $storeContext,
+        ReportCustomerTransfer $reportTransfer,
+        UploadPaymentReceipt $uploadReceipt,
+    ): JsonResponse {
+        $storeId = $storeContext->require()->id;
+        $found = $this->findAuthorized($order, $request, $storeId);
+
+        $payment = $this->paymentDetails->forOrder($storeId, $order);
+
+        if ($payment === null) {
+            throw new BusinessRuleViolation(ErrorCode::ResourceNotFound, 'Payment not found');
+        }
+
+        $receiptPath = null;
+
+        if ($request->hasReceipt()) {
+            /** @var list<string> $allowed */
+            $allowed = (array) config('commerce.media.image_mime_types', []);
+
+            $receiptPath = $uploadReceipt->handle(
+                $storeId,
+                $payment->paymentId,
+                $request->receiptContents(),
+                $allowed,
+                (int) config('commerce.media.max_bytes', 2 * 1024 * 1024),
+            );
+        }
+
+        $reportTransfer->handle($storeId, $payment->paymentId, $receiptPath);
+
+        $updated = $this->paymentDetails->forOrder($storeId, $order);
+
+        if ($updated === null) {
+            throw new BusinessRuleViolation(ErrorCode::ResourceNotFound, 'Payment not found');
+        }
+
+        return (new OrderPaymentResource($updated, $found->fulfillmentType))->response();
     }
 
     /**

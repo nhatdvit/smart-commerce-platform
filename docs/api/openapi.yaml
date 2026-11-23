@@ -834,6 +834,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /orders/{order}/payment/report-transfer:
+    post:
+      operationId: reportCustomerTransfer
+      tags: [Payment]
+      summary: "\"I have transferred\" (notification only)"
+      description: |
+        Records that the customer themselves said they transferred, with an
+        optional receipt photo — **never proof of payment** (CLAUDE.md section
+        6, decision dated 2026-11-24). `payment.status` never changes here;
+        this exists only so staff have a real notification and, if one was
+        sent, a receipt photo to look at on the confirm screen — they still
+        type the amount they actually saw land in the bank themselves.
+
+        Refused for a `CASH` payment, or one already settled.
+      security:
+        - sanctumSession: []
+        - guestOrderToken: []
+      parameters:
+        - $ref: '#/components/parameters/OrderPath'
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                receipt:
+                  type: string
+                  format: binary
+                  description: Optional JPEG, PNG or WebP photo of the transfer receipt.
+      responses:
+        '200':
+          description: The payment, with method-specific instructions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPayment'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: This payment is already settled. Carries `PAYMENT_ALREADY_CONFIRMED`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: |
+            Not a bank-transfer payment (`CASH` has nothing to transfer), or
+            the uploaded receipt failed validation. Carries `VALIDATION_FAILED`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /customer/orders:
     get:
       operationId: listOwnOrders
@@ -1358,6 +1414,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPayment'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/payments/{payment}/receipt:
+    get:
+      operationId: getAdminPaymentReceipt
+      tags: [Admin - Payments]
+      summary: The customer's uploaded receipt photo
+      description: |
+        Permission `payment.read`, and the payment must belong to this store -
+        unlike a product photo, a receipt is sensitive and never public
+        (§8). 404 when no receipt is on file (`has_customer_receipt` on
+        `AdminPayment` says whether to call this at all).
+
+        This is a reference for staff to look at, never something the server
+        treats as proof - it has no effect on `POST .../confirm` (§6, decision
+        dated 2026-11-24).
+      parameters:
+        - $ref: '#/components/parameters/PaymentPath'
+      responses:
+        '200':
+          description: The receipt image.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -4603,6 +4698,14 @@ components:
           type: [string, 'null']
           format: date-time
           description: When staff confirmed the real money. Not when a QR was shown.
+        customer_reported_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When this customer last clicked "I have transferred" - a
+            notification shown to staff, never proof (§6, decision dated
+            2026-11-24). Only ever populated on the `OrderPayment` read a
+            customer gets back for their own order.
 
     Order:
       type: object
@@ -5010,6 +5113,18 @@ components:
         expires_at:
           type: [string, 'null']
           format: date-time
+        customer_reported_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the customer themselves last clicked "I have transferred" -
+            a notification, never proof (§6, decision dated 2026-11-24).
+        has_customer_receipt:
+          type: boolean
+          description: |
+            Whether a receipt photo is attached to that report. The photo
+            itself is never embedded here - fetch it, once authorized for
+            this payment, from `GET /admin/payments/{payment}/receipt`.
         needs_attention:
           type: boolean
         discrepancies:

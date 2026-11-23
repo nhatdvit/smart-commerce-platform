@@ -43,6 +43,7 @@ final class EloquentOrderPaymentDetailsProvider implements ProvidesOrderPaymentD
             $row->bank_bin === null ? null : KnownBank::nameFor($row->bank_bin),
             $row->bank_account_number,
             $row->bank_account_name,
+            $row->customer_reported_at,
         );
     }
 }

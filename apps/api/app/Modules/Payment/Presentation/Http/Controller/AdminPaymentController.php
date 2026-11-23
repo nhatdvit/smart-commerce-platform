@@ -7,6 +7,7 @@ namespace App\Modules\Payment\Presentation\Http\Controller;
 use App\Modules\Payment\Application\Action\ConfirmPayment;
 use App\Modules\Payment\Application\Action\FlagPayment;
 use App\Modules\Payment\Application\Action\GenerateBankTransferInstructions;
+use App\Modules\Payment\Domain\Contract\PaymentReceiptStorage;
 use App\Modules\Payment\Domain\Contract\PaymentRepository;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Presentation\Http\Request\ConfirmPaymentRequest;
@@ -19,6 +20,7 @@ use App\Shared\Presentation\Http\Controllers\Controller;
 use App\Shared\Presentation\Http\ErrorCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -37,7 +39,10 @@ final class AdminPaymentController extends Controller
      * long-lived process, and a request-scoped dependency held here would
      * outlive the request that resolved it.
      */
-    public function __construct(private readonly PaymentRepository $payments) {}
+    public function __construct(
+        private readonly PaymentRepository $payments,
+        private readonly PaymentReceiptStorage $receipts,
+    ) {}
 
     public function index(ListAdminPaymentsRequest $request, StoreContext $storeContext): JsonResponse
     {
@@ -66,6 +71,38 @@ final class AdminPaymentController extends Controller
         Gate::authorize('view', $found);
 
         return (new AdminPaymentResource($found))->response();
+    }
+
+    /**
+     * The customer's own uploaded receipt - shown to staff as a reference,
+     * never fetched or trusted automatically (CLAUDE.md section 6). Gated
+     * exactly like `show()`: this is the same sensitive payment, not a public
+     * media file the way a product photo is.
+     */
+    public function receipt(string $payment, StoreContext $storeContext): Response
+    {
+        $storeId = $storeContext->require()->id;
+        $found = $this->payments->findInStore($storeId, $payment);
+
+        if ($found === null) {
+            throw new BusinessRuleViolation(ErrorCode::ResourceNotFound, 'Payment not found');
+        }
+
+        Gate::authorize('view', $found);
+
+        $path = $found->customerReceiptPath;
+        $receipt = $path === null ? null : $this->receipts->read($path);
+
+        if ($receipt === null) {
+            throw new BusinessRuleViolation(ErrorCode::ResourceNotFound, 'Receipt not found');
+        }
+
+        return new Response($receipt['contents'], 200, [
+            'Content-Type' => $receipt['content_type'],
+            'X-Content-Type-Options' => 'nosniff',
+            'Content-Disposition' => 'inline',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     public function confirm(

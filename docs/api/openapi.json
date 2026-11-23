@@ -1275,6 +1275,63 @@
                 }
             }
         },
+        "/admin/payments/{payment}/receipt": {
+            "get": {
+                "operationId": "admin.payments.receipt",
+                "summary": "The customer's own uploaded receipt - shown to staff as a reference,\nnever fetched or trusted automatically (CLAUDE.md section 6). Gated\nexactly like `show()`: this is the same sensitive payment, not a public\nmedia file the way a product photo is",
+                "tags": [
+                    "AdminPayment"
+                ],
+                "parameters": [
+                    {
+                        "name": "payment",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "headers": {
+                            "X-Content-Type-Options": {
+                                "schema": {
+                                    "type": "string",
+                                    "const": "nosniff"
+                                }
+                            },
+                            "Content-Disposition": {
+                                "schema": {
+                                    "type": "string",
+                                    "const": "inline"
+                                }
+                            },
+                            "Cache-Control": {
+                                "schema": {
+                                    "type": "string",
+                                    "const": "private, no-store"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    }
+                }
+            }
+        },
         "/admin/payments/{payment}/confirm": {
             "post": {
                 "operationId": "admin.payments.confirm",
@@ -2267,6 +2324,50 @@
                 }
             }
         },
+        "/orders/{order}/payment/report-transfer": {
+            "post": {
+                "operationId": "orders.payment.report-transfer",
+                "description": "Ownership is checked exactly like `payment()` - owner session or the\nmatching guest token - before anything is recorded. Never a status\nchange: {@see ReportCustomerTransfer} only ever writes a timestamp and\nan optional receipt path (CLAUDE.md section 6, decision dated\n2026-11-24). A receipt upload failing does not lose the report itself;\nthe click is recorded with whatever receipt (if any) made it through.",
+                "summary": "A customer or guest saying \"I have transferred\", for their own order",
+                "tags": [
+                    "CustomerOrder"
+                ],
+                "parameters": [
+                    {
+                        "name": "order",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportCustomerTransferRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`OrderPaymentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OrderPaymentResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    }
+                }
+            }
+        },
         "/media/products/{store}/{file}": {
             "get": {
                 "operationId": "media.product-image",
@@ -2795,6 +2896,16 @@
                             "null"
                         ]
                     },
+                    "customer_reported_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "The customer's own \"I have transferred\" click - a notification\nfor this screen to show, never proof (CLAUDE.md section 6). The\npath itself is never exposed; the receipt is fetched through\nits own authorized endpoint, GET .../payments/{payment}/receipt."
+                    },
+                    "has_customer_receipt": {
+                        "type": "boolean"
+                    },
                     "needs_attention": {
                         "type": "boolean"
                     },
@@ -2824,6 +2935,8 @@
                     "confirmed_by",
                     "confirmed_at",
                     "expires_at",
+                    "customer_reported_at",
+                    "has_customer_receipt",
                     "needs_attention",
                     "discrepancies",
                     "events"
@@ -3668,6 +3781,12 @@
                                     "string",
                                     "null"
                                 ]
+                            },
+                            "customer_reported_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             }
                         },
                         "required": [
@@ -3676,7 +3795,8 @@
                             "status",
                             "amount",
                             "expires_at",
-                            "paid_at"
+                            "paid_at",
+                            "customer_reported_at"
                         ]
                     },
                     "bank_transfer": {
@@ -4300,6 +4420,22 @@
                     "schedules"
                 ],
                 "title": "ReplaceMenuRequest"
+            },
+            "ReportCustomerTransferRequest": {
+                "type": "object",
+                "description": "Validates one customer \"I have transferred\" report.\n\nThe receipt is optional - a bare click is still a real, useful\nnotification - and these rules are only the cheap first pass on what the\nclient declared; {@see \\App\\Modules\\Payment\\Application\\Action\\UploadPaymentReceipt}\ndecides the real type from the bytes.",
+                "properties": {
+                    "receipt": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 2048 kilobytes."
+                    }
+                },
+                "title": "ReportCustomerTransferRequest"
             },
             "RewardResource": {
                 "type": "object",

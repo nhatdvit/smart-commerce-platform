@@ -208,6 +208,21 @@ final class EloquentPaymentRepository implements PaymentRepository
         return $this->toEntity($row->refresh(), withHistory: false);
     }
 
+    public function recordCustomerTransferReport(Payment $payment): Payment
+    {
+        $row = PaymentModel::query()
+            ->where('store_id', $payment->storeId)
+            ->whereKey($payment->id)
+            ->sole();
+
+        $row->fill([
+            'customer_reported_at' => $payment->customerReportedAt,
+            'customer_receipt_path' => $payment->customerReceiptPath,
+        ])->save();
+
+        return $this->toEntity($row->refresh(), withHistory: false);
+    }
+
     /** @return Builder<PaymentModel> */
     private function baseQuery(string $storeId): Builder
     {
@@ -247,6 +262,10 @@ final class EloquentPaymentRepository implements PaymentRepository
                 // skipped it too (e.g. findForUpdate(), which never needs the
                 // flag) falls back to relationLoaded() the same as before.
                 $row->discrepancies_exists ?? ($row->relationLoaded('discrepancies') && $row->discrepancies->isNotEmpty()),
+                events: [],
+                discrepancies: [],
+                customerReportedAt: $row->customer_reported_at,
+                customerReceiptPath: $row->customer_receipt_path,
             );
         }
 
@@ -302,6 +321,8 @@ final class EloquentPaymentRepository implements PaymentRepository
             $row->discrepancies->isNotEmpty(),
             $events,
             $discrepancies,
+            $row->customer_reported_at,
+            $row->customer_receipt_path,
         );
     }
 

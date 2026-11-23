@@ -92,4 +92,11 @@ interface PaymentRepository
         string $qrPayload,
         ?DateTimeImmutable $expiresAt = null,
     ): Payment;
+
+    /**
+     * Records the customer's own "I have transferred" click. A notification,
+     * never a status change (CLAUDE.md section 6, decision dated 2026-11-24) -
+     * see {@see Payment::reportCustomerTransfer()}.
+     */
+    public function recordCustomerTransferReport(Payment $payment): Payment;
 }
