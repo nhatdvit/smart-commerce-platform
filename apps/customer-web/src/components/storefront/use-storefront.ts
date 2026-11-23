@@ -564,6 +564,7 @@ export function useStorefront() {
       .catch(() => undefined)
       .finally(() => {
         setCurrentCustomer(null);
+        setModal(null);
         toast('Đã đăng xuất');
       });
   }, [toast]);
