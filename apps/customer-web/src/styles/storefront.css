@@ -1597,3 +1597,421 @@ body {
     height: 32px;
   }
 }
+
+/*
+ * ================================================================
+ * Homepage redesign v2 - a second, lighter CSS pass over the same
+ * v5 markup (delivered package `bep-nha-minh-storefront`), ported the
+ * same way as the block above: appended here rather than rewriting the
+ * rules it supersedes, so this section is reviewable as its own diff.
+ * Recorded in docs/architecture/DESIGN_PORT_NOTES.md.
+ *
+ * The delivered stylesheet placed `.hero` and `.delivery` as direct
+ * children of `.page` (`grid-column:1/-1`), full-width above and below
+ * the two-column area - not nested in `.main-column` the way v5 had
+ * it. The markup now matches: see StorefrontApp.tsx.
+ *
+ * Deviation: the delivered `.cart-panel{position:sticky;top:84px}` is
+ * dropped. Cart, loyalty, promo and trust are four stacked panels in the
+ * same column, so a sticky first panel rides over the other three as the
+ * page scrolls rather than leaving room for them - visible on first
+ * scroll, not on the static mock. The cart panel scrolls in flow instead.
+ * ================================================================
+ */
+:root {
+  --navy: #102442;
+  --yellow: #ffca22;
+  --shadow: 0 5px 18px rgba(20, 36, 58, 0.05);
+}
+body {
+  background: #f8f9fa;
+}
+.header {
+  height: 72px;
+  padding-inline: max(24px, calc((100vw - 1320px) / 2));
+  gap: 18px;
+}
+.brand {
+  min-width: 205px;
+}
+.brand strong {
+  font-size: 22px;
+}
+.brand small {
+  font-size: 12px;
+}
+.topnav button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.page {
+  max-width: 1380px;
+  padding: 24px;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: 24px;
+}
+.hero {
+  grid-column: 1 / -1;
+  height: clamp(310px, 31vw, 420px);
+  background: #eef1f3;
+  color: var(--navy);
+  border-radius: 24px;
+}
+.hero-copy {
+  width: 48%;
+  padding: clamp(25px, 4vw, 54px);
+  align-self: center;
+}
+.hero h1 {
+  font-size: clamp(32px, 3.6vw, 52px);
+  line-height: 1.12;
+}
+.hero p {
+  max-width: 370px;
+}
+.eyebrow {
+  color: var(--navy);
+}
+.hero h1 em {
+  color: #e9a600;
+}
+.hero-photo {
+  width: 58%;
+  border-radius: 22% 0 0 22% / 50% 0 0 50%;
+  opacity: 1;
+}
+.hero:after {
+  display: none;
+}
+.hero-features {
+  font-size: 12px;
+  gap: 16px;
+  font-weight: 400;
+}
+.hero-feature {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.hero-features strong {
+  display: block;
+  font-weight: 800;
+}
+.hero-features small {
+  display: block;
+  font-weight: 500;
+  color: var(--muted);
+}
+.hero-nav {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--navy);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 8px rgba(20, 36, 58, 0.18);
+}
+/* The photo starts at `left:42%` (`.hero-photo` is 58% wide, right-aligned),
+   so the prev arrow sits on its left edge rather than floating in the text
+   column; the next arrow sits on the photo's own right edge as normal. */
+.hero-nav.prev {
+  left: 42%;
+  transform: translate(-50%, -50%);
+}
+.hero-nav.next {
+  right: 16px;
+  transform: translateY(-50%);
+}
+.categories {
+  display: flex;
+  overflow-x: auto;
+  gap: 9px;
+  margin: 0 0 28px;
+  padding: 2px 0 8px;
+  scrollbar-width: thin;
+}
+.category {
+  flex: 1;
+  min-width: 76px;
+  min-height: 85px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+.category span {
+  font-size: 25px;
+}
+.category.active {
+  background: #ffda53;
+}
+.product-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.product-photo {
+  height: auto;
+  aspect-ratio: 1.55;
+}
+.product {
+  border-radius: 14px;
+  box-shadow: 0 3px 9px rgba(20, 36, 58, 0.05);
+  transition: transform 0.15s;
+}
+.product:hover {
+  transform: translateY(-3px);
+}
+.product-content {
+  padding: 12px;
+}
+.product-name {
+  min-height: 34px;
+  font-size: 14px;
+}
+.product-sub {
+  font-size: 11px;
+}
+.product-price {
+  font-size: 15px;
+}
+.add {
+  width: 34px;
+  height: 34px;
+  color: var(--navy);
+}
+.section-heading h2 {
+  font-size: 23px;
+}
+.see-all {
+  color: var(--navy);
+  font-size: 12px;
+}
+.product-section {
+  margin-bottom: 30px;
+}
+.right-column {
+  gap: 18px;
+}
+.cart-empty strong {
+  display: block;
+  color: var(--navy);
+  font-size: 13px;
+  margin-top: 4px;
+}
+.panel {
+  border-radius: 18px;
+  padding: 18px;
+}
+.promo-panel {
+  position: relative;
+  background: #fff4d9;
+  overflow: hidden;
+}
+.promo-badge {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #ffe2a8;
+  color: #ad6a00;
+  display: grid;
+  place-items: center;
+  transform: rotate(-12deg);
+}
+.trust-panel {
+  background: #eef3fa;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  text-align: left;
+}
+.trust-panel h3 {
+  margin-bottom: 2px;
+}
+.trust-panel div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  border: 0;
+  font-size: inherit;
+}
+.trust-panel strong {
+  display: block;
+  font-size: 13px;
+}
+.trust-panel small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+}
+.reward-big > span {
+  font-size: 32px;
+}
+.delivery {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 25px 36px;
+  background: #fff4dc;
+  border-radius: 22px;
+}
+.delivery-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.delivery-art {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #ffe3b0;
+  color: #9a5d00;
+}
+.delivery-copy h2,
+.delivery-copy p {
+  margin: 0;
+}
+.delivery-copy p {
+  margin-top: 5px;
+  color: #526078;
+}
+#menu {
+  scroll-margin-top: 90px;
+}
+.cart-empty {
+  padding: 35px 8px;
+}
+.why {
+  border: 1px solid var(--line);
+}
+
+@media (max-width: 1150px) {
+  .topnav {
+    display: none;
+  }
+  .page {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+  .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .hero-copy {
+    width: 53%;
+  }
+  .hero h1 {
+    font-size: 36px;
+  }
+}
+@media (max-width: 900px) {
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hero-copy {
+    padding: 24px;
+  }
+  .hero-features {
+    font-size: 10px;
+  }
+  .hero h1 {
+    font-size: 32px;
+  }
+}
+@media (max-width: 760px) {
+  .header {
+    padding: 0 12px;
+    height: 64px;
+    gap: 10px;
+  }
+  .brand {
+    min-width: 0;
+  }
+  .search {
+    min-width: 0;
+  }
+  .page {
+    display: block;
+    padding: 12px;
+  }
+  .hero {
+    height: 340px;
+    margin-bottom: 15px;
+    align-items: flex-start;
+    background: #eef1f3;
+  }
+  .hero-copy {
+    width: 100%;
+    padding: 20px;
+    align-self: flex-start;
+  }
+  .hero h1 {
+    font-size: 29px;
+    margin: 7px 0;
+  }
+  .hero p {
+    font-size: 12px;
+    max-width: 290px;
+  }
+  .hero-photo {
+    width: 100%;
+    height: 46%;
+    top: auto;
+    bottom: 0;
+    border-radius: 24% 0 0 0;
+    object-position: center 65%;
+  }
+  .hero-features,
+  .hero-nav {
+    display: none;
+  }
+  .hero .btn {
+    padding: 9px 16px;
+  }
+  .categories {
+    margin-bottom: 18px;
+  }
+  .category {
+    min-width: 80px;
+    min-height: 70px;
+  }
+  .product-grid {
+    gap: 12px;
+  }
+  .product-name {
+    font-size: 13px;
+  }
+  .product-price {
+    font-size: 13px;
+  }
+  .section-heading h2 {
+    font-size: 19px;
+  }
+  .delivery {
+    padding: 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-top: 20px;
+  }
+  .delivery-copy h2 {
+    font-size: 19px;
+  }
+  .right-column {
+    display: none;
+  }
+  .mobile-bar {
+    height: 65px;
+  }
+  .product-content {
+    padding: 10px;
+  }
+}
