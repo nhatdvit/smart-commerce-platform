@@ -229,6 +229,7 @@ export function StorefrontApp() {
           onUpdateName={(name) => void store.updateProfile(name)}
           onChangePassword={(current, next) => void store.changePassword(current, next)}
           onLogout={store.logout}
+          onToast={store.toast}
         />
       )}
 

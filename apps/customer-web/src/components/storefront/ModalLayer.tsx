@@ -19,6 +19,7 @@ import {
   FoodIcon,
   IconBag,
   IconCheckCircle,
+  IconCopy,
   IconGift,
   IconLogout,
   IconShield,
@@ -441,8 +442,52 @@ function ProfileForm({
   );
 }
 
-/** Renders an EMVCo/VietQR payload client-side - the server sends the payload, never an image. */
-function QrCode({ payload }: { readonly payload: string }) {
+/**
+ * Copies a value to the clipboard with a toast, falling back to a prompt
+ * dialog when the Clipboard API refuses (an insecure context, an older
+ * browser) - the same thing a customer could do by hand, just one tap.
+ */
+function CopyButton({
+  value,
+  label,
+  onToast,
+}: {
+  readonly value: string;
+  readonly label: string;
+  readonly onToast: (message: string) => void;
+}) {
+  function copy() {
+    void navigator.clipboard
+      .writeText(value)
+      .then(() => onToast('Đã sao chép'))
+      .catch(() => {
+        try {
+          window.prompt('Sao chép thông tin:', value);
+        } catch {
+          onToast(value);
+        }
+      });
+  }
+
+  return (
+    <button type="button" className="copy-btn" aria-label={label} onClick={copy}>
+      <IconCopy size={15} />
+    </button>
+  );
+}
+
+/**
+ * Renders an EMVCo/VietQR payload client-side - the server sends the
+ * payload, never an image - plus a download link off the same data URL, so
+ * a customer can save the QR instead of keeping this tab open.
+ */
+function QrCode({
+  payload,
+  downloadName,
+}: {
+  readonly payload: string;
+  readonly downloadName: string;
+}) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -466,13 +511,18 @@ function QrCode({ payload }: { readonly payload: string }) {
   }
 
   return (
-    <img
-      className="qr-code"
-      src={dataUrl}
-      alt="Mã QR chuyển khoản VietQR"
-      width={220}
-      height={220}
-    />
+    <>
+      <img
+        className="qr-code"
+        src={dataUrl}
+        alt="Mã QR chuyển khoản VietQR"
+        width={220}
+        height={220}
+      />
+      <a className="btn btn-outline qr-download" href={dataUrl} download={downloadName}>
+        Tải mã QR
+      </a>
+    </>
   );
 }
 
@@ -485,14 +535,32 @@ function QrCode({ payload }: { readonly payload: string }) {
 function TransferReportForm({
   orderId,
   guestOrderToken,
+  onReported,
 }: {
   readonly orderId: string;
   readonly guestOrderToken: string | null;
+  readonly onReported: () => void;
 }) {
   const [receipt, setReceipt] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [reportedAt, setReportedAt] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (receipt === null) {
+      setPreviewUrl(null);
+
+      return undefined;
+    }
+
+    const url = URL.createObjectURL(receipt);
+    setPreviewUrl(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [receipt]);
 
   if (reportedAt !== null) {
     return (
@@ -509,102 +577,252 @@ function TransferReportForm({
     setError('');
 
     void reportTransfer(orderId, guestOrderToken, receipt)
-      .then((at) => setReportedAt(at ?? new Date().toISOString()))
+      .then((at) => {
+        setReportedAt(at ?? new Date().toISOString());
+        onReported();
+      })
       .catch(() => setError('Không gửi được thông báo. Vui lòng thử lại.'))
       .finally(() => setSubmitting(false));
   }
 
   return (
     <div className="transfer-report">
-      <label className="transfer-report-upload">
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
-        />
-        {receipt === null ? 'Tải ảnh biên lai (không bắt buộc)' : receipt.name}
-      </label>
+      <div className="confirm-actions">
+        <label className="transfer-report-upload">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
+          />
+          Tải ảnh biên lai (không bắt buộc)
+        </label>
+        <button type="button" className="btn btn-yellow" disabled={submitting} onClick={submit}>
+          {submitting ? 'Đang gửi...' : '✓ Tôi đã chuyển khoản'}
+        </button>
+      </div>
+      {previewUrl === null ? null : (
+        <div className="confirm-receipt-preview">
+          <img src={previewUrl} alt="Ảnh biên lai xem trước" />
+          <button type="button" className="btn btn-outline" onClick={() => setReceipt(null)}>
+            Xóa ảnh
+          </button>
+        </div>
+      )}
       {error === '' ? null : (
         <p className="modal-note" role="alert">
           {error}
         </p>
       )}
-      <button type="button" className="btn btn-outline" disabled={submitting} onClick={submit}>
-        {submitting ? 'Đang gửi...' : 'Tôi đã chuyển khoản'}
-      </button>
     </div>
   );
+}
+
+type ConfirmStepState = 'done' | 'active' | 'pending';
+
+/**
+ * Four display steps over the real order/payment state - never a status of
+ * its own (CLAUDE.md section 6: order state and payment state stay separate
+ * machines). The second step's label is whatever `confirmation.status`
+ * actually is right now, so it reads correctly whichever status an order is
+ * created in; only "paid" and "completed" are inferred, from the real
+ * payment/order fields.
+ */
+function confirmSteps(
+  confirmation: OrderConfirmation,
+): readonly { readonly label: string; readonly state: ConfirmStepState }[] {
+  const paid = confirmation.paymentStatus === 'PAID';
+  const completed = confirmation.status === 'COMPLETED';
+
+  return [
+    { label: 'Đã đặt hàng', state: 'done' },
+    {
+      label: ORDER_STATUS_LABELS[confirmation.status] ?? confirmation.status,
+      state: paid || completed ? 'done' : 'active',
+    },
+    { label: 'Đã thanh toán', state: paid ? 'done' : 'pending' },
+    { label: 'Hoàn thành', state: completed ? 'done' : 'pending' },
+  ];
+}
+
+/**
+ * The one-line payment summary at the bottom - cash never needs a "chờ xác
+ * nhận" state since nothing is collected until pickup/delivery; bank
+ * transfer reads `transferReported` (set the moment this tab's own report
+ * succeeds) ahead of a page reload actually bringing back `PROCESSING`.
+ */
+function paymentStatusText(confirmation: OrderConfirmation, transferReported: boolean): string {
+  if (confirmation.paymentMethod === 'CASH') {
+    return confirmation.cash?.collectAt === 'ON_DELIVERY'
+      ? 'Tiền mặt khi nhận hàng giao tới'
+      : 'Tiền mặt khi nhận hàng tại quán';
+  }
+  if (confirmation.paymentStatus === 'PAID') {
+    return 'Đã thanh toán';
+  }
+  if (transferReported || confirmation.paymentStatus === 'PROCESSING') {
+    return 'Chờ xác nhận thanh toán';
+  }
+
+  return 'Chưa thanh toán';
 }
 
 interface OrderConfirmedProps {
   readonly confirmation: OrderConfirmation;
   readonly onClose: () => void;
+  readonly onToast: (message: string) => void;
 }
 
-function OrderConfirmed({ confirmation, onClose }: OrderConfirmedProps) {
+/**
+ * Its own dialog shell, not `ModalShell` - the approved design (vietqr-popup
+ * mock) has a header, QR/bank grid and status tracker no other modal needs,
+ * so it draws the `.modal` box itself instead of forcing that layout through
+ * the generic icon+title header every other modal in this file shares.
+ */
+function OrderConfirmed({ confirmation, onClose, onToast }: OrderConfirmedProps) {
   const { bankTransfer, cash } = confirmation;
+  const titleId = useId();
+  const [transferReported, setTransferReported] = useState(false);
+  const steps = confirmSteps(confirmation);
+  const createdTime = new Date(confirmation.createdAt).toLocaleTimeString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   return (
-    <>
-      <p>
-        Cảm ơn <strong>{confirmation.contactName}</strong>! Đơn{' '}
-        <strong>{confirmation.orderCode}</strong> đã được ghi nhận.
-      </p>
-
-      {bankTransfer !== null ? (
-        <div className="profile-section qr-section">
-          {bankTransfer.qrPayload === null ? null : (
-            <div className="qr-wrap">
-              <QrCode payload={bankTransfer.qrPayload} />
-            </div>
-          )}
-          <p className="modal-note">Quét mã bằng app ngân hàng, hoặc chuyển khoản thủ công:</p>
-          <dl className="qr-details">
-            <div className="qr-detail-row">
-              <dt>Ngân hàng</dt>
-              <dd>{bankTransfer.bankName ?? bankTransfer.bankBin ?? '—'}</dd>
-            </div>
-            <div className="qr-detail-row">
-              <dt>Số tài khoản</dt>
-              <dd>{bankTransfer.accountNumber ?? '—'}</dd>
-            </div>
-            <div className="qr-detail-row">
-              <dt>Chủ tài khoản</dt>
-              <dd>{bankTransfer.accountName ?? '—'}</dd>
-            </div>
-            <div className="qr-detail-row">
-              <dt>Nội dung CK</dt>
-              <dd>{bankTransfer.transferReference}</dd>
-            </div>
-          </dl>
-          <div className="modal-total">{money(bankTransfer.amount)}</div>
-          <p className="modal-note">
-            Sau khi chuyển khoản, nhân viên cửa hàng sẽ xác nhận thủ công khi nhận được tiền - mã QR
-            không phải là bằng chứng đã thanh toán.
-          </p>
-          <TransferReportForm
-            orderId={confirmation.orderId}
-            guestOrderToken={confirmation.guestOrderToken}
-          />
-        </div>
-      ) : null}
-
-      {cash !== null ? (
-        <p className="modal-note">
-          {cash.collectAt === 'ON_DELIVERY'
-            ? 'Thanh toán tiền mặt khi nhận hàng giao tới.'
-            : 'Thanh toán tiền mặt khi nhận hàng tại quán.'}
-        </p>
-      ) : null}
-
-      <p className="modal-note">
-        Trạng thái đơn:{' '}
-        <strong>{ORDER_STATUS_LABELS[confirmation.status] ?? confirmation.status}</strong>
-      </p>
-      <button className="btn btn-yellow" type="button" onClick={onClose}>
-        Hoàn tất
+    <div className="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <button type="button" className="close confirm-close" aria-label="Đóng" onClick={onClose}>
+        ✕
       </button>
-    </>
+
+      <header className="confirm-head">
+        <div className="confirm-badge" aria-hidden="true">
+          <IconCheckCircle size={32} />
+        </div>
+        <div>
+          <h3 id={titleId}>Đặt hàng thành công</h3>
+          <p>
+            Cảm ơn <strong>{confirmation.contactName}</strong>! Đơn hàng đã được ghi nhận.
+          </p>
+          <div className="confirm-order-chip">
+            <span>Mã đơn hàng</span>
+            <strong>{confirmation.orderCode}</strong>
+            <CopyButton value={confirmation.orderCode} label="Sao chép mã đơn" onToast={onToast} />
+          </div>
+        </div>
+      </header>
+
+      <div className="confirm-body">
+        {bankTransfer === null ? null : (
+          <section className="confirm-section">
+            <h4>Thanh toán chuyển khoản</h4>
+            <p className="modal-note">Quét mã bằng app ngân hàng, hoặc chuyển khoản thủ công:</p>
+
+            <div className="confirm-payment-grid">
+              <div className="confirm-qr-col">
+                {bankTransfer.qrPayload === null ? null : (
+                  <QrCode
+                    payload={bankTransfer.qrPayload}
+                    downloadName={`vietqr-${confirmation.orderCode}.png`}
+                  />
+                )}
+              </div>
+              <div className="confirm-bank-col">
+                <dl className="qr-details">
+                  <div className="qr-detail-row">
+                    <dt>Ngân hàng</dt>
+                    <dd>{bankTransfer.bankName ?? bankTransfer.bankBin ?? '—'}</dd>
+                  </div>
+                  <div className="qr-detail-row">
+                    <dt>Số tài khoản</dt>
+                    <dd>
+                      {bankTransfer.accountNumber ?? '—'}
+                      {bankTransfer.accountNumber === null ? null : (
+                        <CopyButton
+                          value={bankTransfer.accountNumber}
+                          label="Sao chép số tài khoản"
+                          onToast={onToast}
+                        />
+                      )}
+                    </dd>
+                  </div>
+                  <div className="qr-detail-row">
+                    <dt>Chủ tài khoản</dt>
+                    <dd>{bankTransfer.accountName ?? '—'}</dd>
+                  </div>
+                  <div className="qr-detail-row">
+                    <dt>Nội dung CK</dt>
+                    <dd>
+                      {bankTransfer.transferReference}
+                      <CopyButton
+                        value={bankTransfer.transferReference}
+                        label="Sao chép nội dung chuyển khoản"
+                        onToast={onToast}
+                      />
+                    </dd>
+                  </div>
+                </dl>
+                <div className="confirm-amount">
+                  <span>Số tiền thanh toán</span>
+                  <strong>{money(bankTransfer.amount)}</strong>
+                  <CopyButton
+                    value={String(bankTransfer.amount)}
+                    label="Sao chép số tiền"
+                    onToast={onToast}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p className="confirm-info">
+              Sau khi chuyển khoản, vui lòng xác nhận để cửa hàng kiểm tra và xác nhận thanh toán -
+              mã QR không phải là bằng chứng đã thanh toán.
+            </p>
+
+            <div className="confirm-section-label">XÁC NHẬN THANH TOÁN</div>
+
+            <TransferReportForm
+              orderId={confirmation.orderId}
+              guestOrderToken={confirmation.guestOrderToken}
+              onReported={() => setTransferReported(true)}
+            />
+          </section>
+        )}
+
+        {cash === null ? null : (
+          <section className="confirm-section">
+            <h4>Thanh toán tiền mặt</h4>
+            <p className="modal-note">
+              {cash.collectAt === 'ON_DELIVERY'
+                ? 'Thanh toán tiền mặt khi nhận hàng giao tới.'
+                : 'Thanh toán tiền mặt khi nhận hàng tại quán.'}
+            </p>
+          </section>
+        )}
+
+        <section className="confirm-section confirm-status">
+          <h4>Trạng thái đơn hàng</h4>
+          <div className="confirm-steps">
+            {steps.map((step, index) => (
+              <div key={index} className={`confirm-step is-${step.state}`}>
+                <i>{step.state === 'done' ? '✓' : null}</i>
+                {step.label}
+                {index === 0 ? <small>{createdTime}</small> : null}
+              </div>
+            ))}
+          </div>
+          <div className="confirm-payment-status">
+            <span>Thanh toán</span>
+            <strong>{paymentStatusText(confirmation, transferReported)}</strong>
+          </div>
+        </section>
+      </div>
+
+      <footer className="confirm-foot">
+        <button className="btn btn-yellow" type="button" onClick={onClose}>
+          Hoàn tất
+        </button>
+      </footer>
+    </div>
   );
 }
 
@@ -677,6 +895,7 @@ interface ModalLayerProps {
   readonly onUpdateName: (name: string) => void;
   readonly onChangePassword: (currentPassword: string, newPassword: string) => void;
   readonly onLogout: () => void;
+  readonly onToast: (message: string) => void;
 }
 
 export function ModalLayer({
@@ -703,6 +922,7 @@ export function ModalLayer({
   onUpdateName,
   onChangePassword,
   onLogout,
+  onToast,
 }: ModalLayerProps) {
   if (view.kind === 'variants') {
     const card = cardsByProductId.get(view.productId);
@@ -769,9 +989,5 @@ export function ModalLayer({
     );
   }
 
-  return (
-    <ModalShell title="Đặt hàng thành công" icon={<IconCheckCircle size={20} />} onClose={onClose}>
-      <OrderConfirmed confirmation={view.confirmation} onClose={onClose} />
-    </ModalShell>
-  );
+  return <OrderConfirmed confirmation={view.confirmation} onClose={onClose} onToast={onToast} />;
 }

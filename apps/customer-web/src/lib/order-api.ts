@@ -117,6 +117,7 @@ export interface OrderConfirmation {
   readonly orderId: string;
   readonly orderCode: string;
   readonly status: string;
+  readonly createdAt: string;
   readonly contactName: string;
   readonly items: readonly OrderLine[];
   readonly total: number;
@@ -139,6 +140,7 @@ function toConfirmation(data: ApiOrderCreated): OrderConfirmation {
     orderId: order.id,
     orderCode: order.order_code,
     status: order.status,
+    createdAt: order.created_at,
     contactName: order.contact.name,
     items: order.items.map((item) => ({
       productName: item.product_name,

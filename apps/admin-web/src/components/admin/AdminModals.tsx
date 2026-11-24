@@ -1477,42 +1477,6 @@ function dateTime(iso: string | null): string {
 }
 
 /**
- * The actual scannable VietQR, rendered client-side from the raw EMVCo
- * string the server already validated - never proof of anything itself,
- * just a convenience so staff can show it on a screen without a second app.
- */
-function PaymentQrImage({ payload }: { readonly payload: string }) {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let current = true;
-    setDataUrl(null);
-
-    void QRCode.toDataURL(payload, { margin: 1, width: 200 })
-      .then((url) => {
-        if (current) {
-          setDataUrl(url);
-        }
-      })
-      .catch(() => {
-        // Decorative: a failed render just means no image, not an error the
-        // operator needs to see - the reference and masked account below are
-        // what they actually verify a transfer against.
-      });
-
-    return () => {
-      current = false;
-    };
-  }, [payload]);
-
-  if (dataUrl === null) {
-    return null;
-  }
-
-  return <img src={dataUrl} alt="Mã QR chuyển khoản" className="payment-qr" />;
-}
-
-/**
  * The customer's uploaded receipt photo, fetched once (it is authenticated
  * and store-scoped, never a public URL - see `loadPaymentReceiptUrl`'s own
  * note) and opened full-size in a new tab on request. Never treated as
@@ -1579,7 +1543,7 @@ function CustomerReceiptThumb({ paymentId }: { readonly paymentId: string }) {
  * touches the status - a discrepancy is a note on the queue, not a verdict.
  */
 function PaymentModal({ paymentId }: { readonly paymentId: string }) {
-  const { confirmPayment, flagPayment, paymentsBusy, notify, closeModal } = useAdminData();
+  const { confirmPayment, flagPayment, paymentsBusy, closeModal } = useAdminData();
   const [payment, setPayment] = useState<AdminPayment | null>(null);
   const [loadError, setLoadError] = useState('');
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
@@ -1594,8 +1558,6 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
   const [flagType, setFlagType] = useState<DiscrepancyType>('UNKNOWN_REFERENCE');
   const [flagAmount, setFlagAmount] = useState('');
   const [flagNote, setFlagNote] = useState('');
-
-  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -1674,22 +1636,6 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
       observedAmount: flagAmount.trim() === '' ? null : Number(flagAmount),
       note: flagNote.trim() === '' ? null : flagNote.trim(),
     });
-  }
-
-  // Not routed through the provider's confirm/flag writes: those close the
-  // modal on success, and the point here is the opposite - staying open so
-  // the fresh QR is immediately visible to show a customer.
-  function submitRegenerate(target: AdminPayment) {
-    setRegenerating(true);
-    void regeneratePaymentQr(target.id)
-      .then((updated) => {
-        setPayment(updated);
-        notify(`Đã tạo mã QR mới cho đơn ${updated.orderCode}`);
-      })
-      .catch((error: unknown) => {
-        notify(error instanceof Error ? error.message : 'Không tạo lại được mã QR.');
-      })
-      .finally(() => setRegenerating(false));
   }
 
   const flagSection = (
@@ -1966,20 +1912,6 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
             </div>
           </div>
 
-          {payment.method !== 'BANK_TRANSFER' || payment.qrPayload === null ? null : (
-            <div className="payment-qr-block">
-              <PaymentQrImage payload={payment.qrPayload} />
-              <button
-                type="button"
-                className="btn"
-                disabled={regenerating}
-                onClick={() => submitRegenerate(payment)}
-              >
-                Tạo lại mã QR
-              </button>
-            </div>
-          )}
-
           {payment.customerReportedAt === null ? null : (
             <div className="payment-evidence-block">
               <div className="detail-section-heading">
@@ -2136,6 +2068,134 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * The QR alone, life-sized and downloadable - split out of the confirm flow
+ * (CLAUDE.md section 6: QR display is never payment confirmation, so it has
+ * no business sharing a form with the one action that actually settles a
+ * payment) so staff can hand a customer their screen, or save the image, from
+ * the payments list without opening the reconciliation popup.
+ */
+function PaymentQrModal({ paymentId }: { readonly paymentId: string }) {
+  const { notify } = useAdminData();
+  const [payment, setPayment] = useState<AdminPayment | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+
+    void loadPayment(paymentId)
+      .then((detail) => {
+        if (current) {
+          setPayment(detail);
+          setLoadError('');
+        }
+      })
+      .catch((error: unknown) => {
+        if (current) {
+          setLoadError(error instanceof Error ? error.message : 'Không tải được thanh toán.');
+        }
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [paymentId]);
+
+  useEffect(() => {
+    let current = true;
+    setDataUrl(null);
+
+    if (payment === null || payment.qrPayload === null) {
+      return undefined;
+    }
+
+    void QRCode.toDataURL(payment.qrPayload, { margin: 1, width: 320 })
+      .then((url) => {
+        if (current) {
+          setDataUrl(url);
+        }
+      })
+      .catch(() => {
+        if (current) {
+          setLoadError('Không tạo được ảnh mã QR.');
+        }
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [payment?.qrPayload]);
+
+  function submitRegenerate(target: AdminPayment) {
+    setRegenerating(true);
+    void regeneratePaymentQr(target.id)
+      .then((updated) => {
+        setPayment(updated);
+        notify('Đã tạo lại mã QR.');
+      })
+      .catch((error: unknown) => {
+        notify(error instanceof Error ? error.message : 'Không tạo lại được mã QR.');
+      })
+      .finally(() => {
+        setRegenerating(false);
+      });
+  }
+
+  if (loadError !== '') {
+    return (
+      <ModalFrame title="Mã QR chuyển khoản">
+        <p className="form-error">{loadError}</p>
+      </ModalFrame>
+    );
+  }
+
+  if (payment === null) {
+    return (
+      <ModalFrame title="Mã QR chuyển khoản">
+        <p>Đang tải...</p>
+      </ModalFrame>
+    );
+  }
+
+  const settled =
+    payment.status === 'PAID' ||
+    payment.status === 'PARTIALLY_REFUNDED' ||
+    payment.status === 'REFUNDED';
+
+  return (
+    <ModalFrame
+      title={`Mã QR chuyển khoản — ${payment.orderCode}`}
+      actions={
+        settled ? null : (
+          <button
+            type="button"
+            className="btn"
+            disabled={regenerating}
+            onClick={() => submitRegenerate(payment)}
+          >
+            Tạo lại mã QR
+          </button>
+        )
+      }
+    >
+      {payment.qrPayload === null ? (
+        <p>Thanh toán này chưa có mã QR.</p>
+      ) : dataUrl === null ? (
+        <p>Đang tạo mã QR...</p>
+      ) : (
+        <div className="payment-qr-block">
+          <img src={dataUrl} alt="Mã QR chuyển khoản" className="payment-qr payment-qr-large" />
+          <a className="btn" href={dataUrl} download={`vietqr-${payment.orderCode}.png`}>
+            Tải xuống
+          </a>
+        </div>
+      )}
+    </ModalFrame>
   );
 }
 
@@ -2480,6 +2540,9 @@ export function AdminModals() {
       {modal.kind === 'add-product' ? <ProductFormModal /> : null}
       {modal.kind === 'payment' ? (
         <PaymentModal key={modal.paymentId} paymentId={modal.paymentId} />
+      ) : null}
+      {modal.kind === 'payment-qr' ? (
+        <PaymentQrModal key={modal.paymentId} paymentId={modal.paymentId} />
       ) : null}
       {modal.kind === 'bank-account-form' ? <BankAccountFormModal /> : null}
       {modal.kind === 'payment-methods' ? <PaymentMethodsModal /> : null}

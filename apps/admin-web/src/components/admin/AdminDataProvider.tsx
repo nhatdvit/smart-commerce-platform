@@ -100,6 +100,7 @@ export type AdminModal =
   | { readonly kind: 'add-product' }
   | { readonly kind: 'delete-product'; readonly productId: string }
   | { readonly kind: 'payment'; readonly paymentId: string }
+  | { readonly kind: 'payment-qr'; readonly paymentId: string }
   | { readonly kind: 'bank-account-form' }
   | { readonly kind: 'payment-methods' };
 
