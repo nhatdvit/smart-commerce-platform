@@ -114,7 +114,9 @@ function QueueRow({
       <div className="order-row-foot">
         <span className="price">{money(order.total)}</span>
         <span className={order.paymentStatus === 'PAID' ? 'tag tag-green' : 'tag'}>
-          {order.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+          {order.paymentStatus === null
+            ? 'Chưa thanh toán'
+            : PAYMENT_STATUS_LABELS[order.paymentStatus]}
         </span>
       </div>
     </button>
