@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 
 import { CartDrawer } from './CartDrawer';
 import { CategoryBar } from './CategoryBar';
+import { DeliveryBanner } from './DeliveryBanner';
 import { HeroSection } from './HeroSection';
 import { ModalLayer } from './ModalLayer';
 import { ProductSections } from './ProductSections';
@@ -76,9 +77,9 @@ export function StorefrontApp() {
       />
 
       <main className="page" id="top">
-        <div className="main-column">
-          <HeroSection />
+        <HeroSection />
 
+        <div className="main-column">
           <CategoryBar
             categories={store.categories}
             active={store.categoryFilter}
@@ -140,6 +141,8 @@ export function StorefrontApp() {
           onOpenRewards={() => store.setModal({ kind: 'rewards' })}
           onOpenLogin={() => store.setModal({ kind: 'login' })}
         />
+
+        <DeliveryBanner />
       </main>
 
       <footer>

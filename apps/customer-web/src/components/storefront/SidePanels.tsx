@@ -133,36 +133,37 @@ export function SidePanels({
             </h3>
             <strong>GIẢM 10%</strong>
             <p>cho đơn từ 100.000đ</p>
+            <span className="promo-badge" aria-hidden="true">
+              <IconTicket size={22} />
+            </span>
             <button type="button" onClick={() => onApplyCoupon('SANG10')}>
-              Dùng mã SANG10 ⧉
+              Sử dụng ngay →
             </button>
           </div>
         </>
       )}
 
       <div className="panel trust-panel">
+        <h3>Vì sao chọn Bếp nhà mình?</h3>
         <div>
-          <IconScooter size={22} />
+          <IconLeaf size={20} />
           <span>
-            Giao nhanh
-            <br />
-            trong khu vực
+            <strong>Nguyên liệu tươi ngon</strong>
+            <small>Chọn lọc mỗi ngày</small>
           </span>
         </div>
         <div>
-          <IconLeaf size={22} />
+          <IconShield size={20} />
           <span>
-            Nguyên liệu
-            <br />
-            tươi ngon
+            <strong>Chế biến an toàn</strong>
+            <small>Đảm bảo vệ sinh</small>
           </span>
         </div>
         <div>
-          <IconShield size={22} />
+          <IconScooter size={20} />
           <span>
-            An toàn
-            <br />
-            vệ sinh
+            <strong>Giao hàng nhanh</strong>
+            <small>Đúng giờ, tiện lợi</small>
           </span>
         </div>
       </div>

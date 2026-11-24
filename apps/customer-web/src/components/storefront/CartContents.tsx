@@ -19,9 +19,9 @@ export function CartLines({ lines, onChangeQuantity }: CartLinesProps) {
         <span>
           <IconBag size={34} />
         </span>
-        Giỏ hàng đang trống.
+        <strong>Chưa có món nào</strong>
         <br />
-        Chọn món ngon để bắt đầu nhé!
+        Hãy chọn món yêu thích và thêm vào giỏ hàng nhé!
       </div>
     );
   }

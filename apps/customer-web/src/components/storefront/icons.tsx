@@ -343,7 +343,18 @@ export function IconCopy({ size }: IconProps) {
   );
 }
 
-/** A forward affordance - "Xem chi tiết", "Thanh toán ngay". */
+/**
+ * The hero's decorative prev/next controls (there is only ever one slide),
+ * and a forward affordance elsewhere - "Xem chi tiết", "Thanh toán ngay".
+ */
+export function IconChevronLeft({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="m15 18-6-6 6-6" />
+    </Icon>
+  );
+}
+
 export function IconChevronRight({ size }: IconProps) {
   return (
     <Icon size={size}>
