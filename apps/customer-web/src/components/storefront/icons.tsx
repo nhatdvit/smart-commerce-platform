@@ -343,6 +343,23 @@ export function IconCopy({ size }: IconProps) {
   );
 }
 
+/** The hero's decorative prev/next controls - there is only ever one slide. */
+export function IconChevronLeft({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="m15 18-6-6 6-6" />
+    </Icon>
+  );
+}
+
+export function IconChevronRight({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="m9 18 6-6-6-6" />
+    </Icon>
+  );
+}
+
 // ------------------------------------------------------------ food thumbs
 
 /**

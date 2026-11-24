@@ -7,6 +7,7 @@ place the result deviates from them.
 | ------------------------------- | ------------------- |
 | `phu-quy-food-storefront-v5`    | `apps/customer-web` |
 | `breakfast-admin-responsive-v1` | `apps/admin-web`    |
+| `bep-nha-minh-storefront`       | `apps/customer-web` |
 
 Both packages were plain HTML, CSS and vanilla JavaScript — no build tool, no
 `package.json`, no dependencies. They were unpacked outside the repository and
@@ -242,14 +243,80 @@ The brand name changed with it, from "Phú Quý" / "Bữa Sáng Phú Quý":
 The admin's yellow "PQ" tile is gone — the emblem carries its own colour, and
 keeping the tile would have boxed a logo inside a second logo.
 
-### Outstanding: the hero photo still shows the old brand
+### Resolved: the hero photo showed the old brand
 
-`apps/customer-web/public/assets/hero.jpg` is one of the AI-generated mockup
-images, and the coffee cup in it has a **"Phú Quý" logo painted into the
-pixels**. With the new logo in the header, the hero now contradicts it. No code
-change can fix that; the cup is the centre of the composition, so it cannot be
-cropped out either. It needs a replacement hero image — the same job as the
-product photography above.
+`apps/customer-web/public/assets/hero.jpg` was one of the AI-generated mockup
+images, and the coffee cup in it had a **"Phú Quý" logo painted into the
+pixels**, contradicting the new header logo. Fixed by the `bep-nha-minh-storefront`
+redesign below, which delivered a hero photo with the correct cup branding.
+
+## Homepage redesign v2 (`bep-nha-minh-storefront`)
+
+A second design pass arrived later, as another plain HTML/CSS/JS package, over
+the same v5 markup: a lighter, airier palette, a full-bleed hero and closing
+banner, a horizontally-scrolling category row, a 4-column product grid, and a
+restyled right column. Ported the same way as v5 — the delivered CSS appended
+to `storefront.css` as its own block rather than rewritten into the rules it
+supersedes (see that block's own header comment) — plus the structural change
+the delivered markup also made: `.hero` and `.delivery` moved out of
+`.main-column` to become full-width siblings of it and `.right-column` inside
+`.page` (`grid-column:1/-1`). Confirmed live, scrolled, not just against the
+static mock.
+
+### The hero photo
+
+The package's own `assets/hero.jpg` turned out to be the _old_, still
+"Phú Quý"-branded mockup crop byte-for-byte (same 640×260 the first port
+fixed, re-included by mistake). The correct photo — "Bếp nhà mình" on the cup
+— only existed baked into a result screenshot, with a prev/next arrow and dot
+carousel control painted over it. Re-cropped with `sharp` (not checked in,
+same one-off-script convention as the food photos above):
+
+- Source `552×315` → extract `left 60, top 50, width 432, height 215` clears
+  the arrows, the dots and a decorative corner shape bleeding in from the
+  page behind it, keeping the branded cup centred.
+
+### Deviations from this second package
+
+1. **The delivered `.cart-panel{position:sticky;top:84px}` is dropped.** Cart,
+   loyalty, promo and trust are four stacked panels in the same column, so a
+   sticky first panel rides over the other three as the page scrolls, rather
+   than leaving room for them underneath — visible on the first scroll, not
+   on a static screenshot. The cart panel scrolls in flow instead.
+
+   **Visual effect:** none at rest; the sticky behaviour never shipped.
+
+2. **The delivery banner's rider-on-a-scooter illustration is a line-icon
+   badge, not artwork.** Consistent with item 8 above: the rest of the page
+   is one coherent icon set, and a one-off cartoon illustration was not part
+   of either delivered CSS/HTML file, only visible in the result screenshot.
+
+   **Visual effect:** close, not identical — a circular badge around the
+   existing scooter icon rather than a custom drawing.
+
+3. **The header nav keeps "Tích điểm" (→ the rewards panel), not "Về chúng
+   tôi."** The result screenshot's nav reads differently, but the delivered
+   `index.html`/`app.js` in this same package still jump to `#rewards` with
+   the old label, and there is no "about us" page or section anywhere to
+   link an "about us" item to. Added small icons in front of each label
+   either way, which both the screenshot and the old base design lacked.
+
+4. **The loyalty/rewards panel is kept in the right column.** The result
+   screenshot (captured signed in) shows only cart → promo → trust, no
+   rewards panel in between — but the request's own scope was icons, colour
+   and type, not removing a working feature, and the delivered markup still
+   includes it at that position. Only promo and trust were restyled.
+
+5. **Section heading icons still cycle (flame/star/cup by position), not by
+   category name.** The screenshot pairs specific icons to specific category
+   names (a leaf for "Chả đặc sản", for instance), but categories are live
+   API data here, not a fixed list — a name→icon table would silently stop
+   matching the day a category is renamed or added. Left as the existing,
+   already-documented "purely for visual variety" cycle.
+
+**Visual effect of 3-5:** faithful to the interactive package; a few
+cosmetic details from the static result screenshot were not chased where
+doing so meant inventing content or coupling to data that is not fixed.
 
 ## Not ported (absent from the delivered designs)
 

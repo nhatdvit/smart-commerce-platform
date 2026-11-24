@@ -1,17 +1,31 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import type { CurrentCustomer } from '@/lib/auth-api';
 
-import { IconCart, IconSearch, IconUser } from './icons';
+import {
+  IconCart,
+  IconHome,
+  IconMenuList,
+  IconSearch,
+  IconStar,
+  IconTicket,
+  IconUser,
+} from './icons';
 import { scrollToSection, scrollToTop } from './scroll';
 
 // "Đặt trước" (preorder) is left out: that is Phase 2 scope (CLAUDE.md
 // delivery stages) and isn't built, so the link had nowhere real to go.
-const NAV_ITEMS: readonly { readonly label: string; readonly target: string }[] = [
-  { label: 'Trang chủ', target: 'top' },
-  { label: 'Thực đơn', target: 'menu' },
-  { label: 'Ưu đãi', target: 'promos' },
-  { label: 'Tích điểm', target: 'rewards' },
+const NAV_ITEMS: readonly {
+  readonly label: string;
+  readonly target: string;
+  readonly icon: ReactNode;
+}[] = [
+  { label: 'Trang chủ', target: 'top', icon: <IconHome size={16} /> },
+  { label: 'Thực đơn', target: 'menu', icon: <IconMenuList size={16} /> },
+  { label: 'Ưu đãi', target: 'promos', icon: <IconTicket size={16} /> },
+  { label: 'Tích điểm', target: 'rewards', icon: <IconStar size={16} /> },
 ];
 
 interface SiteHeaderProps {
@@ -77,7 +91,7 @@ export function SiteHeader({
             className={index === 0 ? 'nav-active' : undefined}
             onClick={() => scrollToSection(item.target)}
           >
-            {item.label}
+            {item.icon} {item.label}
           </button>
         ))}
       </nav>

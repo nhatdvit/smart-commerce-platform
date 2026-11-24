@@ -1,6 +1,6 @@
 'use client';
 
-import { IconLeaf, IconScooter, IconShield } from './icons';
+import { IconChevronLeft, IconChevronRight, IconLeaf, IconScooter, IconShield } from './icons';
 import { scrollToSection } from './scroll';
 
 /**
@@ -25,25 +25,43 @@ export function HeroSection() {
           Đặt món ngay <span>→</span>
         </button>
         <div className="hero-features">
-          <span>
-            <IconScooter size={16} /> Giao nhanh
-            <br />
-            trong khu vực
-          </span>
-          <span>
-            <IconLeaf size={16} /> Nguyên liệu
-            <br />
-            tươi ngon
-          </span>
-          <span>
-            <IconShield size={16} /> An toàn
-            <br />
-            vệ sinh
-          </span>
+          <div className="hero-feature">
+            <IconLeaf size={18} />
+            <span>
+              <strong>Tươi ngon</strong>
+              <small>Mỗi ngày</small>
+            </span>
+          </div>
+          <div className="hero-feature">
+            <IconShield size={18} />
+            <span>
+              <strong>An toàn</strong>
+              <small>Vệ sinh</small>
+            </span>
+          </div>
+          <div className="hero-feature">
+            <IconScooter size={18} />
+            <span>
+              <strong>Giao nhanh</strong>
+              <small>Đúng giờ</small>
+            </span>
+          </div>
         </div>
       </div>
 
       <img className="hero-photo" src="/assets/hero.jpg" alt="Bánh mì, cà phê và món ngon" />
+
+      {/*
+       * Decorative only, like the dots below them: one photo, nothing to
+       * page through yet. Not buttons, so they never claim an action they
+       * don't perform.
+       */}
+      <span className="hero-nav prev" aria-hidden="true">
+        <IconChevronLeft size={18} />
+      </span>
+      <span className="hero-nav next" aria-hidden="true">
+        <IconChevronRight size={18} />
+      </span>
 
       <div className="hero-dots">
         <i className="active" />
