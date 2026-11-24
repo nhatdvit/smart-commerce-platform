@@ -277,7 +277,7 @@ function isSettledPayment(status: AdminOrderDetail['paymentStatus']): boolean {
  * header instead of just the footer.
  */
 function OrderModal({ orderId }: { orderId: string }) {
-  const { moveOrder, ordersBusy, closeModal, openModal } = useAdminData();
+  const { moveOrder, ordersBusy, closeModal } = useAdminData();
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [loadError, setLoadError] = useState('');
   const [askingReason, setAskingReason] = useState(false);
@@ -327,7 +327,6 @@ function OrderModal({ orderId }: { orderId: string }) {
   }
 
   const next = forwardStatus(order.status);
-  const needsPayment = order.paymentId !== null && !isSettledPayment(order.paymentStatus);
   // No money was ever collected, so there is nothing a refund policy needs
   // to look at - a real anomaly (a payment row with no method at all) reads
   // the same way, honestly, rather than as a settled transaction.
@@ -572,20 +571,6 @@ function OrderModal({ orderId }: { orderId: string }) {
             Xác nhận hủy
           </button>
         ) : null}
-        {!needsPayment ? null : (
-          <button
-            type="button"
-            className="btn"
-            disabled={ordersBusy}
-            onClick={() => {
-              if (order.paymentId !== null) {
-                openModal({ kind: 'payment', paymentId: order.paymentId });
-              }
-            }}
-          >
-            Xác nhận thu tiền
-          </button>
-        )}
         {next === undefined ? null : (
           <button
             type="button"
