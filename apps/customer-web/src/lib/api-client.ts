@@ -103,7 +103,10 @@ async function request<T>(
 
   const headers: Record<string, string> = { Accept: 'application/json', ...extraHeaders };
 
-  if (body !== undefined) {
+  // FormData sets its own Content-Type, including the multipart boundary the
+  // server needs to parse the body. Setting one here would overwrite it with a
+  // header that has no boundary, and the upload would arrive empty.
+  if (body !== undefined && !(body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
@@ -116,7 +119,10 @@ async function request<T>(
     method,
     headers,
     credentials: 'include',
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body:
+      body === undefined || body instanceof FormData
+        ? (body as BodyInit | undefined)
+        : JSON.stringify(body),
   });
 
   if (response.status === 204) {
@@ -139,4 +145,10 @@ export const api = {
   post: <T>(path: string, body?: unknown, headers?: Readonly<Record<string, string>>): Promise<T> =>
     request<T>('POST', path, body, headers),
   put: <T>(path: string, body?: unknown): Promise<T> => request<T>('PUT', path, body),
+  /** A multipart POST. Same session and CSRF handling as any other write. */
+  upload: <T>(
+    path: string,
+    body: FormData,
+    headers?: Readonly<Record<string, string>>,
+  ): Promise<T> => request<T>('POST', path, body, headers),
 };

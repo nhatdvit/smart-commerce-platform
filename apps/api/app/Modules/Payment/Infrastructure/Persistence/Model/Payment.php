@@ -27,6 +27,7 @@ use Illuminate\Support\Str;
  * @property string $store_id
  * @property string $order_id
  * @property string $order_code
+ * @property string $customer_name
  * @property PaymentMethod $method
  * @property PaymentStatus $status
  * @property int $amount
@@ -42,6 +43,8 @@ use Illuminate\Support\Str;
  * @property string|null $confirmed_by
  * @property \Carbon\CarbonImmutable|null $confirmed_at
  * @property \Carbon\CarbonImmutable|null $expires_at
+ * @property \Carbon\CarbonImmutable|null $customer_reported_at
+ * @property string|null $customer_receipt_path
  * @property \Carbon\CarbonImmutable|null $paid_at
  * @property \Carbon\CarbonImmutable|null $created_at
  * @property \Illuminate\Database\Eloquent\Collection<int, PaymentEvent> $paymentEvents
@@ -58,6 +61,7 @@ final class Payment extends Model
         'store_id',
         'order_id',
         'order_code',
+        'customer_name',
         'method',
         'status',
         'amount',
@@ -74,6 +78,8 @@ final class Payment extends Model
         'bank_transaction_reference',
         'confirmed_by',
         'confirmed_at',
+        'customer_reported_at',
+        'customer_receipt_path',
     ];
 
     /** Time-ordered keys, so "newest first" is an index scan on the primary key. */
@@ -132,6 +138,7 @@ final class Payment extends Model
             'expires_at' => 'immutable_datetime',
             'paid_at' => 'immutable_datetime',
             'confirmed_at' => 'immutable_datetime',
+            'customer_reported_at' => 'immutable_datetime',
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];

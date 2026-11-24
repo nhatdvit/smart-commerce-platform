@@ -1774,6 +1774,12 @@ nav button > span {
   color: #8794a5;
   padding: 36px !important;
 }
+.payments-table {
+  min-width: 760px;
+}
+.payments-table .status {
+  border-radius: 20px;
+}
 @media (max-width: 1100px) {
   .order-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2487,4 +2493,231 @@ nav button > span {
   border-radius: 8px;
   background: white;
   padding: 8px;
+}
+
+/* ----------------------------------------------------- Payment confirm dialog --
+ * The two-column confirm/reconcile screen: order + customer on the left,
+ * the amount-reconciliation form on the right. Shares its shell with
+ * .order-detail-modal (see that section) - only the layout ratio differs,
+ * since here the form column, not the summary column, needs the room.
+ */
+.payment-confirm-heading {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.payment-confirm-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: #fff3d9;
+  color: #d4920c;
+  display: grid;
+  place-items: center;
+}
+.payment-confirm-heading p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 420px;
+}
+.payment-confirm-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(0, 1.7fr);
+  gap: 26px;
+  padding: 24px 28px;
+  overflow-y: auto;
+}
+.payment-info-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.payment-form-col {
+  min-width: 0;
+}
+.payment-info-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 15px;
+}
+.payment-info-box small {
+  display: block;
+  font-size: 10px;
+  color: #7185a0;
+  margin-bottom: 4px;
+}
+.payment-info-box strong {
+  display: block;
+  font-size: 13px;
+}
+.payment-info-box a {
+  display: block;
+  font-size: 11px;
+  color: #7185a0;
+  text-decoration: none;
+  margin-top: 2px;
+}
+.payment-method-pick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.payment-method-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 13px;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--muted);
+  background: #fff;
+}
+.payment-method-card.is-active {
+  border-color: #f1bd52;
+  background: #fff9ed;
+  color: var(--navy);
+}
+.payment-method-card .method-check {
+  margin-left: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #f1bd52;
+  color: #fff;
+  font-size: 10px;
+}
+.payment-reconcile-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 14px 0;
+  font-size: 12px;
+}
+.payment-reconcile-banner.is-match,
+.payment-reconcile-banner.is-over {
+  background: #e9f8ef;
+  color: #1d8a56;
+}
+.payment-reconcile-banner.is-under {
+  background: #fff3db;
+  color: #a0711a;
+}
+.payment-reconcile-banner strong {
+  display: block;
+}
+.payment-reconcile-banner small {
+  display: block;
+  color: inherit;
+  opacity: 0.75;
+  font-weight: 500;
+  margin-top: 2px;
+}
+.payment-disposition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.payment-disposition-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 12px 13px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.payment-disposition-option input[type='radio'] {
+  width: auto;
+  flex-shrink: 0;
+  margin: 0;
+}
+.payment-disposition-option.is-selected {
+  border-color: #f1bd52;
+  background: #fff9ed;
+}
+.payment-settle-summary {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 15px;
+  margin-bottom: 16px;
+}
+.payment-settle-summary .summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.payment-settle-summary .summary-row.total {
+  font-weight: 800;
+  color: var(--navy);
+  border-top: 1px dashed var(--line);
+  margin-top: 6px;
+  padding-top: 8px;
+  font-size: 12px;
+}
+.payment-history-details {
+  margin-top: 16px;
+}
+.payment-history-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  color: #526981;
+}
+.payment-history-details .order-timeline {
+  margin-top: 10px;
+}
+.payment-evidence-block {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 14px 15px;
+  margin: 15px 0;
+}
+.payment-evidence-block .detail-section-heading {
+  margin: 0 0 10px;
+}
+.payment-evidence-block .notice {
+  margin: 10px 0 0;
+}
+.payment-evidence-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.payment-receipt-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.payment-receipt-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: white;
+  border: 1px solid var(--line);
+}
+.payment-receipt-thumb.is-loading {
+  background: var(--line);
+}
+@media (max-width: 800px) {
+  .payment-confirm-layout {
+    grid-template-columns: 1fr;
+  }
 }

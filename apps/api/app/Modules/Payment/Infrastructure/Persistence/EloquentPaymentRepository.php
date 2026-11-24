@@ -158,6 +158,7 @@ final class EloquentPaymentRepository implements PaymentRepository
             'type' => $discrepancy->type->value,
             'expected_amount' => $discrepancy->expectedAmount?->amount,
             'observed_amount' => $discrepancy->observedAmount?->amount,
+            'disposition' => $discrepancy->disposition?->value,
             'note' => $discrepancy->note,
             'recorded_by' => $discrepancy->recordedBy,
             'recorded_at' => $discrepancy->recordedAt ?? now()->toImmutable(),
@@ -207,6 +208,38 @@ final class EloquentPaymentRepository implements PaymentRepository
         return $this->toEntity($row->refresh(), withHistory: false);
     }
 
+    public function recordCustomerTransferReport(Payment $payment): Payment
+    {
+        $row = PaymentModel::query()
+            ->where('store_id', $payment->storeId)
+            ->whereKey($payment->id)
+            ->sole();
+
+        $from = $row->status;
+
+        $row->fill([
+            'status' => $payment->status->value,
+            'customer_reported_at' => $payment->customerReportedAt,
+            'customer_receipt_path' => $payment->customerReceiptPath,
+        ])->save();
+
+        if ($from !== $payment->status) {
+            PaymentEventModel::query()->create([
+                'store_id' => $payment->storeId,
+                'payment_id' => $payment->id,
+                'event_type' => 'CUSTOMER_REPORTED_TRANSFER',
+                'from_status' => $from->value,
+                'to_status' => $payment->status->value,
+                // No actor: the customer themselves triggered this, not staff
+                // (same reasoning as a system-moved event having none).
+                'actor_id' => null,
+                'created_at' => $payment->customerReportedAt ?? now(),
+            ]);
+        }
+
+        return $this->toEntity($row->refresh(), withHistory: false);
+    }
+
     /** @return Builder<PaymentModel> */
     private function baseQuery(string $storeId): Builder
     {
@@ -221,6 +254,7 @@ final class EloquentPaymentRepository implements PaymentRepository
                 $row->store_id,
                 $row->order_id,
                 $row->order_code,
+                $row->customer_name,
                 $row->method,
                 $row->status,
                 Money::vnd($row->amount),
@@ -245,6 +279,10 @@ final class EloquentPaymentRepository implements PaymentRepository
                 // skipped it too (e.g. findForUpdate(), which never needs the
                 // flag) falls back to relationLoaded() the same as before.
                 $row->discrepancies_exists ?? ($row->relationLoaded('discrepancies') && $row->discrepancies->isNotEmpty()),
+                events: [],
+                discrepancies: [],
+                customerReportedAt: $row->customer_reported_at,
+                customerReceiptPath: $row->customer_receipt_path,
             );
         }
 
@@ -271,6 +309,7 @@ final class EloquentPaymentRepository implements PaymentRepository
                 $discrepancy->recorded_by,
                 $discrepancy->recorded_by === null ? null : ($names[$discrepancy->recorded_by] ?? null),
                 $discrepancy->recorded_at,
+                $discrepancy->disposition,
             ),
         )->all());
 
@@ -279,6 +318,7 @@ final class EloquentPaymentRepository implements PaymentRepository
             $row->store_id,
             $row->order_id,
             $row->order_code,
+            $row->customer_name,
             $row->method,
             $row->status,
             Money::vnd($row->amount),
@@ -298,6 +338,8 @@ final class EloquentPaymentRepository implements PaymentRepository
             $row->discrepancies->isNotEmpty(),
             $events,
             $discrepancies,
+            $row->customer_reported_at,
+            $row->customer_receipt_path,
         );
     }
 

@@ -339,6 +339,34 @@ export async function cancelOrder(orderId: string, reason?: string): Promise<str
   return data.status;
 }
 
+/**
+ * "I have transferred", with an optional receipt photo - a notification
+ * only, never proof of payment (CLAUDE.md section 6, decision dated
+ * 2026-11-24). `guestOrderToken` is `confirmation.guestOrderToken`, exactly
+ * as `GET /orders/{order}/payment` would need it; a signed-in customer needs
+ * none, the session cookie already proves ownership.
+ *
+ * @return the server's own `customer_reported_at`, to show back immediately
+ */
+export async function reportTransfer(
+  orderId: string,
+  guestOrderToken: string | null,
+  receipt: File | null,
+): Promise<string | null> {
+  const form = new FormData();
+  if (receipt !== null) {
+    form.append('receipt', receipt);
+  }
+
+  const headers = guestOrderToken === null ? undefined : { 'X-Guest-Order-Token': guestOrderToken };
+
+  const data = await api.upload<{
+    readonly payment: { readonly customer_reported_at: string | null };
+  }>(`/orders/${orderId}/payment/report-transfer`, form, headers);
+
+  return data.payment.customer_reported_at;
+}
+
 export interface PaymentMethodOption {
   readonly method: PaymentMethod;
   readonly enabled: boolean;

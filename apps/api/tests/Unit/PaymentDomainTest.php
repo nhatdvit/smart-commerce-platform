@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Payment\Domain\Entity\BankAccount;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Domain\Enum\DiscrepancyType;
+use App\Modules\Payment\Domain\Enum\OverpaymentDisposition;
 use App\Modules\Payment\Domain\Enum\PaymentMethod;
 use App\Modules\Payment\Domain\Enum\PaymentStatus;
 use App\Modules\Payment\Domain\ValueObject\KnownBank;
@@ -31,6 +32,7 @@ function payment(
         '01930000-0000-7000-8000-000000000002',
         '01930000-0000-7000-8000-000000000003',
         'SCP-20261121-0001',
+        'Nguyễn Văn A',
         $method,
         $status,
         Money::vnd($amount),
@@ -142,6 +144,22 @@ it('flags an exception without changing the payment status', function (): void {
         ->and($discrepancy->recordedByName)->toBe('Thu ngân Demo');
 });
 
+it('carries an overpayment disposition on the discrepancy it records', function (): void {
+    $existing = payment(status: PaymentStatus::Pending, amount: 100_000);
+
+    $discrepancy = $existing->flag(
+        DiscrepancyType::Overpaid,
+        Money::vnd(102_000),
+        null,
+        'cashier-1',
+        'Thu ngân Demo',
+        new DateTimeImmutable('2026-11-24 07:10:00'),
+        OverpaymentDisposition::Keep,
+    );
+
+    expect($discrepancy->disposition)->toBe(OverpaymentDisposition::Keep);
+});
+
 it('can flag a payment that is already paid, for a duplicate transfer', function (): void {
     // DUPLICATE_TRANSFER literally implies the first transfer already
     // succeeded, so flag() must not refuse a settled payment the way
@@ -175,6 +193,7 @@ it('refuses a payment for a negative amount', function (): void {
         '01930000-0000-7000-8000-000000000002',
         '01930000-0000-7000-8000-000000000003',
         'SCP-20261121-0001',
+        'Nguyễn Văn A',
         PaymentMethod::Cash,
         PaymentStatus::Pending,
         Money::vnd(-1),

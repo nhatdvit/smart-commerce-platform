@@ -38,6 +38,7 @@ final class AdminPaymentResource extends JsonResource
             'id' => $payment->id,
             'order_id' => $payment->orderId,
             'order_code' => $payment->orderCode,
+            'customer_name' => $payment->customerName,
             'store_id' => $payment->storeId,
             'method' => $payment->method->value,
             'status' => $payment->status->value,
@@ -55,12 +56,19 @@ final class AdminPaymentResource extends JsonResource
             'confirmed_by' => $payment->confirmedByName,
             'confirmed_at' => IsoTimestamp::of($payment->confirmedAt),
             'expires_at' => IsoTimestamp::of($payment->expiresAt),
+            // The customer's own "I have transferred" click - a notification
+            // for this screen to show, never proof (CLAUDE.md section 6). The
+            // path itself is never exposed; the receipt is fetched through
+            // its own authorized endpoint, GET .../payments/{payment}/receipt.
+            'customer_reported_at' => IsoTimestamp::of($payment->customerReportedAt),
+            'has_customer_receipt' => $payment->customerReceiptPath !== null,
             'needs_attention' => $payment->needsAttention(),
             'discrepancies' => array_values(array_map(
                 static fn (PaymentDiscrepancy $discrepancy): array => [
                     'type' => $discrepancy->type->value,
                     'expected_amount' => $discrepancy->expectedAmount?->jsonSerialize(),
                     'observed_amount' => $discrepancy->observedAmount?->jsonSerialize(),
+                    'disposition' => $discrepancy->disposition?->value,
                     'note' => $discrepancy->note,
                     'recorded_by' => $discrepancy->recordedByName,
                     'recorded_at' => IsoTimestamp::of($discrepancy->recordedAt),

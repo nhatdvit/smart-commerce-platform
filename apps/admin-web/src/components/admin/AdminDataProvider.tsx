@@ -215,11 +215,13 @@ const AdminContext = createContext<AdminContextValue | null>(null);
 /**
  * How often the order list re-reads itself while the tab is in front.
  *
- * Half a minute: long enough that a shop's morning costs a couple of hundred
- * cheap reads, short enough that nobody is standing at the counter wondering
- * whether the screen is stuck.
+ * Short enough that the New Orders counter reads as close to real-time
+ * without standing up WebSocket infrastructure (Reverb/Broadcasting is
+ * CLAUDE.md section 16's Operations-stage answer to this, not MVP's): a
+ * busy morning costs a cheap read every few seconds, which is nothing next
+ * to someone standing at the counter watching a screen that looks stuck.
  */
-const ORDER_POLL_MS = 30_000;
+const ORDER_POLL_MS = 5_000;
 
 /**
  * Holds the dashboard's state for the whole admin shell.
@@ -1465,16 +1467,18 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * Orders waiting for someone to act: a transfer not yet verified, or an
-   * order the store has not acknowledged.
+   * Orders the counter has not yet acknowledged - exactly the "Đơn hàng mới"
+   * queue (`PLACED` only). Deliberately excludes `PENDING_PAYMENT`: that is a
+   * transfer still awaiting staff verification on the Payments screen, a
+   * different action on a different screen, not something this badge's own
+   * "chờ xác nhận" wording means - counting it here made the sidebar badge
+   * disagree with the New Orders screen's own "Chờ xác nhận" card, which only
+   * ever counted `PLACED`.
    *
    * Taken from the server's counts, not from the loaded page, so the badge is
    * the real number even when the screen is showing one filtered page.
    */
-  const pendingCount = useMemo(
-    () => (orderCounts.PENDING_PAYMENT ?? 0) + (orderCounts.PLACED ?? 0),
-    [orderCounts],
-  );
+  const pendingCount = useMemo(() => orderCounts.PLACED ?? 0, [orderCounts]);
 
   const products = useMemo<readonly MenuProduct[]>(() => snapshot?.products ?? [], [snapshot]);
 

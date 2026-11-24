@@ -22,14 +22,17 @@ import { money } from '@/lib/money';
 import {
   DISCREPANCY_TYPES,
   DISCREPANCY_TYPE_LABELS,
+  OVERPAYMENT_DISPOSITIONS,
   PAYMENT_METHOD_LABELS as SETTLEMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS as SETTLEMENT_STATUS_LABELS,
   loadPayment,
+  loadPaymentReceiptUrl,
   paymentStatusTone,
   regeneratePaymentQr,
   type AdminPayment,
   type DiscrepancyType,
   type KnownBankOption,
+  type OverpaymentDisposition,
 } from '@/lib/payments-api';
 import {
   FULFILLMENT_LABELS,
@@ -56,7 +59,7 @@ import {
 } from '@/lib/product-form';
 
 import { useAdminData } from './AdminDataProvider';
-import { FoodIcon, IconGift, IconStar } from './icons';
+import { FoodIcon, IconGift, IconReceipt, IconStar, IconWallet } from './icons';
 import { Metric, StatusBadge } from './primitives';
 
 interface ModalFrameProps {
@@ -274,7 +277,7 @@ function isSettledPayment(status: AdminOrderDetail['paymentStatus']): boolean {
  * header instead of just the footer.
  */
 function OrderModal({ orderId }: { orderId: string }) {
-  const { moveOrder, ordersBusy, closeModal, openModal } = useAdminData();
+  const { moveOrder, ordersBusy, closeModal } = useAdminData();
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [loadError, setLoadError] = useState('');
   const [askingReason, setAskingReason] = useState(false);
@@ -324,7 +327,6 @@ function OrderModal({ orderId }: { orderId: string }) {
   }
 
   const next = forwardStatus(order.status);
-  const needsPayment = order.paymentId !== null && !isSettledPayment(order.paymentStatus);
   // No money was ever collected, so there is nothing a refund policy needs
   // to look at - a real anomaly (a payment row with no method at all) reads
   // the same way, honestly, rather than as a settled transaction.
@@ -569,20 +571,6 @@ function OrderModal({ orderId }: { orderId: string }) {
             Xác nhận hủy
           </button>
         ) : null}
-        {!needsPayment ? null : (
-          <button
-            type="button"
-            className="btn"
-            disabled={ordersBusy}
-            onClick={() => {
-              if (order.paymentId !== null) {
-                openModal({ kind: 'payment', paymentId: order.paymentId });
-              }
-            }}
-          >
-            Xác nhận thu tiền
-          </button>
-        )}
         {next === undefined ? null : (
           <button
             type="button"
@@ -1464,6 +1452,17 @@ function LoyaltyMemberModal({ phone, name }: { readonly phone: string; readonly 
   );
 }
 
+/**
+ * Generic wording for the read-only history view - the live confirm form
+ * phrases "KEEP" as a tip for cash and as kept revenue for a transfer, but a
+ * past record just needs one plain label regardless of which it was.
+ */
+const OVERPAYMENT_DISPOSITION_LABELS: Record<OverpaymentDisposition, string> = {
+  KEEP: 'Giữ lại số tiền thừa',
+  REFUND: 'Hoàn lại cho khách',
+  DEBT: 'Ghi nhận công nợ',
+};
+
 /** "20/11/2026 08:40" from an ISO instant, or a dash when there is none. */
 function dateTime(iso: string | null): string {
   if (iso === null) {
@@ -1514,6 +1513,63 @@ function PaymentQrImage({ payload }: { readonly payload: string }) {
 }
 
 /**
+ * The customer's uploaded receipt photo, fetched once (it is authenticated
+ * and store-scoped, never a public URL - see `loadPaymentReceiptUrl`'s own
+ * note) and opened full-size in a new tab on request. Never treated as
+ * anything but a reference image for staff to look at.
+ */
+function CustomerReceiptThumb({ paymentId }: { readonly paymentId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    let objectUrl: string | null = null;
+    setUrl(null);
+    setFailed(false);
+
+    void loadPaymentReceiptUrl(paymentId)
+      .then((loaded) => {
+        if (current) {
+          objectUrl = loaded;
+          setUrl(loaded);
+        } else {
+          URL.revokeObjectURL(loaded);
+        }
+      })
+      .catch(() => {
+        if (current) {
+          setFailed(true);
+        }
+      });
+
+    return () => {
+      current = false;
+      if (objectUrl !== null) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [paymentId]);
+
+  if (failed) {
+    return <p className="cell-sub warn">Không tải được ảnh biên lai.</p>;
+  }
+
+  if (url === null) {
+    return <div className="payment-receipt-thumb is-loading" aria-hidden="true" />;
+  }
+
+  return (
+    <span className="payment-receipt-preview">
+      <img src={url} alt="Ảnh biên lai khách gửi" className="payment-receipt-thumb" />
+      <a href={url} target="_blank" rel="noreferrer" className="btn">
+        Xem ảnh lớn
+      </a>
+    </span>
+  );
+}
+
+/**
  * One payment: its reconciliation facts, then the two things staff can do
  * about it.
  *
@@ -1523,14 +1579,16 @@ function PaymentQrImage({ payload }: { readonly payload: string }) {
  * touches the status - a discrepancy is a note on the queue, not a verdict.
  */
 function PaymentModal({ paymentId }: { readonly paymentId: string }) {
-  const { confirmPayment, flagPayment, paymentsBusy, notify } = useAdminData();
+  const { confirmPayment, flagPayment, paymentsBusy, notify, closeModal } = useAdminData();
   const [payment, setPayment] = useState<AdminPayment | null>(null);
   const [loadError, setLoadError] = useState('');
+  const [order, setOrder] = useState<AdminOrderDetail | null>(null);
 
   const [confirmAmount, setConfirmAmount] = useState('');
   const [bankReference, setBankReference] = useState('');
   const [confirmNote, setConfirmNote] = useState('');
-  const [acceptDiscrepancy, setAcceptDiscrepancy] = useState(false);
+  const [disposition, setDisposition] = useState<OverpaymentDisposition | null>(null);
+  const [dispositionError, setDispositionError] = useState('');
 
   const [flagging, setFlagging] = useState(false);
   const [flagType, setFlagType] = useState<DiscrepancyType>('UNKNOWN_REFERENCE');
@@ -1561,6 +1619,31 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
     };
   }, [paymentId]);
 
+  const orderId = payment?.orderId ?? null;
+
+  // The order's own items and phone number are not on the payment itself, and
+  // are purely a convenience for whoever is reconciling - a failure here is
+  // swallowed rather than shown, because it must never block confirming an
+  // actual payment.
+  useEffect(() => {
+    if (orderId === null) {
+      return;
+    }
+    let current = true;
+
+    void loadOrderDetail(orderId)
+      .then((detail) => {
+        if (current) {
+          setOrder(detail);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      current = false;
+    };
+  }, [orderId]);
+
   if (loadError !== '') {
     return (
       <ModalFrame title="Thanh toán">
@@ -1581,25 +1664,10 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
     payment.status === 'PAID' ||
     payment.status === 'PARTIALLY_REFUNDED' ||
     payment.status === 'REFUNDED';
-  const mismatched = confirmAmount.trim() !== '' && Number(confirmAmount) !== payment.amount;
 
   // Taken as an argument rather than read from the closure: TypeScript does
   // not carry the null check above into a function declaration, the same
   // reasoning as OrderModal's cancelOrder.
-  function submitConfirm(target: AdminPayment) {
-    const amount = Number(confirmAmount);
-    if (!Number.isInteger(amount) || amount < 0) {
-      return;
-    }
-
-    confirmPayment(target.id, {
-      amount,
-      bankTransactionReference: bankReference.trim() === '' ? null : bankReference.trim(),
-      acceptDiscrepancy,
-      note: confirmNote.trim() === '' ? null : confirmNote.trim(),
-    });
-  }
-
   function submitFlag(target: AdminPayment) {
     flagPayment(target.id, {
       type: flagType,
@@ -1624,199 +1692,450 @@ function PaymentModal({ paymentId }: { readonly paymentId: string }) {
       .finally(() => setRegenerating(false));
   }
 
+  const flagSection = (
+    <>
+      {!flagging ? (
+        <button type="button" className="btn" onClick={() => setFlagging(true)}>
+          Ghi nhận ngoại lệ khác
+        </button>
+      ) : (
+        <>
+          <h3>Ghi nhận ngoại lệ</h3>
+          <p className="notice">
+            Dùng khi không nên đánh dấu đã thu hoặc thất bại: mã không khớp đơn nào, chuyển khoản
+            trùng lặp, hoặc tiền về sau khi đơn đã hủy. Không tự đổi trạng thái thanh toán.
+          </p>
+          <Field label="Loại ngoại lệ">
+            <select
+              value={flagType}
+              onChange={(event) =>
+                setFlagType(
+                  DISCREPANCY_TYPES.find((type) => type === event.target.value) ?? flagType,
+                )
+              }
+            >
+              {DISCREPANCY_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {DISCREPANCY_TYPE_LABELS[type]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <div className="form-row">
+            <Field label="Số tiền thực tế (VND)" hint="Để trống nếu không áp dụng.">
+              <input
+                type="number"
+                min={0}
+                value={flagAmount}
+                onChange={(event) => setFlagAmount(event.target.value)}
+              />
+            </Field>
+            <Field label="Ghi chú">
+              <input value={flagNote} onChange={(event) => setFlagNote(event.target.value)} />
+            </Field>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={paymentsBusy}
+            onClick={() => submitFlag(payment)}
+          >
+            Ghi nhận ngoại lệ
+          </button>
+        </>
+      )}
+    </>
+  );
+
+  if (settled) {
+    return (
+      <ModalFrame title={`Thanh toán đơn ${payment.orderCode}`}>
+        <div className="order-detail">
+          <div className="order-detail-row">
+            <span className={`status ${paymentStatusTone(payment.status)}`}>
+              {SETTLEMENT_STATUS_LABELS[payment.status]}
+            </span>
+            <span>{SETTLEMENT_METHOD_LABELS[payment.method]}</span>
+            {payment.needsAttention ? <span className="status waiting">Cần xử lý</span> : null}
+          </div>
+
+          <dl className="order-facts">
+            <dt>Số tiền cần thu</dt>
+            <dd>{money(payment.amount)}</dd>
+            {payment.confirmedAmount === null ? null : (
+              <>
+                <dt>Số tiền đã xác nhận</dt>
+                <dd>{money(payment.confirmedAmount)}</dd>
+              </>
+            )}
+            {payment.transferReference === null ? null : (
+              <>
+                <dt>Mã tham chiếu</dt>
+                <dd>{payment.transferReference}</dd>
+              </>
+            )}
+            {payment.bankAccountMasked === null ? null : (
+              <>
+                <dt>Tài khoản nhận</dt>
+                <dd>{payment.bankAccountMasked}</dd>
+              </>
+            )}
+            {payment.bankTransactionReference === null ? null : (
+              <>
+                <dt>Mã giao dịch ngân hàng</dt>
+                <dd>{payment.bankTransactionReference}</dd>
+              </>
+            )}
+            {payment.confirmedBy === null ? null : (
+              <>
+                <dt>Người xác nhận</dt>
+                <dd>
+                  {payment.confirmedBy}
+                  {payment.confirmedAt === null ? '' : ` · ${dateTime(payment.confirmedAt)}`}
+                </dd>
+              </>
+            )}
+          </dl>
+
+          {payment.discrepancies.length === 0 ? null : (
+            <>
+              <h3>Ngoại lệ đã ghi nhận</h3>
+              <ol className="order-timeline">
+                {payment.discrepancies.map((discrepancy, index) => (
+                  <li key={`${discrepancy.type}-${index}`}>
+                    <b>{DISCREPANCY_TYPE_LABELS[discrepancy.type]}</b>
+                    <span>
+                      {dateTime(discrepancy.recordedAt)}
+                      {discrepancy.recordedBy === null ? '' : ` · ${discrepancy.recordedBy}`}
+                    </span>
+                    {discrepancy.observedAmount === null ? null : (
+                      <em>Số tiền thực tế: {money(discrepancy.observedAmount)}</em>
+                    )}
+                    {discrepancy.disposition === null ? null : (
+                      <em>Xử lý: {OVERPAYMENT_DISPOSITION_LABELS[discrepancy.disposition]}</em>
+                    )}
+                    {discrepancy.note === null ? null : <em>{discrepancy.note}</em>}
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+
+          {flagSection}
+        </div>
+      </ModalFrame>
+    );
+  }
+
+  // Taken as an argument rather than read from the closure, same as above.
+  function submitConfirm(target: AdminPayment) {
+    const amount = Number(confirmAmount);
+    if (!Number.isInteger(amount) || amount < 0) {
+      return;
+    }
+
+    if (amount > target.amount && disposition === null) {
+      setDispositionError('Vui lòng chọn cách xử lý số tiền thừa.');
+
+      return;
+    }
+
+    confirmPayment(target.id, {
+      amount,
+      bankTransactionReference: bankReference.trim() === '' ? null : bankReference.trim(),
+      acceptDiscrepancy: amount !== target.amount,
+      note: confirmNote.trim() === '' ? null : confirmNote.trim(),
+      overpaymentDisposition: amount > target.amount ? disposition : null,
+    });
+  }
+
+  const enteredAmount = confirmAmount.trim() === '' ? null : Number(confirmAmount);
+  const hasValidAmount =
+    enteredAmount !== null && Number.isInteger(enteredAmount) && enteredAmount >= 0;
+  const diff = hasValidAmount ? enteredAmount - payment.amount : 0;
+  const isOverpaid = hasValidAmount && diff > 0;
+  const isUnderpaid = hasValidAmount && diff < 0;
+  const mismatched = isOverpaid || isUnderpaid;
+
+  const dispositionLabels: Record<OverpaymentDisposition, string> =
+    payment.method === 'CASH'
+      ? {
+          KEEP: 'Khách bo thêm (tiền tip)',
+          REFUND: 'Trả lại khách',
+          DEBT: 'Ghi nhận cần trả khách sau',
+        }
+      : {
+          KEEP: 'Giữ lại số tiền thừa (cộng vào doanh thu)',
+          REFUND: 'Hoàn lại cho khách',
+          DEBT: 'Ghi nhận công nợ',
+        };
+
   return (
-    <ModalFrame title={`Thanh toán đơn ${payment.orderCode}`}>
-      <div className="order-detail">
-        <div className="order-detail-row">
-          <span className={`status ${paymentStatusTone(payment.status)}`}>
-            {SETTLEMENT_STATUS_LABELS[payment.status]}
+    <div className="modal order-detail-modal payment-confirm-modal" role="dialog" aria-modal="true">
+      <div className="modal-head">
+        <div className="payment-confirm-heading">
+          <span className="payment-confirm-icon" aria-hidden="true">
+            <IconWallet size={20} />
           </span>
-          <span>{SETTLEMENT_METHOD_LABELS[payment.method]}</span>
-          {payment.needsAttention ? <span className="status waiting">Cần xử lý</span> : null}
+          <div>
+            <h2>Xác nhận thanh toán</h2>
+            <p>Đối soát số tiền thực nhận và xử lý chênh lệch (tiền thừa, tiền thiếu, tiền bo).</p>
+          </div>
+        </div>
+        <button type="button" className="icon-btn" aria-label="Đóng" onClick={closeModal}>
+          ✕
+        </button>
+      </div>
+
+      <div className="payment-confirm-layout">
+        <div className="payment-info-col">
+          <div className="payment-info-box">
+            <span className="detail-round-icon" aria-hidden="true">
+              ▤
+            </span>
+            <div>
+              <small>Đơn hàng</small>
+              <strong>{payment.orderCode}</strong>
+            </div>
+          </div>
+          <div className="payment-info-box">
+            <span className="detail-round-icon" aria-hidden="true">
+              ♙
+            </span>
+            <div>
+              <small>Khách hàng</small>
+              <strong>{payment.customerName}</strong>
+              {order === null ? null : (
+                <a href={`tel:${order.contactPhone.replace(/\s/g, '')}`}>{order.contactPhone}</a>
+              )}
+            </div>
+          </div>
+
+          {order === null || order.lines.length === 0 ? null : (
+            <>
+              <div className="detail-section-heading">
+                <span aria-hidden="true">♧</span>
+                <h3>Món đã đặt ({order.lines.length})</h3>
+              </div>
+              <div className="detail-items">
+                {order.lines.map((line) => (
+                  <div className="detail-product" key={line.id}>
+                    <span className="detail-product-thumb" aria-hidden="true">
+                      🍽️
+                    </span>
+                    <div className="detail-product-name">
+                      <strong>{line.name}</strong>
+                    </div>
+                    <span className="detail-product-qty">× {line.quantity}</span>
+                    <strong className="detail-product-price">{money(line.lineTotal)}</strong>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div className="detail-total">
+            <strong>Tổng tiền đơn hàng</strong>
+            <b>{money(payment.amount)}</b>
+          </div>
         </div>
 
-        <dl className="order-facts">
-          <dt>Số tiền cần thu</dt>
-          <dd>{money(payment.amount)}</dd>
-          {payment.confirmedAmount === null ? null : (
-            <>
-              <dt>Số tiền đã xác nhận</dt>
-              <dd>{money(payment.confirmedAmount)}</dd>
-            </>
-          )}
-          {payment.transferReference === null ? null : (
-            <>
-              <dt>Mã tham chiếu</dt>
-              <dd>{payment.transferReference}</dd>
-            </>
-          )}
-          {payment.bankAccountMasked === null ? null : (
-            <>
-              <dt>Tài khoản nhận</dt>
-              <dd>{payment.bankAccountMasked}</dd>
-            </>
-          )}
-          {payment.bankTransactionReference === null ? null : (
-            <>
-              <dt>Mã giao dịch ngân hàng</dt>
-              <dd>{payment.bankTransactionReference}</dd>
-            </>
-          )}
-          {payment.confirmedBy === null ? null : (
-            <>
-              <dt>Người xác nhận</dt>
-              <dd>
-                {payment.confirmedBy}
-                {payment.confirmedAt === null ? '' : ` · ${dateTime(payment.confirmedAt)}`}
-              </dd>
-            </>
-          )}
-          {payment.expiresAt === null || payment.status !== 'PENDING' ? null : (
-            <>
-              <dt>Hết hạn chuyển khoản</dt>
-              <dd>{dateTime(payment.expiresAt)}</dd>
-            </>
-          )}
-        </dl>
+        <div className="payment-form-col">
+          <div className="detail-section-heading">
+            <span aria-hidden="true">▥</span>
+            <h3>Phương thức thanh toán</h3>
+          </div>
+          <div className="payment-method-pick">
+            <div
+              className={`payment-method-card${payment.method === 'BANK_TRANSFER' ? ' is-active' : ''}`}
+            >
+              <IconReceipt size={16} /> Chuyển khoản VietQR
+              {payment.method !== 'BANK_TRANSFER' ? null : (
+                <span className="method-check" aria-hidden="true">
+                  ✓
+                </span>
+              )}
+            </div>
+            <div className={`payment-method-card${payment.method === 'CASH' ? ' is-active' : ''}`}>
+              <IconWallet size={16} /> Tiền mặt
+              {payment.method !== 'CASH' ? null : (
+                <span className="method-check" aria-hidden="true">
+                  ✓
+                </span>
+              )}
+            </div>
+          </div>
 
-        {payment.method !== 'BANK_TRANSFER' ? null : (
-          <div className="payment-qr-block">
-            {payment.qrPayload === null ? null : <PaymentQrImage payload={payment.qrPayload} />}
-            {settled ? null : (
+          {payment.method !== 'BANK_TRANSFER' || payment.qrPayload === null ? null : (
+            <div className="payment-qr-block">
+              <PaymentQrImage payload={payment.qrPayload} />
               <button
                 type="button"
                 className="btn"
                 disabled={regenerating}
                 onClick={() => submitRegenerate(payment)}
               >
-                {payment.qrPayload === null ? 'Tạo mã QR' : 'Tạo lại mã QR'}
+                Tạo lại mã QR
               </button>
-            )}
-          </div>
-        )}
-
-        {payment.discrepancies.length === 0 ? null : (
-          <>
-            <h3>Ngoại lệ đã ghi nhận</h3>
-            <ol className="order-timeline">
-              {payment.discrepancies.map((discrepancy, index) => (
-                <li key={`${discrepancy.type}-${index}`}>
-                  <b>{DISCREPANCY_TYPE_LABELS[discrepancy.type]}</b>
-                  <span>
-                    {dateTime(discrepancy.recordedAt)}
-                    {discrepancy.recordedBy === null ? '' : ` · ${discrepancy.recordedBy}`}
-                  </span>
-                  {discrepancy.observedAmount === null ? null : (
-                    <em>Số tiền thực tế: {money(discrepancy.observedAmount)}</em>
-                  )}
-                  {discrepancy.note === null ? null : <em>{discrepancy.note}</em>}
-                </li>
-              ))}
-            </ol>
-          </>
-        )}
-
-        {settled ? null : (
-          <>
-            <h3>Xác nhận đã nhận tiền</h3>
-            <p className="notice">
-              Chỉ xác nhận sau khi đã thấy tiền mặt hoặc khoản chuyển khoản thật trong ngân hàng. Mã
-              QR hiển thị hoặc khách báo "đã chuyển" không phải là bằng chứng.
-            </p>
-            <div className="form-row">
-              <Field label="Số tiền đã nhận (VND)">
-                <input
-                  type="number"
-                  min={0}
-                  value={confirmAmount}
-                  onChange={(event) => setConfirmAmount(event.target.value)}
-                />
-              </Field>
-              <Field label="Mã giao dịch ngân hàng" hint="Nếu là chuyển khoản.">
-                <input
-                  maxLength={120}
-                  value={bankReference}
-                  onChange={(event) => setBankReference(event.target.value)}
-                />
-              </Field>
             </div>
-            {!mismatched ? null : (
-              <label className="form-field">
-                <input
-                  type="checkbox"
-                  checked={acceptDiscrepancy}
-                  onChange={(event) => setAcceptDiscrepancy(event.target.checked)}
-                />{' '}
-                Số tiền khác với số cần thu ({money(payment.amount)}). Xác nhận đây là cố ý
-                (thiếu/thừa tiền sẽ được ghi nhận là ngoại lệ).
-              </label>
-            )}
-            <Field label="Ghi chú" hint="Không bắt buộc.">
-              <input value={confirmNote} onChange={(event) => setConfirmNote(event.target.value)} />
-            </Field>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={paymentsBusy || (mismatched && !acceptDiscrepancy)}
-              onClick={() => submitConfirm(payment)}
-            >
-              Xác nhận đã nhận tiền
-            </button>
-          </>
-        )}
+          )}
 
-        {!flagging ? (
-          <button type="button" className="btn" onClick={() => setFlagging(true)}>
-            Ghi nhận ngoại lệ khác
-          </button>
-        ) : (
-          <>
-            <h3>Ghi nhận ngoại lệ</h3>
-            <p className="notice">
-              Dùng khi không nên đánh dấu đã thu hoặc thất bại: mã không khớp đơn nào, chuyển khoản
-              trùng lặp, hoặc tiền về sau khi đơn đã hủy. Không tự đổi trạng thái thanh toán.
-            </p>
-            <Field label="Loại ngoại lệ">
-              <select
-                value={flagType}
-                onChange={(event) =>
-                  setFlagType(
-                    DISCREPANCY_TYPES.find((type) => type === event.target.value) ?? flagType,
-                  )
-                }
-              >
-                {DISCREPANCY_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {DISCREPANCY_TYPE_LABELS[type]}
-                  </option>
+          {payment.customerReportedAt === null ? null : (
+            <div className="payment-evidence-block">
+              <div className="detail-section-heading">
+                <span aria-hidden="true">◈</span>
+                <h3>Bằng chứng từ khách hàng</h3>
+              </div>
+              <div className="payment-evidence-row">
+                {payment.hasCustomerReceipt ? (
+                  <CustomerReceiptThumb paymentId={payment.id} />
+                ) : (
+                  <p className="cell-sub">Khách chưa gửi ảnh biên lai.</p>
+                )}
+                <p className="cell-sub">
+                  Khách báo đã chuyển khoản lúc {dateTime(payment.customerReportedAt)}
+                </p>
+              </div>
+              <p className="notice">
+                Đây chỉ là thông báo từ khách, không phải bằng chứng thanh toán. Vẫn tự kiểm tra
+                ngân hàng và nhập đúng số tiền thực nhận bên dưới.
+              </p>
+            </div>
+          )}
+
+          <Field label="Số tiền thực nhận (VND) *">
+            <input
+              type="number"
+              min={0}
+              value={confirmAmount}
+              onChange={(event) => {
+                setConfirmAmount(event.target.value);
+                setDisposition(null);
+                setDispositionError('');
+              }}
+            />
+          </Field>
+
+          {!hasValidAmount ? null : (
+            <div
+              className={`payment-reconcile-banner ${mismatched ? (isOverpaid ? 'is-over' : 'is-under') : 'is-match'}`}
+              role="status"
+            >
+              <span aria-hidden="true">{isUnderpaid ? '!' : '✓'}</span>
+              <div>
+                <strong>
+                  {isOverpaid
+                    ? `Khách chuyển thừa ${money(diff)}`
+                    : isUnderpaid
+                      ? `Khách thiếu ${money(-diff)}`
+                      : 'Khớp với tổng đơn'}
+                </strong>
+                <small>
+                  Tổng đơn: {money(payment.amount)} · Thực nhận: {money(enteredAmount)}
+                </small>
+              </div>
+            </div>
+          )}
+
+          {!isOverpaid ? null : (
+            <Field
+              label="Xử lý phần chênh lệch *"
+              error={dispositionError === '' ? undefined : dispositionError}
+            >
+              <div className="payment-disposition-list">
+                {OVERPAYMENT_DISPOSITIONS.map((option) => (
+                  <label
+                    key={option}
+                    className={`payment-disposition-option${disposition === option ? ' is-selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="overpayment-disposition"
+                      checked={disposition === option}
+                      onChange={() => {
+                        setDisposition(option);
+                        setDispositionError('');
+                      }}
+                    />
+                    {dispositionLabels[option]}
+                  </label>
                 ))}
-              </select>
+              </div>
             </Field>
-            <div className="form-row">
-              <Field label="Số tiền thực tế (VND)" hint="Để trống nếu không áp dụng.">
-                <input
-                  type="number"
-                  min={0}
-                  value={flagAmount}
-                  onChange={(event) => setFlagAmount(event.target.value)}
-                />
-              </Field>
-              <Field label="Ghi chú">
-                <input value={flagNote} onChange={(event) => setFlagNote(event.target.value)} />
-              </Field>
+          )}
+
+          {!isOverpaid || disposition !== 'KEEP' ? null : (
+            <div className="payment-settle-summary">
+              <div className="summary-row">
+                <span>Doanh thu đơn hàng</span>
+                <span>{money(payment.amount)}</span>
+              </div>
+              <div className="summary-row">
+                <span>
+                  {payment.method === 'CASH' ? 'Tiền tip (khách bo)' : 'Tiền thu thêm (giữ lại)'}
+                </span>
+                <span>{money(diff)}</span>
+              </div>
+              <div className="summary-row total">
+                <span>Tổng tiền thu</span>
+                <span>{money(enteredAmount ?? payment.amount)}</span>
+              </div>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={paymentsBusy}
-              onClick={() => submitFlag(payment)}
-            >
-              Ghi nhận ngoại lệ
-            </button>
-          </>
-        )}
+          )}
+
+          {payment.method !== 'BANK_TRANSFER' ? null : (
+            <Field label="Mã giao dịch ngân hàng" hint="Tùy chọn - theo sao kê ngân hàng thật.">
+              <input
+                maxLength={120}
+                value={bankReference}
+                onChange={(event) => setBankReference(event.target.value)}
+              />
+            </Field>
+          )}
+
+          <Field label="Ghi chú" hint="Không bắt buộc.">
+            <input value={confirmNote} onChange={(event) => setConfirmNote(event.target.value)} />
+          </Field>
+
+          {payment.discrepancies.length === 0 ? null : (
+            <details className="payment-history-details">
+              <summary>Ngoại lệ đã ghi nhận ({payment.discrepancies.length})</summary>
+              <ol className="order-timeline">
+                {payment.discrepancies.map((discrepancy, index) => (
+                  <li key={`${discrepancy.type}-${index}`}>
+                    <b>{DISCREPANCY_TYPE_LABELS[discrepancy.type]}</b>
+                    <span>
+                      {dateTime(discrepancy.recordedAt)}
+                      {discrepancy.recordedBy === null ? '' : ` · ${discrepancy.recordedBy}`}
+                    </span>
+                    {discrepancy.observedAmount === null ? null : (
+                      <em>Số tiền thực tế: {money(discrepancy.observedAmount)}</em>
+                    )}
+                    {discrepancy.note === null ? null : <em>{discrepancy.note}</em>}
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+
+          {flagSection}
+        </div>
       </div>
-    </ModalFrame>
+
+      <div className="modal-actions">
+        <button type="button" className="btn" onClick={closeModal}>
+          Đóng
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={paymentsBusy || !hasValidAmount}
+          onClick={() => submitConfirm(payment)}
+        >
+          ✓ Xác nhận đã thanh toán
+        </button>
+      </div>
+    </div>
   );
 }
 

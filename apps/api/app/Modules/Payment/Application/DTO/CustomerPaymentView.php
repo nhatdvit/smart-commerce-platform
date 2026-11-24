@@ -33,5 +33,7 @@ final readonly class CustomerPaymentView
         public ?string $bankName,
         public ?string $bankAccountNumber,
         public ?string $bankAccountName,
+        /** When this customer last clicked "I have transferred" - a notification, never proof. */
+        public ?DateTimeImmutable $customerReportedAt,
     ) {}
 }

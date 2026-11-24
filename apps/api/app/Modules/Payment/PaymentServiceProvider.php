@@ -9,6 +9,7 @@ use App\Modules\Payment\Application\Contract\ProvidesOrderPaymentDetails;
 use App\Modules\Payment\Application\Contract\ProvidesPaymentSummaries;
 use App\Modules\Payment\Domain\Contract\BankAccountRepository;
 use App\Modules\Payment\Domain\Contract\PaymentMethodRepository;
+use App\Modules\Payment\Domain\Contract\PaymentReceiptStorage;
 use App\Modules\Payment\Domain\Contract\PaymentRepository;
 use App\Modules\Payment\Domain\Entity\Payment;
 use App\Modules\Payment\Infrastructure\Persistence\EloquentBankAccountRepository;
@@ -16,8 +17,10 @@ use App\Modules\Payment\Infrastructure\Persistence\EloquentOrderPaymentDetailsPr
 use App\Modules\Payment\Infrastructure\Persistence\EloquentPaymentMethodRepository;
 use App\Modules\Payment\Infrastructure\Persistence\EloquentPaymentRepository;
 use App\Modules\Payment\Infrastructure\Persistence\EloquentPaymentSummaryProvider;
+use App\Modules\Payment\Infrastructure\Storage\DiskPaymentReceiptStorage;
 use App\Modules\Payment\Presentation\Policy\PaymentPolicy;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -42,6 +45,16 @@ final class PaymentServiceProvider extends ServiceProvider
         $this->app->singleton(PaymentRepository::class, EloquentPaymentRepository::class);
         $this->app->singleton(BankAccountRepository::class, EloquentBankAccountRepository::class);
         $this->app->singleton(PaymentMethodRepository::class, EloquentPaymentMethodRepository::class);
+
+        // Same disk as product photography (CLAUDE.md §16: config, not env,
+        // outside config.php) - this module's own files live under
+        // payment-receipts/, Catalog's under media/products/.
+        $this->app->singleton(
+            PaymentReceiptStorage::class,
+            static fn (): DiskPaymentReceiptStorage => new DiskPaymentReceiptStorage(
+                Storage::disk((string) config('commerce.media.disk', 'local')),
+            ),
+        );
 
         // The prefix is config because the reference format is, in part, an
         // operational choice (CLAUDE.md §16 config.php: "read through config(),

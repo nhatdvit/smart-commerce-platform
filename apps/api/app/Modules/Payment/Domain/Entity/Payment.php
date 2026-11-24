@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payment\Domain\Entity;
 
 use App\Modules\Payment\Domain\Enum\DiscrepancyType;
+use App\Modules\Payment\Domain\Enum\OverpaymentDisposition;
 use App\Modules\Payment\Domain\Enum\PaymentMethod;
 use App\Modules\Payment\Domain\Enum\PaymentStatus;
 use App\Shared\Domain\Exception\BusinessRuleViolation;
@@ -39,6 +40,7 @@ final readonly class Payment
         public string $storeId,
         public string $orderId,
         public string $orderCode,
+        public string $customerName,
         public PaymentMethod $method,
         public PaymentStatus $status,
         public Money $amount,
@@ -59,6 +61,13 @@ final readonly class Payment
         public bool $hasDiscrepancy,
         public array $events,
         public array $discrepancies,
+        /**
+         * The customer's own "I have transferred" click - a notification, never
+         * proof (CLAUDE.md section 6). Null until {@see reportCustomerTransfer()}.
+         */
+        public ?DateTimeImmutable $customerReportedAt = null,
+        /** The most recently uploaded receipt photo's storage path, if any. */
+        public ?string $customerReceiptPath = null,
     ) {}
 
     /**
@@ -70,6 +79,7 @@ final readonly class Payment
         string $storeId,
         string $orderId,
         string $orderCode,
+        string $customerName,
         PaymentMethod $method,
         PaymentStatus $status,
         Money $amount,
@@ -89,6 +99,8 @@ final readonly class Payment
         bool $hasDiscrepancy = false,
         array $events = [],
         array $discrepancies = [],
+        ?DateTimeImmutable $customerReportedAt = null,
+        ?string $customerReceiptPath = null,
     ): self {
         if ($amount->isNegative()) {
             throw new BusinessRuleViolation(
@@ -103,6 +115,7 @@ final readonly class Payment
             $storeId,
             $orderId,
             $orderCode,
+            $customerName,
             $method,
             $status,
             $amount,
@@ -122,6 +135,8 @@ final readonly class Payment
             $hasDiscrepancy,
             array_values($events),
             array_values($discrepancies),
+            $customerReportedAt,
+            $customerReceiptPath,
         );
     }
 
@@ -189,6 +204,7 @@ final readonly class Payment
             $this->storeId,
             $this->orderId,
             $this->orderCode,
+            $this->customerName,
             $this->method,
             PaymentStatus::Paid,
             $this->amount,
@@ -208,6 +224,79 @@ final readonly class Payment
             $this->hasDiscrepancy,
             $this->events,
             $this->discrepancies,
+            $this->customerReportedAt,
+            $this->customerReceiptPath,
+        );
+    }
+
+    /**
+     * Records that the customer themselves clicked "I have transferred",
+     * optionally with a receipt photo.
+     *
+     * Moves `status` to `PROCESSING` ("chờ xác nhận thanh toán") - a real,
+     * approved transition between two already-documented, never-settled
+     * statuses (CLAUDE.md section 6; decision dated 2026-11-24, amended
+     * 2026-11-24). It is still never proof and never `PAID`: the receipt is
+     * shown to staff as a reference alongside the `Số tiền thực nhận` field
+     * they must still fill in themselves after checking the real bank
+     * credit - this method cannot be reached from `confirm()`, and nothing
+     * here can produce `PAID`.
+     *
+     * Refused once the payment is settled or is not a bank transfer at all -
+     * a cash order has no transfer to report, and a settled payment has
+     * nothing left for this notification to do.
+     */
+    public function reportCustomerTransfer(DateTimeImmutable $at, ?string $receiptPath): self
+    {
+        if ($this->method !== PaymentMethod::BankTransfer) {
+            throw new BusinessRuleViolation(
+                ErrorCode::ValidationFailed,
+                'Only a bank transfer payment can be reported',
+                [['field' => 'method', 'message' => 'Chỉ áp dụng cho đơn chuyển khoản.']],
+            );
+        }
+
+        if ($this->status->isSettled()) {
+            throw new BusinessRuleViolation(
+                ErrorCode::PaymentAlreadyConfirmed,
+                sprintf('Payment is already %s', $this->status->value),
+                [[
+                    'field' => 'status',
+                    'message' => sprintf('Thanh toán này đã ở trạng thái "%s".', $this->status->label()),
+                ]],
+            );
+        }
+
+        return new self(
+            $this->id,
+            $this->storeId,
+            $this->orderId,
+            $this->orderCode,
+            $this->customerName,
+            $this->method,
+            PaymentStatus::Processing,
+            $this->amount,
+            $this->confirmedAmount,
+            $this->transferReference,
+            $this->qrPayload,
+            $this->bankAccountId,
+            $this->bankBin,
+            $this->bankAccountNumber,
+            $this->bankAccountName,
+            $this->bankTransactionReference,
+            $this->confirmedBy,
+            $this->confirmedByName,
+            $this->confirmedAt,
+            $this->expiresAt,
+            $this->createdAt,
+            $this->hasDiscrepancy,
+            $this->events,
+            $this->discrepancies,
+            $at,
+            // A bare "I've transferred" click with no photo keeps whichever
+            // receipt is already on file, the same way confirm() keeps the
+            // bank reference when the caller sends none.
+            $receiptPath ?? $this->customerReceiptPath,
         );
     }
 
@@ -245,6 +334,7 @@ final readonly class Payment
         string $actorId,
         ?string $actorName,
         DateTimeImmutable $at,
+        ?OverpaymentDisposition $disposition = null,
     ): PaymentDiscrepancy {
         return new PaymentDiscrepancy(
             $type,
@@ -254,6 +344,7 @@ final readonly class Payment
             $actorId,
             $actorName,
             $at,
+            $disposition,
         );
     }
 

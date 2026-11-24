@@ -182,6 +182,16 @@ Route::post('/orders/{order}/cancel', [CustomerOrderController::class, 'cancel']
     ->middleware(['store.resolve', 'throttle:commerce-write'])
     ->name('api.orders.cancel');
 
+/*
+ * "I have transferred", with an optional receipt photo. A notification only
+ * - see CustomerOrderController::reportTransfer() and CLAUDE.md section 6
+ * (decision dated 2026-11-24): nothing here can mark a payment PAID.
+ */
+Route::post('/orders/{order}/payment/report-transfer', [CustomerOrderController::class, 'reportTransfer'])
+    ->whereUuid('order')
+    ->middleware(['store.resolve', 'throttle:commerce-write'])
+    ->name('api.orders.payment.report-transfer');
+
 Route::middleware(['auth:sanctum', 'store.resolve'])
     ->prefix('admin')
     ->name('api.admin.')
@@ -311,6 +321,11 @@ Route::middleware(['auth:sanctum', 'store.resolve'])
             ->middleware('store.can:payment.read')
             ->whereUuid('payment')
             ->name('payments.show');
+
+        Route::get('/payments/{payment}/receipt', [AdminPaymentController::class, 'receipt'])
+            ->middleware('store.can:payment.read')
+            ->whereUuid('payment')
+            ->name('payments.receipt');
 
         Route::post('/payments/{payment}/confirm', [AdminPaymentController::class, 'confirm'])
             ->middleware(['store.can:payment.confirm', 'idempotent:payment.confirm', 'throttle:commerce-write'])

@@ -448,6 +448,7 @@ final class DemoOrderSeeder extends Seeder
             'store_id' => $storeId,
             'order_id' => $order->id,
             'order_code' => $order->order_code,
+            'customer_name' => $demo['customer'],
             'method' => $demo['method']->value,
             // Always created PENDING, settled below if at all: the action
             // that attaches VietQR instructions refuses an already-settled

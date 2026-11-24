@@ -8,6 +8,7 @@ use App\Modules\Identity\Application\StaffDirectory;
 use App\Modules\Payment\Application\DTO\ConfirmPaymentInput;
 use App\Modules\Payment\Domain\Contract\PaymentRepository;
 use App\Modules\Payment\Domain\Entity\Payment;
+use App\Modules\Payment\Domain\Enum\DiscrepancyType;
 use App\Shared\Application\Audit\AuditEntry;
 use App\Shared\Application\Contract\RecordsAuditTrail;
 use App\Shared\Application\Contract\RecordsDomainEvents;
@@ -64,6 +65,26 @@ final readonly class ConfirmPayment
             // that still has both numbers in hand to build the record from.
             $mismatch = $existing->classifyMismatch($input->amount);
 
+            // CLAUDE.md section 6 (decision dated 2026-11-24): an overpayment
+            // is never left as a bare number - the operator must say what
+            // becomes of the excess in the same call that accepts it. Checked
+            // here, before confirm() changes anything, rather than inside the
+            // entity: it is a request-shape requirement ("you must tell us"),
+            // not a payment-state rule the way isSettled()/amount matching are.
+            if ($mismatch === DiscrepancyType::Overpaid
+                && $input->acceptDiscrepancy
+                && $input->overpaymentDisposition === null
+            ) {
+                throw new BusinessRuleViolation(
+                    ErrorCode::PaymentAmountMismatch,
+                    'An overpayment must say what becomes of the excess',
+                    [[
+                        'field' => 'overpayment_disposition',
+                        'message' => 'Vui lòng chọn cách xử lý số tiền thừa trước khi xác nhận.',
+                    ]],
+                );
+            }
+
             $confirmed = $existing->confirm(
                 $input->amount,
                 $input->bankTransactionReference,
@@ -84,6 +105,7 @@ final readonly class ConfirmPayment
                         $actorId,
                         $this->staff->namesByIds([$actorId])[$actorId] ?? null,
                         $input->observedAt ?? now()->toImmutable(),
+                        $mismatch === DiscrepancyType::Overpaid ? $input->overpaymentDisposition : null,
                     ),
                 );
             }
@@ -95,6 +117,9 @@ final readonly class ConfirmPayment
                     'amount_owed' => $existing->amount->amount,
                     'bank_transaction_reference' => $input->bankTransactionReference,
                     'discrepancy' => $mismatch?->value,
+                    'overpayment_disposition' => $mismatch === DiscrepancyType::Overpaid
+                        ? $input->overpaymentDisposition?->value
+                        : null,
                 ])->inStore($storeId)->by($actorId),
             );
 

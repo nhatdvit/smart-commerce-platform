@@ -45,6 +45,7 @@ final class OrderPaymentResource extends JsonResource
                 'amount' => $payment->amount->jsonSerialize(),
                 'expires_at' => IsoTimestamp::of($payment->expiresAt),
                 'paid_at' => IsoTimestamp::of($payment->paidAt),
+                'customer_reported_at' => IsoTimestamp::of($payment->customerReportedAt),
             ],
             'bank_transfer' => $payment->method === PaymentMethod::BankTransfer ? [
                 'transfer_reference' => $payment->transferReference,

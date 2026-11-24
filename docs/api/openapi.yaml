@@ -834,6 +834,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /orders/{order}/payment/report-transfer:
+    post:
+      operationId: reportCustomerTransfer
+      tags: [Payment]
+      summary: "\"I have transferred\" (notification, not proof)"
+      description: |
+        Records that the customer themselves said they transferred, with an
+        optional receipt photo. Moves `payment.status` from `PENDING` to
+        `PROCESSING` ("chờ xác nhận thanh toán") — never to `PAID` (CLAUDE.md
+        section 6, decision dated 2026-11-24, amended 2026-11-24): only a
+        named staff member confirming the real bank credit can do that. This
+        exists so staff have a real notification and, if one was sent, a
+        receipt photo to look at on the confirm screen — they still type the
+        amount they actually saw land in the bank themselves.
+
+        Refused for a `CASH` payment, or one already settled.
+      security:
+        - sanctumSession: []
+        - guestOrderToken: []
+      parameters:
+        - $ref: '#/components/parameters/OrderPath'
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                receipt:
+                  type: string
+                  format: binary
+                  description: Optional JPEG, PNG or WebP photo of the transfer receipt.
+      responses:
+        '200':
+          description: The payment, with method-specific instructions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPayment'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: This payment is already settled. Carries `PAYMENT_ALREADY_CONFIRMED`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: |
+            Not a bank-transfer payment (`CASH` has nothing to transfer), or
+            the uploaded receipt failed validation. Carries `VALIDATION_FAILED`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /customer/orders:
     get:
       operationId: listOwnOrders
@@ -1358,6 +1416,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AdminPayment'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/StoreScopeDenied'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/payments/{payment}/receipt:
+    get:
+      operationId: getAdminPaymentReceipt
+      tags: [Admin - Payments]
+      summary: The customer's uploaded receipt photo
+      description: |
+        Permission `payment.read`, and the payment must belong to this store -
+        unlike a product photo, a receipt is sensitive and never public
+        (§8). 404 when no receipt is on file (`has_customer_receipt` on
+        `AdminPayment` says whether to call this at all).
+
+        This is a reference for staff to look at, never something the server
+        treats as proof - it has no effect on `POST .../confirm` (§6, decision
+        dated 2026-11-24).
+      parameters:
+        - $ref: '#/components/parameters/PaymentPath'
+      responses:
+        '200':
+          description: The receipt image.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -4603,6 +4700,14 @@ components:
           type: [string, 'null']
           format: date-time
           description: When staff confirmed the real money. Not when a QR was shown.
+        customer_reported_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When this customer last clicked "I have transferred" - a
+            notification shown to staff, never proof (§6, decision dated
+            2026-11-24). Only ever populated on the `OrderPayment` read a
+            customer gets back for their own order.
 
     Order:
       type: object
@@ -4916,6 +5021,14 @@ components:
           $ref: '#/components/schemas/Money'
         observed_amount:
           $ref: '#/components/schemas/Money'
+        disposition:
+          description: |
+            What becomes of the excess - set only when type is OVERPAID
+            (§6, decision dated 2026-11-24); null for every other type.
+          oneOf:
+            - type: string
+              enum: [KEEP, REFUND, DEBT]
+            - type: 'null'
         note:
           type: [string, 'null']
         recorded_by:
@@ -4950,7 +5063,7 @@ components:
       description: |
         A payment as staff see it, with the order it belongs to and the trail of
         who did what.
-      required: [id, order_id, order_code, method, status, amount]
+      required: [id, order_id, order_code, customer_name, method, status, amount]
       properties:
         id:
           $ref: '#/components/schemas/Uuid'
@@ -4958,6 +5071,12 @@ components:
           $ref: '#/components/schemas/Uuid'
         order_code:
           type: string
+        customer_name:
+          type: string
+          description: |
+            A snapshot of the order's contact name, copied at payment creation -
+            never a live join to the order (the same reason order_code is a
+            snapshot too).
         store_id:
           $ref: '#/components/schemas/Uuid'
         method:
@@ -4996,6 +5115,18 @@ components:
         expires_at:
           type: [string, 'null']
           format: date-time
+        customer_reported_at:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the customer themselves last clicked "I have transferred" -
+            a notification, never proof (§6, decision dated 2026-11-24).
+        has_customer_receipt:
+          type: boolean
+          description: |
+            Whether a receipt photo is attached to that report. The photo
+            itself is never embedded here - fetch it, once authorized for
+            this payment, from `GET /admin/payments/{payment}/receipt`.
         needs_attention:
           type: boolean
         discrepancies:
@@ -5049,6 +5180,14 @@ components:
         note:
           type: [string, 'null']
           maxLength: 500
+        overpayment_disposition:
+          type: [string, 'null']
+          enum: [KEEP, REFUND, DEBT, null]
+          description: |
+            What becomes of the excess, when `amount` exceeds what is owed
+            (§6, decision dated 2026-11-24). Required in that case once
+            `accept_discrepancy` is set; refused with `PAYMENT_AMOUNT_MISMATCH`
+            otherwise. Ignored when `amount` is not an overpayment.
 
     FlagPaymentRequest:
       type: object

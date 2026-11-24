@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Payment\Presentation\Http\Request;
 
 use App\Modules\Payment\Application\DTO\ConfirmPaymentInput;
+use App\Modules\Payment\Domain\Enum\OverpaymentDisposition;
 use App\Shared\Domain\ValueObject\Money;
 use DateTimeImmutable;
 use DateTimeZone;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Validates `ConfirmPaymentRequest`.
@@ -32,6 +34,16 @@ final class ConfirmPaymentRequest extends FormRequest
             'observed_at' => ['sometimes', 'nullable', 'date'],
             'accept_discrepancy' => ['sometimes', 'boolean'],
             'note' => ['sometimes', 'nullable', 'string', 'max:500'],
+            // Whether this is actually required - the amount turns out to
+            // exceed what is owed - depends on the payment this request has
+            // no way to load, so that half of the rule lives in
+            // ConfirmPayment::handle() instead; this only checks the shape.
+            'overpayment_disposition' => [
+                'sometimes',
+                'nullable',
+                'string',
+                Rule::in(array_column(OverpaymentDisposition::cases(), 'value')),
+            ],
         ];
     }
 
@@ -56,6 +68,9 @@ final class ConfirmPaymentRequest extends FormRequest
             observedAt: $this->timestamp($data['observed_at'] ?? null),
             acceptDiscrepancy: (bool) ($data['accept_discrepancy'] ?? false),
             note: isset($data['note']) && is_string($data['note']) ? trim($data['note']) : null,
+            overpaymentDisposition: isset($data['overpayment_disposition']) && is_string($data['overpayment_disposition'])
+                ? OverpaymentDisposition::from($data['overpayment_disposition'])
+                : null,
         );
     }
 

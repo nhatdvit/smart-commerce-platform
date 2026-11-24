@@ -229,6 +229,42 @@ it('refuses an amount mismatch unless accepted, then records it as a discrepancy
         ->assertJsonPath('needs_attention', true);
 });
 
+it('requires a disposition for an overpayment, then records it on the discrepancy', function (): void {
+    // CLAUDE.md section 6, decision dated 2026-11-24: an overpayment is never
+    // left as a bare number - accepting the mismatch is not enough, the
+    // operator must also say what becomes of the excess in the same call.
+    [$store, $manager] = storeWithStaff();
+    $order = orderInStore($store->id, method: PaymentMethod::BankTransfer);
+    $payment = Payment::query()->where('order_id', $order->id)->sole();
+    $extra = $payment->amount + 2_000;
+
+    $this->actingAs($manager, 'sanctum')
+        ->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            ['amount' => (string) $extra, 'accept_discrepancy' => true],
+            ['Idempotency-Key' => 'confirm-overpaid-1'],
+        )
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'PAYMENT_AMOUNT_MISMATCH');
+
+    expect($payment->refresh()->status)->toBe(PaymentStatus::Pending);
+
+    $this->actingAs($manager, 'sanctum')
+        ->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            [
+                'amount' => (string) $extra,
+                'accept_discrepancy' => true,
+                'overpayment_disposition' => 'KEEP',
+            ],
+            ['Idempotency-Key' => 'confirm-overpaid-2'],
+        )
+        ->assertOk()
+        ->assertJsonPath('status', 'PAID')
+        ->assertJsonPath('discrepancies.0.type', 'OVERPAID')
+        ->assertJsonPath('discrepancies.0.disposition', 'KEEP');
+});
+
 it('flags an exception without confirming or failing the payment, and audits it', function (): void {
     [$store, $manager] = storeWithStaff();
     $order = orderInStore($store->id, method: PaymentMethod::BankTransfer);

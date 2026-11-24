@@ -10,6 +10,7 @@
  */
 
 import { ApiError, api, newIdempotencyKey } from './api-client';
+import { adminEnv } from './env';
 
 export const PAYMENT_METHODS = ['CASH', 'BANK_TRANSFER'] as const;
 
@@ -33,7 +34,7 @@ export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 export const PAYMENT_STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
   PENDING: 'Chờ thanh toán',
-  PROCESSING: 'Đang xử lý',
+  PROCESSING: 'Chờ xác nhận thanh toán',
   PAID: 'Đã thanh toán',
   FAILED: 'Thất bại',
   PARTIALLY_REFUNDED: 'Hoàn một phần',
@@ -77,10 +78,16 @@ export const DISCREPANCY_TYPE_LABELS: Readonly<Record<DiscrepancyType, string>> 
   CANCELLED_ORDER_PAID: 'Đơn đã hủy nhưng có tiền về',
 };
 
+export const OVERPAYMENT_DISPOSITIONS = ['KEEP', 'REFUND', 'DEBT'] as const;
+
+export type OverpaymentDisposition = (typeof OVERPAYMENT_DISPOSITIONS)[number];
+
 export interface PaymentDiscrepancy {
   readonly type: DiscrepancyType;
   readonly expectedAmount: number | null;
   readonly observedAmount: number | null;
+  /** Set only when type is OVERPAID (CLAUDE.md §6, decision dated 2026-11-24). */
+  readonly disposition: OverpaymentDisposition | null;
   readonly note: string | null;
   readonly recordedBy: string | null;
   readonly recordedAt: string | null;
@@ -99,6 +106,7 @@ export interface AdminPayment {
   readonly id: string;
   readonly orderId: string;
   readonly orderCode: string;
+  readonly customerName: string;
   readonly storeId: string | null;
   readonly method: PaymentMethod;
   readonly status: PaymentStatus;
@@ -119,6 +127,10 @@ export interface AdminPayment {
   readonly confirmedBy: string | null;
   readonly confirmedAt: string | null;
   readonly expiresAt: string | null;
+  /** When the customer themselves clicked "I have transferred" - a notification, never proof. */
+  readonly customerReportedAt: string | null;
+  /** Whether a receipt photo is attached; fetch it from the dedicated receipt endpoint. */
+  readonly hasCustomerReceipt: boolean;
   readonly needsAttention: boolean;
   readonly discrepancies: readonly PaymentDiscrepancy[];
   readonly events: readonly PaymentEvent[];
@@ -144,6 +156,8 @@ export interface ConfirmPaymentInput {
   readonly bankTransactionReference?: string | null;
   readonly acceptDiscrepancy?: boolean;
   readonly note?: string | null;
+  /** Required only when `amount` exceeds what is owed (CLAUDE.md §6, 2026-11-24). */
+  readonly overpaymentDisposition?: OverpaymentDisposition | null;
 }
 
 export interface FlagPaymentInput {
@@ -173,10 +187,17 @@ function toDiscrepancyType(value: string): DiscrepancyType {
   return DISCREPANCY_TYPES.find((type) => type === value) ?? 'UNKNOWN_REFERENCE';
 }
 
+function toDisposition(value: string | null): OverpaymentDisposition | null {
+  return value === null
+    ? null
+    : (OVERPAYMENT_DISPOSITIONS.find((disposition) => disposition === value) ?? null);
+}
+
 interface ApiPaymentDiscrepancy {
   readonly type: string;
   readonly expected_amount: ApiMoney | null;
   readonly observed_amount: ApiMoney | null;
+  readonly disposition: string | null;
   readonly note: string | null;
   readonly recorded_by: string | null;
   readonly recorded_at: string | null;
@@ -194,6 +215,7 @@ interface ApiAdminPayment {
   readonly id: string;
   readonly order_id: string;
   readonly order_code: string;
+  readonly customer_name: string;
   readonly store_id: string | null;
   readonly method: string;
   readonly status: string;
@@ -206,6 +228,8 @@ interface ApiAdminPayment {
   readonly confirmed_by: string | null;
   readonly confirmed_at: string | null;
   readonly expires_at: string | null;
+  readonly customer_reported_at: string | null;
+  readonly has_customer_receipt: boolean;
   readonly needs_attention: boolean;
   readonly discrepancies: readonly ApiPaymentDiscrepancy[];
   readonly events: readonly ApiPaymentEvent[];
@@ -222,6 +246,7 @@ function toPayment(payment: ApiAdminPayment): AdminPayment {
     id: payment.id,
     orderId: payment.order_id,
     orderCode: payment.order_code,
+    customerName: payment.customer_name,
     storeId: payment.store_id,
     method: toMethod(payment.method),
     status: toStatus(payment.status),
@@ -234,11 +259,14 @@ function toPayment(payment: ApiAdminPayment): AdminPayment {
     confirmedBy: payment.confirmed_by,
     confirmedAt: payment.confirmed_at,
     expiresAt: payment.expires_at,
+    customerReportedAt: payment.customer_reported_at,
+    hasCustomerReceipt: payment.has_customer_receipt,
     needsAttention: payment.needs_attention,
     discrepancies: payment.discrepancies.map((discrepancy) => ({
       type: toDiscrepancyType(discrepancy.type),
       expectedAmount: toAmount(discrepancy.expected_amount),
       observedAmount: toAmount(discrepancy.observed_amount),
+      disposition: toDisposition(discrepancy.disposition),
       note: discrepancy.note,
       recordedBy: discrepancy.recorded_by,
       recordedAt: discrepancy.recorded_at,
@@ -297,6 +325,31 @@ export async function loadPayment(paymentId: string): Promise<AdminPayment> {
 }
 
 /**
+ * Fetches the customer's uploaded receipt as a local, viewable URL.
+ *
+ * A fetch with credentials rather than a plain `<img src>`, for the same
+ * reason every other read in this file goes through `api`: the endpoint is
+ * authenticated and store-scoped (CLAUDE.md section 8), not a public media
+ * file the way a product photo is. The caller is responsible for revoking
+ * the returned URL (`URL.revokeObjectURL`) once it is no longer shown.
+ */
+export async function loadPaymentReceiptUrl(paymentId: string): Promise<string> {
+  const response = await fetch(`${adminEnv.apiBaseUrl}/admin/payments/${paymentId}/receipt`, {
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, {
+      status_code: response.status,
+      code: 'RESOURCE_NOT_FOUND',
+      message: 'Không tải được ảnh biên lai.',
+    });
+  }
+
+  return URL.createObjectURL(await response.blob());
+}
+
+/**
  * Records that the money actually arrived. The only way a payment becomes
  * `PAID` - never a customer action, never automatic (CLAUDE.md section 6).
  *
@@ -316,6 +369,7 @@ export async function confirmPayment(
       bank_transaction_reference: input.bankTransactionReference ?? null,
       accept_discrepancy: input.acceptDiscrepancy ?? false,
       note: input.note ?? null,
+      overpayment_disposition: input.overpaymentDisposition ?? null,
     },
     { 'Idempotency-Key': newIdempotencyKey() },
   );

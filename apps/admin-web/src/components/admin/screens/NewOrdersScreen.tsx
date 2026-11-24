@@ -460,7 +460,7 @@ export function NewOrdersScreen() {
             <div className="panel-title">
               <h3>Danh sách chờ</h3>
               <span className="panel-note" aria-live="polite">
-                {ordersBusy ? 'Đang tải...' : 'Ưu tiên theo thời gian chờ · tự làm mới mỗi 30 giây'}
+                {ordersBusy ? 'Đang tải...' : 'Ưu tiên theo thời gian chờ · tự làm mới mỗi 5 giây'}
               </span>
             </div>
             <div className="order-list">
