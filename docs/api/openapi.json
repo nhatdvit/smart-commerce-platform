@@ -4423,7 +4423,7 @@
             },
             "ReportCustomerTransferRequest": {
                 "type": "object",
-                "description": "Validates one customer \"I have transferred\" report.\n\nThe receipt is optional - a bare click is still a real, useful\nnotification - and these rules are only the cheap first pass on what the\nclient declared; {@see \\App\\Modules\\Payment\\Application\\Action\\UploadPaymentReceipt}\ndecides the real type from the bytes.",
+                "description": "Validates one customer \"I have transferred\" report.\n\nLives in Order, not Payment, even though what it produces flows into\nPayment's `UploadPaymentReceipt`/`ReportCustomerTransfer` actions: a\nPresentation-layer class belongs to the module whose controller uses it,\nand `CustomerOrderController` may only reach Payment through its exported\nApplication layer (`ArchitectureTest`: \"the order module reaches payments\n * only through their exported contract\").\n\nThe receipt is optional - a bare click is still a real, useful\nnotification - and these rules are only the cheap first pass on what the\nclient declared; `UploadPaymentReceipt` decides the real type from the bytes.",
                 "properties": {
                     "receipt": {
                         "type": [

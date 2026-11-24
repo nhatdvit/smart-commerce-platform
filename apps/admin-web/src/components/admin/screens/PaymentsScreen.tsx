@@ -77,11 +77,22 @@ function groupFor(status: PaymentStatus): Exclude<PaymentGroup, 'all'> {
   return 'unpaid';
 }
 
-/** The simplified, four-word status this screen shows - never the real six-value label. */
+/**
+ * The simplified label this screen shows - never the real six-value one,
+ * except for `PROCESSING`: a customer's own "I have transferred" report
+ * (CLAUDE.md section 6, decision dated 2026-11-24) is exactly the thing this
+ * queue exists to surface, so it keeps its own distinct wording rather than
+ * collapsing into the same "chưa thanh toán" text as a plain, unreported
+ * PENDING row - both still belong to the same "unpaid" tab/tone.
+ */
+function statusLabel(status: PaymentStatus): string {
+  return status === 'PROCESSING' ? 'Chờ xác nhận thanh toán' : GROUP_LABELS[groupFor(status)];
+}
+
 function SimplePaymentStatusBadge({ status }: { readonly status: PaymentStatus }) {
   const group = groupFor(status);
 
-  return <span className={`status ${GROUP_TONE[group]}`}>{GROUP_LABELS[group]}</span>;
+  return <span className={`status ${GROUP_TONE[group]}`}>{statusLabel(status)}</span>;
 }
 
 type MethodFilter = 'all' | PaymentMethod;

@@ -838,14 +838,16 @@ paths:
     post:
       operationId: reportCustomerTransfer
       tags: [Payment]
-      summary: "\"I have transferred\" (notification only)"
+      summary: "\"I have transferred\" (notification, not proof)"
       description: |
         Records that the customer themselves said they transferred, with an
-        optional receipt photo — **never proof of payment** (CLAUDE.md section
-        6, decision dated 2026-11-24). `payment.status` never changes here;
-        this exists only so staff have a real notification and, if one was
-        sent, a receipt photo to look at on the confirm screen — they still
-        type the amount they actually saw land in the bank themselves.
+        optional receipt photo. Moves `payment.status` from `PENDING` to
+        `PROCESSING` ("chờ xác nhận thanh toán") — never to `PAID` (CLAUDE.md
+        section 6, decision dated 2026-11-24, amended 2026-11-24): only a
+        named staff member confirming the real bank credit can do that. This
+        exists so staff have a real notification and, if one was sent, a
+        receipt photo to look at on the confirm screen — they still type the
+        amount they actually saw land in the bank themselves.
 
         Refused for a `CASH` payment, or one already settled.
       security:

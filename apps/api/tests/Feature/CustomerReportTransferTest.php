@@ -22,7 +22,7 @@ beforeEach(function (): void {
     Storage::fake('local');
 });
 
-it('records a bare click as a notification only, leaving payment PENDING', function (): void {
+it('moves payment to PROCESSING as a notification, never PAID', function (): void {
     [$store] = storeWithStaff();
     enableBankTransfer($store->id);
     $item = activeMenuWithItem($store->id, 30_000);
@@ -36,11 +36,11 @@ it('records a bare click as a notification only, leaving payment PENDING', funct
     $this->withHeader('X-Guest-Order-Token', (string) $created->json('guest_order_token'))
         ->postJson("/api/v1/orders/{$orderId}/payment/report-transfer")
         ->assertOk()
-        ->assertJsonPath('payment.status', 'PENDING')
+        ->assertJsonPath('payment.status', 'PROCESSING')
         ->assertJson(fn ($json) => $json->has('payment.customer_reported_at')->etc());
 
     $payment = Payment::query()->where('order_id', $orderId)->sole();
-    expect($payment->status->value)->toBe('PENDING')
+    expect($payment->status->value)->toBe('PROCESSING')
         ->and($payment->customer_reported_at)->not->toBeNull()
         ->and($payment->customer_receipt_path)->toBeNull();
 });
@@ -69,12 +69,40 @@ it('accepts a receipt photo and makes it visible to staff, never to confirm itse
         ->getJson("/api/v1/admin/payments/{$payment->id}")
         ->assertOk()
         ->assertJsonPath('has_customer_receipt', true)
-        ->assertJsonPath('status', 'PENDING');
+        ->assertJsonPath('status', 'PROCESSING');
 
     $this->actingAs($manager, 'sanctum')
         ->get("/api/v1/admin/payments/{$payment->id}/receipt")
         ->assertOk()
         ->assertHeader('Content-Type', 'image/png');
+});
+
+it('still lets staff confirm a payment the customer already reported', function (): void {
+    [$store, $manager] = storeWithStaff();
+    enableBankTransfer($store->id);
+    $item = activeMenuWithItem($store->id, 30_000);
+
+    $created = $this->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($item->id, ['payment_method' => 'BANK_TRANSFER']))
+        ->assertCreated();
+    $orderId = (string) $created->json('order.id');
+
+    $this->withHeader('X-Guest-Order-Token', (string) $created->json('guest_order_token'))
+        ->postJson("/api/v1/orders/{$orderId}/payment/report-transfer")
+        ->assertOk()
+        ->assertJsonPath('payment.status', 'PROCESSING');
+
+    $payment = Payment::query()->where('order_id', $orderId)->sole();
+
+    $this->actingAs($manager, 'sanctum')
+        ->postJson(
+            "/api/v1/admin/payments/{$payment->id}/confirm",
+            ['amount' => (string) $payment->amount],
+            ['Idempotency-Key' => 'confirm-after-report-1'],
+        )
+        ->assertOk()
+        ->assertJsonPath('status', 'PAID');
 });
 
 it('refuses to report a cash payment, which has nothing to transfer', function (): void {

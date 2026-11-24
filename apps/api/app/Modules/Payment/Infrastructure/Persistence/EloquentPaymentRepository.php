@@ -215,10 +215,27 @@ final class EloquentPaymentRepository implements PaymentRepository
             ->whereKey($payment->id)
             ->sole();
 
+        $from = $row->status;
+
         $row->fill([
+            'status' => $payment->status->value,
             'customer_reported_at' => $payment->customerReportedAt,
             'customer_receipt_path' => $payment->customerReceiptPath,
         ])->save();
+
+        if ($from !== $payment->status) {
+            PaymentEventModel::query()->create([
+                'store_id' => $payment->storeId,
+                'payment_id' => $payment->id,
+                'event_type' => 'CUSTOMER_REPORTED_TRANSFER',
+                'from_status' => $from->value,
+                'to_status' => $payment->status->value,
+                // No actor: the customer themselves triggered this, not staff
+                // (same reasoning as a system-moved event having none).
+                'actor_id' => null,
+                'created_at' => $payment->customerReportedAt ?? now(),
+            ]);
+        }
 
         return $this->toEntity($row->refresh(), withHistory: false);
     }

@@ -233,11 +233,14 @@ final readonly class Payment
      * Records that the customer themselves clicked "I have transferred",
      * optionally with a receipt photo.
      *
-     * Never a status change and never proof (CLAUDE.md section 6, decision
-     * dated 2026-11-24): the receipt is shown to staff as a reference
-     * alongside the `Số tiền thực nhận` field they must still fill in
-     * themselves after checking the real bank credit - this method cannot be
-     * reached from `confirm()`, and nothing here moves `status`.
+     * Moves `status` to `PROCESSING` ("chờ xác nhận thanh toán") - a real,
+     * approved transition between two already-documented, never-settled
+     * statuses (CLAUDE.md section 6; decision dated 2026-11-24, amended
+     * 2026-11-24). It is still never proof and never `PAID`: the receipt is
+     * shown to staff as a reference alongside the `Số tiền thực nhận` field
+     * they must still fill in themselves after checking the real bank
+     * credit - this method cannot be reached from `confirm()`, and nothing
+     * here can produce `PAID`.
      *
      * Refused once the payment is settled or is not a bank transfer at all -
      * a cash order has no transfer to report, and a settled payment has
@@ -271,7 +274,7 @@ final readonly class Payment
             $this->orderCode,
             $this->customerName,
             $this->method,
-            $this->status,
+            PaymentStatus::Processing,
             $this->amount,
             $this->confirmedAmount,
             $this->transferReference,

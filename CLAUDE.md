@@ -167,7 +167,12 @@ Allow validated transitions to `CANCELLED` / `EXPIRED` under explicit rules. Cas
 - When a staff-confirmed amount exceeds what an order owes, the operator must say on the spot what becomes of the excess: `KEEP` (store keeps it — a cash round-up or a deliberate tip), `REFUND` (handed back immediately), or `DEBT` (owed back, settled later). Required whenever an overpayment is accepted; confirmation is refused with `PAYMENT_AMOUNT_MISMATCH` without it.
 - This is the one exception carved out of "a general refund policy is not yet settled" below — scoped to overpayment only. Underpayment still has no structured disposition; it is accepted or refused the same way it always was.
 - Recorded on the `OVERPAID` discrepancy row only (`disposition`, nullable, `NULL` for every other discrepancy type); never a new ledger or revenue line for MVP.
-- A customer-side "I have transferred" action with an optional uploaded receipt (shown to staff as a reference alongside the required self-entered amount, never as auto-filled or auto-accepted proof) is a separate, not-yet-built customer-web feature — do not assume it exists when reading `AdminPayment` or rendering its confirm screen.
+
+### Customer "I have transferred" report — approved decision (2026-11-24)
+- Built: a customer may report their own bank-transfer order as transferred, with an optional receipt photo, from the post-checkout confirmation screen (`POST /orders/{order}/payment/report-transfer`, guest-token-or-session authorized the same way `cancel()`/`payment()` are).
+- This **does** move `payment.status` from `PENDING` to `PROCESSING` ("chờ xác nhận thanh toán") — a transition between two already-documented, never-settled statuses, not a new one. It is still never `PAID`: only a named staff member confirming the real bank credit can do that, exactly as before. Closing the confirmation screen without reporting (`Hoàn tất` alone) leaves payment `PENDING` ("chưa thanh toán").
+- The receipt, if any, is shown to staff as a reference on the confirm screen alongside the required self-entered `Số tiền thực nhận` — never auto-filled, never treated as proof, never a reason to skip the manual bank check. Stored per-payment, served only through an authorized admin endpoint (`GET /admin/payments/{payment}/receipt`), never a public media URL.
+- A repeated report (same or another device) simply updates `customer_reported_at`/the receipt and is idempotent; it never regresses a payment already `PAID`/`PARTIALLY_REFUNDED`/`REFUNDED` (refused with `PAYMENT_ALREADY_CONFIRMED`), and never applies to `CASH` (refused with `VALIDATION_FAILED`).
 
 ### Payment states
 `PENDING`, `PROCESSING`, `PAID`, `FAILED`, `PARTIALLY_REFUNDED`, `REFUNDED` (extend only with documented transitions).

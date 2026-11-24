@@ -65,7 +65,7 @@ export const PAYMENT_METHOD_LABELS: Readonly<Record<PaymentMethod, string>> = {
 
 export const PAYMENT_STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
   PENDING: 'Chờ thanh toán',
-  PROCESSING: 'Đang xử lý',
+  PROCESSING: 'Chờ xác nhận thanh toán',
   PAID: 'Đã thanh toán',
   FAILED: 'Thất bại',
   PARTIALLY_REFUNDED: 'Hoàn một phần',
