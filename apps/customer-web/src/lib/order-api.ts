@@ -113,7 +113,15 @@ export interface CashInstructions {
   readonly collectAt: 'PICKUP_COUNTER' | 'ON_DELIVERY';
 }
 
-export interface OrderConfirmation {
+/** The shape every "here's how to pay" view needs - a fresh checkout and a past order's own `GET .../payment` alike. */
+export interface OrderPaymentInfo {
+  readonly paymentMethod: PaymentMethod;
+  readonly paymentStatus: string;
+  readonly bankTransfer: BankTransferInstructions | null;
+  readonly cash: CashInstructions | null;
+}
+
+export interface OrderConfirmation extends OrderPaymentInfo {
   readonly orderId: string;
   readonly orderCode: string;
   readonly status: string;
@@ -121,10 +129,6 @@ export interface OrderConfirmation {
   readonly contactName: string;
   readonly items: readonly OrderLine[];
   readonly total: number;
-  readonly paymentMethod: PaymentMethod;
-  readonly paymentStatus: string;
-  readonly bankTransfer: BankTransferInstructions | null;
-  readonly cash: CashInstructions | null;
   /** Only for a guest checkout - needed to read this order back later. */
   readonly guestOrderToken: string | null;
 }
@@ -133,23 +137,8 @@ function toAmount(money: ApiMoney): number {
   return parseInt(money.amount, 10);
 }
 
-function toConfirmation(data: ApiOrderCreated): OrderConfirmation {
-  const { order, payment } = data;
-
+function toOrderPayment(payment: ApiOrderPayment): OrderPaymentInfo {
   return {
-    orderId: order.id,
-    orderCode: order.order_code,
-    status: order.status,
-    createdAt: order.created_at,
-    contactName: order.contact.name,
-    items: order.items.map((item) => ({
-      productName: item.product_name,
-      variantName: item.variant_name,
-      quantity: item.quantity,
-      unitPrice: toAmount(item.unit_price),
-      lineTotal: toAmount(item.line_total),
-    })),
-    total: toAmount(order.totals.total),
     paymentMethod: payment.payment.method,
     paymentStatus: payment.payment.status,
     bankTransfer:
@@ -165,8 +154,47 @@ function toConfirmation(data: ApiOrderCreated): OrderConfirmation {
             qrPayload: payment.bank_transfer.qr_payload,
           },
     cash: payment.cash === null ? null : { collectAt: payment.cash.collect_at },
+  };
+}
+
+function toConfirmation(data: ApiOrderCreated): OrderConfirmation {
+  const { order } = data;
+
+  return {
+    orderId: order.id,
+    orderCode: order.order_code,
+    status: order.status,
+    createdAt: order.created_at,
+    contactName: order.contact.name,
+    items: order.items.map((item) => ({
+      productName: item.product_name,
+      variantName: item.variant_name,
+      quantity: item.quantity,
+      unitPrice: toAmount(item.unit_price),
+      lineTotal: toAmount(item.line_total),
+    })),
+    total: toAmount(order.totals.total),
+    ...toOrderPayment(data.payment),
     guestOrderToken: data.guest_order_token,
   };
+}
+
+/**
+ * How to pay for an order already placed - the same instructions checkout
+ * itself returns, re-fetched for "Đơn hàng của tôi" so a customer who closed
+ * the confirmation screen can still get back to the QR and report a
+ * transfer. A signed-in customer needs no guest token, the session cookie
+ * already proves ownership; a guest would pass `guestOrderToken` exactly as
+ * `reportTransfer` does.
+ */
+export async function getOrderPayment(
+  orderId: string,
+  guestOrderToken: string | null = null,
+): Promise<OrderPaymentInfo> {
+  const headers = guestOrderToken === null ? undefined : { 'X-Guest-Order-Token': guestOrderToken };
+  const data = await api.get<ApiOrderPayment>(`/orders/${orderId}/payment`, headers);
+
+  return toOrderPayment(data);
 }
 
 /** A fresh key for one checkout attempt - a new one per submit, including a retry after a genuine failure. */
