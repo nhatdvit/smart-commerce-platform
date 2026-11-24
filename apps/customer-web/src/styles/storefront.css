@@ -886,11 +886,248 @@ footer {
   font-weight: 700;
   text-align: right;
   word-break: break-word;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* --------------------------------------------- Order-confirmed modal --
+ * "Đặt hàng thành công" - ported from the approved design mock
+ * (vietqr-popup), wider than the other modals so the QR and bank details
+ * can sit side by side on anything past phone width.
+ */
+.confirm-modal {
+  width: min(760px, calc(100% - 24px));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.confirm-close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+}
+.confirm-head {
+  position: relative;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 24px 56px 18px 24px;
+}
+.confirm-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #19ae78;
+  color: #fff;
+  box-shadow: 0 0 0 8px #eaf8f1;
+}
+.confirm-head h3 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.5px;
+}
+.confirm-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.confirm-order-chip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #f0f3f7;
+  border-radius: 12px;
+  padding: 7px 11px;
+  margin-top: 10px;
+  width: fit-content;
+  font-size: 12.5px;
+}
+.confirm-order-chip span {
+  color: var(--muted);
+}
+.confirm-body {
+  overflow: auto;
+  padding: 0 24px 4px;
+}
+.confirm-section {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  background: #f7f9fc;
+  margin-bottom: 14px;
+}
+.confirm-section h4 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.confirm-payment-grid {
+  display: grid;
+  grid-template-columns: 0.85fr 1.4fr;
+  gap: 20px;
+  align-items: center;
+  margin: 16px 0;
+}
+.confirm-qr-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.confirm-bank-col .qr-details {
+  max-width: none;
+  margin: 0;
+}
+.confirm-amount {
+  margin-top: 12px;
+  background: #fff2cc;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.confirm-amount span {
+  display: block;
+  color: #7a5a00;
+  font-size: 12px;
+}
+.confirm-amount strong {
+  font-size: 24px;
+  color: #9a6200;
+}
+.confirm-info {
+  background: #eaf2fc;
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #27466e;
+  font-size: 12.5px;
+  margin: 0 0 4px;
+}
+.confirm-section-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 800;
+  color: var(--muted);
+  margin: 16px 0 10px;
+}
+.confirm-section-label:before,
+.confirm-section-label:after {
+  content: '';
+  height: 1px;
+  background: var(--line);
+  flex: 1;
+}
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.confirm-receipt-preview {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.confirm-receipt-preview img {
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: 10px;
+}
+.confirm-steps {
+  display: flex;
+  margin: 16px 0;
+  text-align: center;
+  font-size: 12px;
+}
+.confirm-step {
+  flex: 1;
+  position: relative;
+  color: var(--muted);
+}
+.confirm-step:not(:last-child):after {
+  content: '';
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line);
+}
+.confirm-step i {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 6px;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  font-style: normal;
+}
+.confirm-step.is-done i {
+  background: var(--yellow);
+  border-color: var(--yellow);
+  color: var(--navy);
+}
+.confirm-step.is-active i {
+  border-color: var(--yellow);
+}
+.confirm-step.is-active {
+  color: var(--navy);
+  font-weight: 700;
+}
+.confirm-step small {
+  display: block;
+  font-weight: 400;
+  color: var(--muted);
+}
+.confirm-payment-status {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  font-size: 13px;
+}
+.confirm-payment-status strong {
+  color: #996400;
+}
+.confirm-foot {
+  padding: 14px 24px 20px;
+  background: #fff;
+  border-top: 1px solid var(--line);
+}
+.copy-btn {
+  background: transparent;
+  border: 0;
+  padding: 2px;
+  display: inline-flex;
+  color: var(--muted);
+  border-radius: 6px;
+}
+.copy-btn:hover {
+  background: #e3e8ef;
+  color: var(--navy);
+}
+@media (max-width: 640px) {
+  .confirm-payment-grid,
+  .confirm-actions {
+    grid-template-columns: 1fr;
+  }
 }
 .transfer-report {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--line);
   display: flex;
   flex-direction: column;
   gap: 10px;

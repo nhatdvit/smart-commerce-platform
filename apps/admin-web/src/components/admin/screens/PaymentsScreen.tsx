@@ -97,6 +97,11 @@ function SimplePaymentStatusBadge({ status }: { readonly status: PaymentStatus }
 
 type MethodFilter = 'all' | PaymentMethod;
 
+/** Whether there is still a QR worth showing - never for a payment already settled. */
+function isSettled(status: PaymentStatus): boolean {
+  return status === 'PAID' || status === 'PARTIALLY_REFUNDED' || status === 'REFUNDED';
+}
+
 /** What staff actually collected, or what is owed when nothing was confirmed yet. */
 function collected(payment: AdminPayment): number {
   return payment.confirmedAmount ?? payment.amount;
@@ -293,13 +298,27 @@ export function PaymentsScreen() {
                           <SimplePaymentStatusBadge status={payment.status} />
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className={isOutstanding ? 'row-btn primary' : 'row-btn'}
-                            onClick={() => openModal({ kind: 'payment', paymentId: payment.id })}
-                          >
-                            {isOutstanding ? 'Xác nhận thu tiền' : 'Chi tiết →'}
-                          </button>
+                          <div className="row-actions">
+                            {payment.method !== 'BANK_TRANSFER' ||
+                            isSettled(payment.status) ? null : (
+                              <button
+                                type="button"
+                                className="row-btn"
+                                onClick={() =>
+                                  openModal({ kind: 'payment-qr', paymentId: payment.id })
+                                }
+                              >
+                                Mã QR
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className={isOutstanding ? 'row-btn primary' : 'row-btn'}
+                              onClick={() => openModal({ kind: 'payment', paymentId: payment.id })}
+                            >
+                              {isOutstanding ? 'Xác nhận thu tiền' : 'Chi tiết →'}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

@@ -639,6 +639,11 @@ main {
   color: white;
   border-color: var(--navy);
 }
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .search-row {
   display: flex;
   gap: 10px;
@@ -2493,6 +2498,10 @@ nav button > span {
   border-radius: 8px;
   background: white;
   padding: 8px;
+}
+.payment-qr-large {
+  width: 260px;
+  height: 260px;
 }
 
 /* ----------------------------------------------------- Payment confirm dialog --
