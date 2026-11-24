@@ -1468,17 +1468,16 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
   /**
    * Orders the counter has not yet acknowledged - exactly the "Đơn hàng mới"
-   * queue (`PLACED` only). Deliberately excludes `PENDING_PAYMENT`: that is a
-   * transfer still awaiting staff verification on the Payments screen, a
-   * different action on a different screen, not something this badge's own
-   * "chờ xác nhận" wording means - counting it here made the sidebar badge
-   * disagree with the New Orders screen's own "Chờ xác nhận" card, which only
-   * ever counted `PLACED`.
+   * queue's own two statuses (`PENDING_PAYMENT` and `PLACED`), so the badge
+   * never disagrees with that screen's own "Chờ xác nhận" card again.
    *
    * Taken from the server's counts, not from the loaded page, so the badge is
    * the real number even when the screen is showing one filtered page.
    */
-  const pendingCount = useMemo(() => orderCounts.PLACED ?? 0, [orderCounts]);
+  const pendingCount = useMemo(
+    () => (orderCounts.PENDING_PAYMENT ?? 0) + (orderCounts.PLACED ?? 0),
+    [orderCounts],
+  );
 
   const products = useMemo<readonly MenuProduct[]>(() => snapshot?.products ?? [], [snapshot]);
 

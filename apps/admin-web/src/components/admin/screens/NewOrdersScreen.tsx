@@ -296,12 +296,13 @@ function QueueDetail({ orderId }: { readonly orderId: string }) {
 /**
  * Đơn hàng mới: the counter's triage board.
  *
- * Scoped to `status=PLACED` only - a cash order that has just come in, or a
- * bank-transfer order whose payment staff already verified on the Payments
- * screen. An order still waiting on an unverified transfer
- * (`PENDING_PAYMENT`) never appears here; it is not this screen's queue to
- * clear (CLAUDE.md section 6 - settlement is confirmed, not acted on, by
- * hand).
+ * Scoped to `PENDING_PAYMENT` and `PLACED` - every order still new to the
+ * counter, whether it is a cash order that just came in, a bank-transfer
+ * order staff already verified, or one still waiting on an unverified
+ * transfer. A `PENDING_PAYMENT` row is visible so staff see it is coming at
+ * all, but it carries no "Xác nhận đơn" action here - `forwardStatus()`
+ * returns nothing for it on purpose, because confirming its payment is the
+ * Payments screen's job, never a status change (CLAUDE.md section 6).
  */
 export function NewOrdersScreen() {
   const { orders, orderCounts, ordersBusy, ordersError, loadOrders, newOrderIds } = useAdminData();
@@ -324,7 +325,12 @@ export function NewOrdersScreen() {
   }, [query]);
 
   useEffect(() => {
-    loadOrders({ statuses: ['PLACED'], search, newestFirst: false, limit: 50 });
+    loadOrders({
+      statuses: ['PENDING_PAYMENT', 'PLACED'],
+      search,
+      newestFirst: false,
+      limit: 50,
+    });
   }, [loadOrders, search]);
 
   /**
@@ -385,6 +391,10 @@ export function NewOrdersScreen() {
     return true;
   });
   const urgentCount = orders.filter((order) => isUrgent(order, now)).length;
+  // Store-wide, not just this loaded page - the same two statuses this
+  // screen's own query asks for, combined the same way OrdersScreen's own
+  // "Chờ xác nhận" bucket already does.
+  const waitingCount = (orderCounts.PENDING_PAYMENT ?? 0) + (orderCounts.PLACED ?? 0);
   const firstVisibleId = visible[0]?.id ?? null;
   const selectionVisible = selectedId !== null && visible.some((order) => order.id === selectedId);
 
@@ -404,7 +414,7 @@ export function NewOrdersScreen() {
       <div className="metrics">
         <Metric
           title="Chờ xác nhận"
-          value={orderCounts.PLACED ?? orders.length}
+          value={waitingCount}
           icon={<IconClock size={18} />}
           color="#fff3d9"
           foot="Trên toàn cửa hàng"
