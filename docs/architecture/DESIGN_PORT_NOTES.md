@@ -8,6 +8,7 @@ place the result deviates from them.
 | `phu-quy-food-storefront-v5`    | `apps/customer-web` |
 | `breakfast-admin-responsive-v1` | `apps/admin-web`    |
 | `bep-nha-minh-storefront`       | `apps/customer-web` |
+| `my-orders-v2`                  | `apps/customer-web` |
 
 Both packages were plain HTML, CSS and vanilla JavaScript — no build tool, no
 `package.json`, no dependencies. They were unpacked outside the repository and
@@ -317,6 +318,54 @@ same one-off-script convention as the food photos above):
 **Visual effect of 3-5:** faithful to the interactive package; a few
 cosmetic details from the static result screenshot were not chased where
 doing so meant inventing content or coupling to data that is not fixed.
+
+## "Đơn hàng của tôi" redesign (`my-orders-v2`)
+
+The order-history route (`OrdersPage.tsx`) went from a flat list to the
+delivered layout: a dark sidebar (account card, nav list, loyalty promo),
+a hero banner, five status tabs with live counts, search/date/sort filters
+and a five-per-page pager - all new, over the full order history (a real
+shop's is small, same reasoning as the homepage's product-count comment),
+so counts, search and sort are correct across every order, not just the
+page the API happened to return first.
+
+Everything that was already real stayed real and got no less capable:
+cancel now asks for the required reason the backend's `CancelOrder` already
+accepted but the old UI never collected; reorder is unchanged
+(`getOrder` + `addToStoredCart`); and "Thanh toán ngay" is a genuine
+addition - `GET /orders/{id}/payment` (already used right after checkout,
+now also reachable from history) backing the exact same QR/bank-details/
+report-transfer flow, factored out of `ModalLayer.tsx` into
+`payment-widgets.tsx` (`BankTransferPanel`, `QrCode`, `CopyButton`,
+`TransferReportForm`) so both places render the identical, real thing
+rather than a second implementation.
+
+### Deviations
+
+1. **No star ratings.** The delivered demo lets a customer rate a completed
+   order (stored to its own `localStorage` key, nothing server-side). There
+   is no review/rating module anywhere in CLAUDE.md's module table or the
+   codebase - adding the button would mean either inventing a fake
+   persisted-looking feature or a real one with no backend to receive it.
+   Left out entirely rather than shipping either.
+
+2. **Cancel stays available for a confirmed order, not just a pending one.**
+   The demo's own cancel button only ever appears on its `pending` bucket.
+   The real rule (`CancelOrder::CUSTOMER_CANCELLABLE`, already wired before
+   this redesign) also allows cancelling a `CONFIRMED` order, before the
+   kitchen starts - narrowing the button to match the demo would have taken
+   away a capability customers already had.
+
+3. **Most sidebar nav items are inert**, same as the delivered demo's own
+   `.menu` rows (plain, unwired `<div>`s in its markup): "Thông tin tài
+   khoản", "Sổ địa chỉ giao hàng" and "Mã giảm giá của tôi" have no page or
+   feature behind them anywhere in this app. "Đăng xuất" is real
+   (`logoutCustomer`) since leaving a prominent, labelled control dead would
+   be a worse regression than the demo's own non-interactivity; "Điểm
+   thưởng" shows the real balance (`getOwnLoyalty`) inline instead.
+
+**Visual effect:** faithful to the design; the one feature gap (ratings) is
+a backend gap, not a styling shortcut.
 
 ## Not ported (absent from the delivered designs)
 

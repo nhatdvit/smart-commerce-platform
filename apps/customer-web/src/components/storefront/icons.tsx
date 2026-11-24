@@ -343,7 +343,10 @@ export function IconCopy({ size }: IconProps) {
   );
 }
 
-/** The hero's decorative prev/next controls - there is only ever one slide. */
+/**
+ * The hero's decorative prev/next controls (there is only ever one slide),
+ * and a forward affordance elsewhere - "Xem chi tiết", "Thanh toán ngay".
+ */
 export function IconChevronLeft({ size }: IconProps) {
   return (
     <Icon size={size}>
@@ -356,6 +359,107 @@ export function IconChevronRight({ size }: IconProps) {
   return (
     <Icon size={size}>
       <path d="m9 18 6-6-6-6" />
+    </Icon>
+  );
+}
+
+/** "Đơn hàng của tôi": an order awaiting confirmation. */
+export function IconClock({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.2 2" />
+    </Icon>
+  );
+}
+
+/** A cancelled order. */
+export function IconXCircle({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6" />
+    </Icon>
+  );
+}
+
+/** Awaiting payment - the status tile for an unpaid, unconfirmed order. */
+export function IconWallet({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-9Z" />
+      <path d="M14 12h4v3h-4a1.5 1.5 0 0 1 0-3Z" />
+    </Icon>
+  );
+}
+
+/** A completed order - the "Hoàn thành" tab. */
+export function IconMedal({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <circle cx="12" cy="9" r="5" />
+      <path d="m9 13.3-1.5 6.4 4.5-2.4 4.5 2.4-1.5-6.4" />
+    </Icon>
+  );
+}
+
+/** The date filter. */
+export function IconCalendar({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4" />
+    </Icon>
+  );
+}
+
+/** The sort filter. */
+export function IconSort({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M7 4v16M4 7l3-3 3 3M17 20V4M14 17l3 3 3-3" />
+    </Icon>
+  );
+}
+
+/** "Đặt lại" - reorder a past order's items. */
+export function IconRefresh({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M4 12a8 8 0 0 1 14-5.2M20 12a8 8 0 0 1-14 5.2" />
+      <path d="M17.5 3.5v3.5H14M6.5 20.5V17H10" />
+    </Icon>
+  );
+}
+
+/** Delivery address book. */
+export function IconMapPin({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M12 21s-7-6.1-7-11.5a7 7 0 1 1 14 0C19 14.9 12 21 12 21Z" />
+      <circle cx="12" cy="9.5" r="2.3" />
+    </Icon>
+  );
+}
+
+/** "Mã giảm giá của tôi" - a coupon, distinct from the ticket icon used for promotions. */
+export function IconTag({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M20 11.4 12.6 4H5a1 1 0 0 0-1 1v7.6a1 1 0 0 0 .3.7l8.4 8.4a1 1 0 0 0 1.4 0l6.3-6.3a1 1 0 0 0 0-1.4Z" />
+      <circle cx="8.3" cy="8.3" r="1.3" />
+    </Icon>
+  );
+}
+
+/** "Thanh toán ngay" - the VietQR payment action. */
+export function IconQrCode({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1" />
+      <rect x="14" y="3.5" width="6.5" height="6.5" rx="1" />
+      <rect x="3.5" y="14" width="6.5" height="6.5" rx="1" />
+      <path d="M14 14h3v3h-3zM19 14h1.5M14 19h1.5M19 19h1.5" />
     </Icon>
   );
 }
