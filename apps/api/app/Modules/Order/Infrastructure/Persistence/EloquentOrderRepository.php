@@ -146,6 +146,18 @@ final class EloquentOrderRepository implements OrderRepository
         return $counts;
     }
 
+    public function pendingPaymentOrderIds(string $storeId): array
+    {
+        return array_values(
+            DB::table('orders')
+                ->where('store_id', $storeId)
+                ->where('status', OrderStatus::PendingPayment->value)
+                ->pluck('id')
+                ->map(static fn (mixed $id): string => (string) $id)
+                ->all(),
+        );
+    }
+
     /**
      * @return array{items: list<Order>, next_cursor: string|null, has_more: bool}
      */

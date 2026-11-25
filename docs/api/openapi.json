@@ -992,13 +992,17 @@
                                             "additionalProperties": {
                                                 "type": "integer"
                                             }
+                                        },
+                                        "awaiting_payment_confirmation_count": {
+                                            "type": "integer"
                                         }
                                     },
                                     "required": [
                                         "items",
                                         "next_cursor",
                                         "has_more",
-                                        "status_counts"
+                                        "status_counts",
+                                        "awaiting_payment_confirmation_count"
                                     ]
                                 }
                             }

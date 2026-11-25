@@ -110,6 +110,31 @@ it('leaves finished orders out of the open counts', function (): void {
         ->assertJsonMissingPath('status_counts.COMPLETED');
 });
 
+it('counts PENDING_PAYMENT orders a customer has already reported as transferred', function (): void {
+    [$store, $manager] = storeWithStaff();
+
+    // Reported: genuinely waiting on staff, so the operations queue needs it.
+    $reported = Order::factory()->inStore($store->id)->status(OrderStatus::PendingPayment)->totalling(30_000)->create();
+    OrderItem::factory()->on($reported->id, $store->id)->quantity(1)->create([
+        'product_name' => 'Xôi gà',
+        'unit_price_amount' => 30_000,
+    ]);
+    Payment::factory()->on($reported->id, $store->id, $reported->order_code, 30_000)
+        ->reportedByCustomer()
+        ->create();
+
+    // Not reported: nobody has acted on this one yet, so it is not counted.
+    orderInStore($store->id, OrderStatus::PendingPayment, method: PaymentMethod::BankTransfer);
+
+    // An ordinary PLACED order is unaffected by this count.
+    orderInStore($store->id);
+
+    $this->actingAs($manager, 'sanctum')
+        ->getJson('/api/v1/admin/orders')
+        ->assertOk()
+        ->assertJsonPath('awaiting_payment_confirmation_count', 1);
+});
+
 it('works the queue oldest first, and lists history newest first on request', function (): void {
     [$store, $manager] = storeWithStaff();
     $first = orderInStore($store->id);

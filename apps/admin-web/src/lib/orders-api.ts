@@ -175,6 +175,13 @@ export interface OrderPage {
   readonly counts: OrderStatusCounts;
   readonly nextCursor: string | null;
   readonly hasMore: boolean;
+  /**
+   * Store-wide, like `counts` - of this store's `PENDING_PAYMENT` orders, how
+   * many a customer has already reported as transferred. Genuinely waiting
+   * on staff, as opposed to one nobody has acted on yet (CLAUDE.md section
+   * 6 - a display grouping, never an order status of its own).
+   */
+  readonly awaitingPaymentConfirmationCount: number;
 }
 
 interface Money {
@@ -257,6 +264,7 @@ interface ApiOrderPage {
   readonly status_counts: Readonly<Record<string, number>>;
   readonly next_cursor: string | null;
   readonly has_more: boolean;
+  readonly awaiting_payment_confirmation_count: number;
 }
 
 const UNKNOWN_CUSTOMER = 'Khách lẻ';
@@ -381,6 +389,7 @@ function toPage(page: ApiOrderPage): OrderPage {
     counts,
     nextCursor: page.next_cursor,
     hasMore: page.has_more,
+    awaitingPaymentConfirmationCount: page.awaiting_payment_confirmation_count,
   };
 }
 

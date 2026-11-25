@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { money } from '@/lib/money';
 import {
@@ -298,15 +298,26 @@ function QueueDetail({ orderId }: { readonly orderId: string }) {
 /**
  * Đơn hàng mới: the counter's triage board.
  *
- * Scoped to `status=PLACED` only - a cash order that has just come in, or a
- * bank-transfer order whose payment staff already verified on the Payments
- * screen. An order still waiting on an unverified transfer
- * (`PENDING_PAYMENT`) never appears here; it is not this screen's queue to
- * clear (CLAUDE.md section 6 - settlement is confirmed, not acted on, by
- * hand).
+ * `PLACED` - a cash order that has just come in, or a bank-transfer order
+ * whose payment staff already verified on the Payments screen - plus a
+ * `PENDING_PAYMENT` one once a customer has reported the transfer: genuinely
+ * waiting on staff, as opposed to one nobody has acted on. That second group
+ * has no forward step of its own here (`forwardStatus` is `undefined` for
+ * `PENDING_PAYMENT`) - confirming the real bank credit is still the Payments
+ * screen's job, never a status change (CLAUDE.md section 6). An unreported
+ * `PENDING_PAYMENT` order is still excluded; there is nothing to triage about
+ * it yet.
  */
 export function NewOrdersScreen() {
-  const { orders, orderCounts, ordersBusy, ordersError, loadOrders, newOrderIds } = useAdminData();
+  const {
+    orders,
+    orderCounts,
+    awaitingPaymentConfirmationCount,
+    ordersBusy,
+    ordersError,
+    loadOrders,
+    newOrderIds,
+  } = useAdminData();
 
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
@@ -326,8 +337,22 @@ export function NewOrdersScreen() {
   }, [query]);
 
   useEffect(() => {
-    loadOrders({ statuses: ['PLACED'], search, newestFirst: false, limit: 50 });
+    loadOrders({
+      statuses: ['PLACED', 'PENDING_PAYMENT'],
+      search,
+      newestFirst: false,
+      limit: 50,
+    });
   }, [loadOrders, search]);
+
+  // The query above over-fetches PENDING_PAYMENT (the API has no payment-status
+  // filter - see ListOrdersRequest): keep only the ones a customer has already
+  // reported, same rule the sidebar badge counts by.
+  const queue = useMemo(
+    () =>
+      orders.filter((order) => order.status === 'PLACED' || order.paymentStatus === 'PROCESSING'),
+    [orders],
+  );
 
   /**
    * "Đã xử lý trong phiên": how many orders left this fixed-status list since
@@ -337,7 +362,7 @@ export function NewOrdersScreen() {
    * processing the orders it hides.
    */
   useEffect(() => {
-    const currentIds = new Set(orders.map((order) => order.id));
+    const currentIds = new Set(queue.map((order) => order.id));
     const searchChanged = lastSearch.current !== search;
     lastSearch.current = search;
 
@@ -357,7 +382,7 @@ export function NewOrdersScreen() {
       setHandledCount((count) => count + left);
     }
     knownIds.current = currentIds;
-  }, [orders, search]);
+  }, [queue, search]);
 
   // One beep per genuinely new arrival, never on the first load of the screen.
   useEffect(() => {
@@ -373,7 +398,7 @@ export function NewOrdersScreen() {
   }, [newOrderIds, soundOn]);
 
   const now = Date.now();
-  const visible = orders.filter((order) => {
+  const visible = queue.filter((order) => {
     if (typeFilter === 'urgent') {
       return isUrgent(order, now);
     }
@@ -386,7 +411,7 @@ export function NewOrdersScreen() {
 
     return true;
   });
-  const urgentCount = orders.filter((order) => isUrgent(order, now)).length;
+  const urgentCount = queue.filter((order) => isUrgent(order, now)).length;
   const firstVisibleId = visible[0]?.id ?? null;
   const selectionVisible = selectedId !== null && visible.some((order) => order.id === selectedId);
 
@@ -406,7 +431,7 @@ export function NewOrdersScreen() {
       <div className="metrics">
         <Metric
           title="Chờ xác nhận"
-          value={orderCounts.PLACED ?? orders.length}
+          value={(orderCounts.PLACED ?? 0) + awaitingPaymentConfirmationCount}
           icon={<IconClock size={18} />}
           color="#fff3d9"
           foot="Trên toàn cửa hàng"
