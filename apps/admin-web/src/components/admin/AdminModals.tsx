@@ -40,8 +40,8 @@ import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
   canCancel,
+  confirmableStatus,
   dateTimeLabel,
-  forwardStatus,
   loadOrderDetail,
   timeLabel,
   type AdminOrderDetail,
@@ -326,7 +326,7 @@ function OrderModal({ orderId }: { orderId: string }) {
     );
   }
 
-  const next = forwardStatus(order.status);
+  const next = confirmableStatus(order);
   // No money was ever collected, so there is nothing a refund policy needs
   // to look at - a real anomaly (a payment row with no method at all) reads
   // the same way, honestly, rather than as a settled transaction.

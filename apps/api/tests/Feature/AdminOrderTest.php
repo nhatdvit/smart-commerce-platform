@@ -355,6 +355,49 @@ it('will not place an order awaiting a transfer by hand', function (): void {
         ->and($order->placed_at)->toBeNull();
 });
 
+it('refuses to confirm an order awaiting a transfer nobody has reported', function (): void {
+    [$store, $manager] = storeWithStaff();
+    $order = orderInStore(
+        $store->id,
+        OrderStatus::PendingPayment,
+        method: PaymentMethod::BankTransfer,
+    );
+
+    $this->actingAs($manager, 'sanctum')
+        ->postJson("/api/v1/admin/orders/{$order->id}/status", ['to_status' => 'CONFIRMED'])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'INVALID_STATE_TRANSITION');
+
+    expect($order->refresh()->status)->toBe(OrderStatus::PendingPayment);
+});
+
+it('lets a reported transfer be confirmed by hand, before its payment is verified', function (): void {
+    [$store, $manager] = storeWithStaff();
+    $order = Order::factory()->inStore($store->id)->status(OrderStatus::PendingPayment)->totalling(30_000)->create();
+    OrderItem::factory()->on($order->id, $store->id)->quantity(1)->create([
+        'product_name' => 'Xôi gà',
+        'unit_price_amount' => 30_000,
+    ]);
+    Payment::factory()->on($order->id, $store->id, $order->order_code, 30_000)
+        ->reportedByCustomer()
+        ->create();
+
+    // Confirming the order never touches payment - that stays PROCESSING
+    // until staff verify the real bank credit on the Payments screen,
+    // whichever order the two confirmations happen in (CLAUDE.md section 6,
+    // approved 2026-11-25).
+    $this->actingAs($manager, 'sanctum')
+        ->postJson("/api/v1/admin/orders/{$order->id}/status", ['to_status' => 'CONFIRMED'])
+        ->assertOk()
+        ->assertJsonPath('status', 'CONFIRMED')
+        ->assertJsonPath('payment.status', 'PROCESSING');
+
+    expect($order->refresh())
+        ->status->toBe(OrderStatus::Confirmed)
+        ->placed_at->not->toBeNull();
+    expect(Payment::query()->where('order_id', $order->id)->sole()->status)->toBe(PaymentStatus::Processing);
+});
+
 it('lets an order awaiting a transfer be cancelled', function (): void {
     [$store, $manager] = storeWithStaff();
     $order = orderInStore(

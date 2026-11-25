@@ -8,8 +8,8 @@ import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
   canCancel,
+  confirmableStatus,
   dateTimeLabel,
-  forwardStatus,
   itemsSummary,
   loadOrderDetail,
   timeLabel,
@@ -177,7 +177,7 @@ function QueueDetail({ orderId }: { readonly orderId: string }) {
     moveOrder(order.id, 'CANCELLED', reason.trim());
   }
 
-  const next = forwardStatus(order.status);
+  const next = confirmableStatus(order);
 
   return (
     <div className="order-detail">
@@ -302,9 +302,10 @@ function QueueDetail({ orderId }: { readonly orderId: string }) {
  * whose payment staff already verified on the Payments screen - plus a
  * `PENDING_PAYMENT` one once a customer has reported the transfer: genuinely
  * waiting on staff, as opposed to one nobody has acted on. That second group
- * has no forward step of its own here (`forwardStatus` is `undefined` for
- * `PENDING_PAYMENT`) - confirming the real bank credit is still the Payments
- * screen's job, never a status change (CLAUDE.md section 6). An unreported
+ * gets its own "✓ Xác nhận đơn" (via `confirmableStatus`, not `forwardStatus`
+ * - CLAUDE.md section 6, "Order confirmation independent of payment
+ * confirmation"): staff may confirm the order right away, before anyone
+ * checks the real bank credit on the Payments screen. An unreported
  * `PENDING_PAYMENT` order is still excluded; there is nothing to triage about
  * it yet.
  */

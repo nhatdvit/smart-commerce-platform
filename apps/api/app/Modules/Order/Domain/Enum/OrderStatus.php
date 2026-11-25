@@ -48,9 +48,13 @@ enum OrderStatus: string
     public function allowedNext(): array
     {
         return match ($this) {
-            // Placed is reached by confirming the payment, not by hand; see
-            // Application\Action\TransitionOrder.
-            self::PendingPayment => [self::Placed, self::Cancelled, self::Expired],
+            // Placed is reached by confirming the payment, not by hand - see
+            // Application\Action\TransitionOrder. Confirmed is reachable by
+            // hand too, but only once a customer has reported the transfer
+            // (CLAUDE.md section 6, "Order confirmation independent of
+            // payment confirmation") - the same guard decides that, not this
+            // list, since it needs the real payment status to answer.
+            self::PendingPayment => [self::Placed, self::Confirmed, self::Cancelled, self::Expired],
             self::Placed => [self::Confirmed, self::Cancelled],
             self::Confirmed => [self::Preparing, self::Cancelled],
             self::Preparing => [self::Ready, self::Cancelled],
