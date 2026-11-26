@@ -1988,6 +1988,10 @@ body {
   --ink: #182536;
   --muted: #64748b;
   --muted-2: #94a3b8;
+  /* #64748b clears 4.5:1 on white but not on the cream surface below - a
+     real Lighthouse failure, measured, not assumed. This is the darkest
+     step that still reads as secondary text and clears AA on both. */
+  --muted-strong: #4b5566;
   --line: #e8e9ed;
   --green: #15803d;
   --red: #dc2626;
@@ -2031,7 +2035,7 @@ body {
 }
 .product-section-intro {
   margin: calc(var(--sp-2) * -1) 0 var(--sp-5);
-  color: var(--muted);
+  color: var(--muted-strong);
   font-size: 14px;
   max-width: 52ch;
 }
