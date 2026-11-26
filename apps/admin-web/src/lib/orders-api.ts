@@ -184,6 +184,13 @@ export interface OrderPage {
   readonly counts: OrderStatusCounts;
   readonly nextCursor: string | null;
   readonly hasMore: boolean;
+  /**
+   * Store-wide, like `counts` - of this store's `PENDING_PAYMENT` orders, how
+   * many a customer has already reported as transferred. Genuinely waiting
+   * on staff, as opposed to one nobody has acted on yet (CLAUDE.md section
+   * 6 - a display grouping, never an order status of its own).
+   */
+  readonly awaitingPaymentConfirmationCount: number;
 }
 
 interface Money {
@@ -266,6 +273,7 @@ interface ApiOrderPage {
   readonly status_counts: Readonly<Record<string, number>>;
   readonly next_cursor: string | null;
   readonly has_more: boolean;
+  readonly awaiting_payment_confirmation_count: number;
 }
 
 const UNKNOWN_CUSTOMER = 'Khách lẻ';
@@ -390,6 +398,7 @@ function toPage(page: ApiOrderPage): OrderPage {
     counts,
     nextCursor: page.next_cursor,
     hasMore: page.has_more,
+    awaitingPaymentConfirmationCount: page.awaiting_payment_confirmation_count,
   };
 }
 
@@ -477,16 +486,14 @@ export async function transitionOrder(
 }
 
 /**
- * The forward step a staff member can take from here, if any.
+ * The forward step a staff member can take from here, if any - from the
+ * order's status alone, which is enough for every status except
+ * `PENDING_PAYMENT` (see {@see confirmableStatus}, which also looks at how
+ * it is being paid).
  *
- * A mirror of the server's state machine, for choosing a button label. Two
- * moves are deliberately absent:
- *
- *   - PENDING_PAYMENT has no forward step. Such an order joins the queue when
- *     its payment is confirmed against the real bank credit, which is the
- *     payments screen's job - never a status change (CLAUDE.md section 6).
- *   - CANCELLED is not a step forward; it has its own control and needs a
- *     reason.
+ * A mirror of the server's state machine, for choosing a button label.
+ * CANCELLED is not a step forward; it has its own control and needs a
+ * reason, so it is deliberately absent too.
  */
 export function forwardStatus(status: OrderStatus): OrderStatus | undefined {
   switch (status) {
@@ -501,6 +508,29 @@ export function forwardStatus(status: OrderStatus): OrderStatus | undefined {
     default:
       return undefined;
   }
+}
+
+/**
+ * The forward step for a button labelled "Xác nhận đơn", which - unlike
+ * {@see forwardStatus} - also has to answer for `PENDING_PAYMENT`: confirming
+ * the order is a different decision from confirming its payment (CLAUDE.md
+ * section 6, "Order confirmation independent of payment confirmation",
+ * approved 2026-11-25), so once a customer has reported the transfer
+ * (`paymentStatus === 'PROCESSING'`), staff may confirm the order itself
+ * right away, before anyone has checked the real bank credit. An order still
+ * `PENDING_PAYMENT` with nothing reported has nothing to confirm yet - this
+ * is only ever a hint for the button; the server re-checks the real payment
+ * status itself.
+ */
+export function confirmableStatus(order: {
+  readonly status: OrderStatus;
+  readonly paymentStatus: PaymentStatus | null;
+}): OrderStatus | undefined {
+  if (order.status === 'PENDING_PAYMENT') {
+    return order.paymentStatus === 'PROCESSING' ? 'CONFIRMED' : undefined;
+  }
+
+  return forwardStatus(order.status);
 }
 
 /** Whether this order can still be cancelled. The server decides for real. */

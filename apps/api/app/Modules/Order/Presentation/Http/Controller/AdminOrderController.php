@@ -67,6 +67,7 @@ final class AdminOrderController extends Controller
             'next_cursor' => $page['next_cursor'],
             'has_more' => $page['has_more'],
             'status_counts' => $this->orders->openStatusCounts($storeId),
+            'awaiting_payment_confirmation_count' => $this->view->countAwaitingPaymentConfirmation($storeId),
         ]);
     }
 

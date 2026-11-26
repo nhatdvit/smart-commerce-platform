@@ -111,6 +111,8 @@ interface AdminContextValue {
   readonly orders: readonly AdminOrder[];
   /** Open orders per status, counted by the server across the whole store. */
   readonly orderCounts: OrderStatusCounts;
+  /** Of this store's `PENDING_PAYMENT` orders, how many a customer has already reported as transferred. */
+  readonly awaitingPaymentConfirmationCount: number;
   readonly products: readonly MenuProduct[];
   readonly coupons: readonly Coupon[];
   readonly loyaltySummary: LoyaltySummary | null;
@@ -311,6 +313,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
   const [orders, setOrders] = useState<readonly AdminOrder[]>([]);
   const [orderCounts, setOrderCounts] = useState<OrderStatusCounts>({});
+  const [awaitingPaymentConfirmationCount, setAwaitingPaymentConfirmationCount] = useState(0);
   const [orderCursor, setOrderCursor] = useState<string | null>(null);
   const [ordersBusy, setOrdersBusy] = useState(false);
   const [ordersError, setOrdersError] = useState('');
@@ -514,6 +517,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
         setOrders((current) => (cursor === undefined ? page.orders : [...current, ...page.orders]));
         setOrderCounts(page.counts);
+        setAwaitingPaymentConfirmationCount(page.awaitingPaymentConfirmationCount);
         setOrderCursor(page.nextCursor);
         setOrdersError('');
         setSession('signed-in');
@@ -526,6 +530,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
           setSession('signed-out');
           setOrders([]);
           setOrderCounts({});
+          setAwaitingPaymentConfirmationCount(0);
           setOrdersError('');
 
           return;
@@ -1469,17 +1474,22 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
 
   /**
    * Orders the counter has not yet acknowledged - exactly the "Đơn hàng mới"
-   * queue (`PLACED` only). Deliberately excludes `PENDING_PAYMENT`: that is a
-   * transfer still awaiting staff verification on the Payments screen, a
-   * different action on a different screen, not something this badge's own
-   * "chờ xác nhận" wording means - counting it here made the sidebar badge
-   * disagree with the New Orders screen's own "Chờ xác nhận" card, which only
-   * ever counted `PLACED`.
+   * queue: every `PLACED` order, plus a `PENDING_PAYMENT` one only once a
+   * customer has reported the transfer (`awaitingPaymentConfirmationCount`,
+   * CLAUDE.md section 6). A `PENDING_PAYMENT` order nobody has acted on yet
+   * is still excluded - verifying the bank credit itself is still a
+   * different action on the Payments screen, not something this badge's own
+   * "chờ xác nhận" wording means.
    *
-   * Taken from the server's counts, not from the loaded page, so the badge is
-   * the real number even when the screen is showing one filtered page.
+   * Both halves come from the server's own counts, not from the loaded page,
+   * so the badge is the real number even when the screen is showing one
+   * filtered page - and it never disagrees with the New Orders screen's own
+   * "Chờ xác nhận" card, which counts the exact same two things.
    */
-  const pendingCount = useMemo(() => orderCounts.PLACED ?? 0, [orderCounts]);
+  const pendingCount = useMemo(
+    () => (orderCounts.PLACED ?? 0) + awaitingPaymentConfirmationCount,
+    [orderCounts, awaitingPaymentConfirmationCount],
+  );
 
   const products = useMemo<readonly MenuProduct[]>(() => snapshot?.products ?? [], [snapshot]);
 
@@ -1487,6 +1497,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     () => ({
       orders,
       orderCounts,
+      awaitingPaymentConfirmationCount,
       products,
       coupons,
       loyaltySummary,
@@ -1575,6 +1586,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     [
       orders,
       orderCounts,
+      awaitingPaymentConfirmationCount,
       products,
       coupons,
       loyaltySummary,

@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { money } from '@/lib/money';
-import { itemsSummary, timeLabel, type AdminOrder, type OrderStatus } from '@/lib/orders-api';
+import {
+  PAYMENT_STATUS_LABELS,
+  itemsSummary,
+  timeLabel,
+  type AdminOrder,
+  type OrderStatus,
+} from '@/lib/orders-api';
 
 import { useAdminData } from '../AdminDataProvider';
 import { IconCheckCircle, IconClock, IconDownload, IconReceipt, IconXCircle } from '../icons';
@@ -384,9 +390,9 @@ export function OrdersScreen() {
                                       : 'status waiting'
                                   }
                                 >
-                                  {order.paymentStatus === 'PAID'
-                                    ? 'Đã thanh toán'
-                                    : 'Chưa thanh toán'}
+                                  {order.paymentStatus === null
+                                    ? 'Chưa thanh toán'
+                                    : PAYMENT_STATUS_LABELS[order.paymentStatus]}
                                 </span>
                                 <br />
                                 <span className="cell-sub">

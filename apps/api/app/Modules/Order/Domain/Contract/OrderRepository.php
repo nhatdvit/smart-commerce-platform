@@ -94,4 +94,14 @@ interface OrderRepository
      * @return array<string, int> status value => count, every open status present
      */
     public function openStatusCounts(string $storeId): array;
+
+    /**
+     * Every order in this store currently waiting on an unverified bank
+     * transfer - ids only, so the caller can ask Payment's exported read
+     * model which of them a customer has actually reported (CLAUDE.md
+     * section 3: this module does not touch the payments table itself).
+     *
+     * @return list<string>
+     */
+    public function pendingPaymentOrderIds(string $storeId): array;
 }

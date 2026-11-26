@@ -7,6 +7,8 @@ namespace App\Modules\Order\Application\Action;
 use App\Modules\Order\Domain\Contract\OrderRepository;
 use App\Modules\Order\Domain\Entity\Order;
 use App\Modules\Order\Domain\Enum\OrderStatus;
+use App\Modules\Payment\Application\Contract\ProvidesPaymentSummaries;
+use App\Modules\Payment\Domain\Enum\PaymentStatus;
 use App\Shared\Application\Audit\AuditEntry;
 use App\Shared\Application\Contract\RecordsAuditTrail;
 use App\Shared\Application\Contract\RecordsDomainEvents;
@@ -38,6 +40,7 @@ final readonly class TransitionOrder
         private OrderRepository $orders,
         private RecordsAuditTrail $audit,
         private RecordsDomainEvents $events,
+        private ProvidesPaymentSummaries $payments,
     ) {}
 
     /**
@@ -110,29 +113,57 @@ final readonly class TransitionOrder
 
     /**
      * An order waiting for a transfer is placed by confirming the money, not
-     * by hand.
+     * by hand - but once a customer has reported the transfer, confirming the
+     * order itself is a separate decision staff may make right away (CLAUDE.md
+     * section 6, "Order confirmation independent of payment confirmation",
+     * approved 2026-11-25): the two confirmations may happen in either order.
      *
-     * `PENDING_PAYMENT -> PLACED` is a legal edge of the state machine - it is
-     * how a verified transfer puts an order into service - but it belongs to
-     * the payment confirmation flow, which checks the real bank credit and
-     * records who confirmed it. Reachable from this endpoint, it would be a
-     * one-click way to serve an order nobody paid for, which is exactly what
-     * CLAUDE.md section 6 forbids.
+     * `PENDING_PAYMENT -> PLACED` stays exactly as before: a legal edge of the
+     * state machine, but reachable only by {@see
+     * \App\Modules\Order\Application\Listener\AdvanceOrderOnPaymentConfirmed}
+     * reacting to the real bank credit, never from this endpoint - that would
+     * be a one-click way to queue an order nobody paid for.
+     *
+     * `PENDING_PAYMENT -> CONFIRMED` is reachable from here, but only once
+     * {@see customerHasReportedTransfer()} says so; an order nobody has acted
+     * on at all stays unconfirmable by hand, same reasoning.
      */
     private function assertSettlementIsNotDoneByHand(Order $order, OrderStatus $to): void
     {
-        if ($order->status !== OrderStatus::PendingPayment || $to !== OrderStatus::Placed) {
+        if ($order->status !== OrderStatus::PendingPayment) {
             return;
         }
 
-        throw new BusinessRuleViolation(
-            ErrorCode::InvalidStateTransition,
-            'An order awaiting a bank transfer is placed by confirming its payment, not by a status change',
-            [[
-                'field' => 'to_status',
-                'message' => 'Đơn chờ chuyển khoản chỉ vào hàng đợi khi thanh toán được xác nhận ở màn hình Thanh toán.',
-            ]],
-        );
+        if ($to === OrderStatus::Placed) {
+            throw new BusinessRuleViolation(
+                ErrorCode::InvalidStateTransition,
+                'An order awaiting a bank transfer is placed by confirming its payment, not by a status change',
+                [[
+                    'field' => 'to_status',
+                    'message' => 'Đơn chờ chuyển khoản chỉ vào hàng đợi khi thanh toán được xác nhận ở màn hình Thanh toán.',
+                ]],
+            );
+        }
+
+        if ($to === OrderStatus::Confirmed && ! $this->customerHasReportedTransfer($order)) {
+            throw new BusinessRuleViolation(
+                ErrorCode::InvalidStateTransition,
+                'An order awaiting a bank transfer can only be confirmed by hand once the customer has reported the transfer',
+                [[
+                    'field' => 'to_status',
+                    'message' => 'Chỉ có thể xác nhận đơn này sau khi khách đã báo chuyển khoản.',
+                ]],
+            );
+        }
+    }
+
+    /** Re-checks the real payment status itself rather than trusting the request (CLAUDE.md section 6). */
+    private function customerHasReportedTransfer(Order $order): bool
+    {
+        $orderId = (string) $order->id;
+        $snapshot = $this->payments->forOrders($order->storeId, [$orderId])[$orderId] ?? null;
+
+        return $snapshot !== null && $snapshot->status === PaymentStatus::Processing;
     }
 
     /** Cancelling is the move a customer will ask about, so it has to say why. */
