@@ -1,6 +1,7 @@
 'use client';
 
 import { CartLines, CartTotalsRows } from './CartContents';
+import { IconCart } from './icons';
 import type { CartKey, CartLine, CartTotals } from './use-storefront';
 
 interface CartDrawerProps {
@@ -22,7 +23,9 @@ export function CartDrawer({
   return (
     <div className="drawer" role="dialog" aria-modal="true" aria-label="Giỏ hàng">
       <div className="drawer-head">
-        <h3>🛒 Giỏ hàng của bạn</h3>
+        <h3>
+          <IconCart size={17} /> Giỏ hàng của bạn
+        </h3>
         <button type="button" className="close" onClick={onClose}>
           ✕
         </button>
