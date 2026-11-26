@@ -114,7 +114,17 @@ interface ProductSectionsProps {
   readonly onAdd: (card: MenuProductCard) => void;
   readonly onToggleFavorite: (productId: string) => void;
   readonly onSeeAll: (category: CategoryFilter) => void;
+  /** Which tab is active; decides whether the "Tất cả" layout below applies. */
+  readonly categoryFilter: CategoryFilter;
 }
+
+/**
+ * Categories carved out of the shared grid when "Tất cả" is selected, each
+ * into its own editorial section - a dish this specific to the brand (an
+ * assortment of specialty chả, or a bundled combo) reads better as its own
+ * moment than as four more tiles in a long undifferentiated grid.
+ */
+const EDITORIAL_SLUGS = ['cha-dac-san', 'combo'] as const;
 
 /** One category's worth of dishes, in a named section. */
 function section(
@@ -127,9 +137,17 @@ function section(
   onToggleFavorite: (productId: string) => void,
   onSeeAll: (category: CategoryFilter) => void,
   seeAllTarget: CategoryFilter,
+  /** Set only for the one collection that gets editorial treatment (see below). */
+  intro?: string,
 ) {
   return (
-    <section key={key} className="product-section">
+    <section
+      key={key}
+      className={
+        intro === undefined ? 'product-section' : 'product-section product-section--editorial'
+      }
+    >
+      {intro === undefined ? null : <p className="product-section-intro">{intro}</p>}
       <div className="section-heading">
         <h2>
           {icon} {heading}
@@ -166,27 +184,9 @@ export function ProductSections({
   onAdd,
   onToggleFavorite,
   onSeeAll,
+  categoryFilter,
 }: ProductSectionsProps) {
-  const byCategory = new Map<
-    string,
-    { readonly name: string; readonly cards: MenuProductCard[] }
-  >();
-  const order: string[] = [];
-
-  for (const card of cards) {
-    const key = card.category?.id ?? '';
-    const name = card.category?.name ?? 'Món khác';
-    const existing = byCategory.get(key);
-
-    if (existing === undefined) {
-      byCategory.set(key, { name, cards: [card] });
-      order.push(key);
-    } else {
-      existing.cards.push(card);
-    }
-  }
-
-  if (order.length === 0) {
+  if (cards.length === 0) {
     return (
       <div id="menu">
         <p className="notice">Chưa có món nào trên thực đơn hôm nay.</p>
@@ -194,27 +194,74 @@ export function ProductSections({
     );
   }
 
+  // A specific tab (a real category, or "Ưu đãi") already narrows `cards` to
+  // what belongs together, so it is one grid - the per-category split below
+  // is only for "Tất cả", where otherwise a category with one or two dishes
+  // would still claim a full-width row of its own (DESIGN_PORT_NOTES.md).
+  if (categoryFilter !== 'all') {
+    return (
+      <div id="menu">
+        <div className="product-grid">
+          {cards.map((card) => (
+            <ProductCard
+              key={card.productId}
+              card={card}
+              liked={favorites.includes(card.productId)}
+              onAdd={onAdd}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const editorialSlugs: readonly string[] = EDITORIAL_SLUGS;
+  const everyday = cards.filter((card) => !editorialSlugs.includes(card.category?.slug ?? ''));
+  const editorialHeading: Readonly<Record<(typeof EDITORIAL_SLUGS)[number], string>> = {
+    'cha-dac-san': 'Chả đặc sản nhà làm',
+    combo: 'Combo & ưu đãi',
+  };
+  /** Only the specialty collection reads as a brand moment; combo is a plain section. */
+  const editorialIntro: Partial<Record<(typeof EDITORIAL_SLUGS)[number], string>> = {
+    'cha-dac-san': 'Chả cuốn tay, hấp chín mỗi ngày - không trộn lẫn với thực đơn thường.',
+  };
+  const editorial = EDITORIAL_SLUGS.map((slug) => {
+    const group = cards.filter((card) => card.category?.slug === slug);
+
+    return { slug, id: group[0]?.category?.id ?? slug, cards: group };
+  }).filter((group) => group.cards.length > 0);
+
   return (
     <div id="menu">
-      {order.map((key, index) => {
-        const group = byCategory.get(key);
+      {everyday.length === 0
+        ? null
+        : section(
+            'everyday',
+            'Thực đơn hôm nay',
+            headingIconFor(0),
+            everyday,
+            favorites,
+            onAdd,
+            onToggleFavorite,
+            onSeeAll,
+            'all',
+          )}
 
-        if (group === undefined) {
-          return null;
-        }
-
-        return section(
-          key,
-          group.name,
-          headingIconFor(index),
+      {editorial.map((group, index) =>
+        section(
+          group.slug,
+          editorialHeading[group.slug],
+          headingIconFor(index + 1),
           group.cards,
           favorites,
           onAdd,
           onToggleFavorite,
           onSeeAll,
-          key === '' ? 'all' : key,
-        );
-      })}
+          group.id,
+          editorialIntro[group.slug],
+        ),
+      )}
     </div>
   );
 }
