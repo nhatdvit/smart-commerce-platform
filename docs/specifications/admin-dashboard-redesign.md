@@ -448,11 +448,13 @@ Nhánh mới cắt từ `origin/main` theo CLAUDE.md §13 (**không** stack lên
 
 Ba điểm khác với bản thiết kế đã duyệt, đều do thực tế mã nguồn chứ không phải đổi ý:
 
-1. **Cảnh báo "chuyển khoản chờ đối soát" lấy từ số liệu của kỳ đang xem**, không phải
-   từ `awaiting_payment_confirmation_count`. Trường đó chỉ tồn tại trên nhánh
-   `fix/SCP-118-...` chưa merge vào `main`; nhánh này cắt từ `main` theo đúng quy tắc
-   §13 CLAUDE.md nên không có nó. Số đếm vẫn là số thật (các đơn có `payment.status =
-PROCESSING`), chỉ giới hạn trong khoảng thời gian đang chọn.
+1. **Cảnh báo "chuyển khoản chờ đối soát" đếm theo kỳ đang xem**, không dùng
+   `awaiting_payment_confirmation_count` của server — và vẫn giữ như vậy sau khi merge
+   `main`. Trường đó chỉ đếm đơn còn `PENDING_PAYMENT`; từ quyết định 2026-11-25, nhân
+   viên có thể xác nhận đơn trước khi đối soát tiền, nên một đơn đã `CONFIRMED` mà
+   khách đã báo chuyển khoản vẫn là tiền chưa đối soát — server đếm 0 cho đúng trường
+   hợp đó (đã kiểm chứng với đơn SCP-20261124-4738). Cảnh báo vì vậy đếm theo
+   `payment.status = PROCESSING`, đổi lại chỉ thấy các đơn đặt trong khoảng đang chọn.
 2. **Bổ sung dropdown tài khoản ở topbar** (brief §7B yêu cầu, bản thiết kế §2.3 chỉ vẽ
    avatar). Nó cũng giải phóng chỗ trên topbar ở màn hình nhỏ, nơi nút "Đăng xuất" dạng
    chữ làm vỡ hàng ở 390px.

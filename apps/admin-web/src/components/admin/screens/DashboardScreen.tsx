@@ -130,11 +130,19 @@ export function DashboardScreen() {
     }
 
     /*
-     * Transfers the customer says they have made, from the window on screen.
-     * A payment in `PROCESSING` is waiting on a person either way, so the
-     * count is true whatever the range - it is simply blind to orders placed
-     * outside it, which is why the figure is also spelled out in the payment
-     * panel rather than only here.
+     * Transfers a customer says they have made that nobody has checked
+     * against the bank yet, from the window on screen.
+     *
+     * Deliberately NOT the server’s `awaiting_payment_confirmation_count`, which
+     * counts only orders still in `PENDING_PAYMENT`. Staff may confirm an
+     * order before its payment is verified (CLAUDE.md section 6, decision of
+     * 2026-11-25), so a reported transfer on an order already CONFIRMED is
+     * still unreconciled money that count reports as zero. A payment in
+     * `PROCESSING` is the question being asked here, whatever the order
+     * has moved on to.
+     *
+     * The cost is that it sees only orders placed inside the chosen window,
+     * which is why the payment panel spells the figure out as well.
      */
     if (showMoney && awaitingReconciliation > 0) {
       list.push({
