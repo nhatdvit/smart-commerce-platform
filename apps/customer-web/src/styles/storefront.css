@@ -1957,6 +1957,172 @@ body {
 
 /*
  * ================================================================
+ * Homepage redesign v3 - Modern Minimal premium pass.
+ *
+ * A third cascading layer over v5/v2 above, same convention: appended
+ * rather than rewriting the rules it supersedes, so this stays a
+ * reviewable diff of its own. Scope is intentionally bounded to what
+ * was actually verified in the browser this pass:
+ *   - the brand palette re-grounded on the approved token values below;
+ *   - the one real anti-pattern fix (every price read in alarm red);
+ *   - the editorial "Chả đặc sản" collection and the footer, both new
+ *     markup built straight on the token/spacing scale, not retrofit;
+ *   - the hero's prev/next arrows and dots, which pointed at a second
+ *     and third slide that were never real - one photo, not a carousel.
+ *
+ * Deliberately NOT touched: the many hardcoded hex values still spread
+ * through the v5/v2 blocks above (gradients, category-active gold,
+ * status tints) that `var(--navy)`/`var(--yellow)` do not reach. Pulling
+ * every one of those onto this token set is a real, separate migration -
+ * doing it unverified in the same pass as everything else here would be
+ * exactly the kind of change this project's own review process exists
+ * to catch.
+ * ================================================================
+ */
+:root {
+  --navy: #14243b;
+  --navy-deep: #0b192b;
+  --yellow: #f5b82e;
+  --yellow-2: #ffc83d;
+  --cream: #faf7f0;
+  --ink: #182536;
+  --muted: #64748b;
+  --muted-2: #94a3b8;
+  /* #64748b clears 4.5:1 on white but not on the cream surface below - a
+     real Lighthouse failure, measured, not assumed. This is the darkest
+     step that still reads as secondary text and clears AA on both. */
+  --muted-strong: #4b5566;
+  --line: #e8e9ed;
+  --green: #15803d;
+  --red: #dc2626;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 48px;
+  --sp-10: 64px;
+}
+
+/* A price is information, not a warning - red stays for an actual discount
+   or an error state, never the default (signs.md: "ưu tiên giá bán bằng
+   màu navy... chỉ dùng đỏ khi cần thể hiện giảm giá hoặc cảnh báo"). */
+.product-price {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+/* One photo, not a carousel: these pointed at slides that never existed. */
+.hero-nav,
+.hero-dots {
+  display: none;
+}
+
+/*
+ * The specialty collection reads as its own moment, not four more tiles in
+ * the everyday grid: a warm surface and an intro line set it apart, same
+ * product-card markup underneath so nothing about ordering changes.
+ */
+.product-section--editorial {
+  background: var(--cream);
+  border-radius: var(--sp-5);
+  padding: var(--sp-6);
+  margin-inline: calc(var(--sp-6) * -1);
+}
+.product-section-intro {
+  margin: calc(var(--sp-2) * -1) 0 var(--sp-5);
+  color: var(--muted-strong);
+  font-size: 14px;
+  max-width: 52ch;
+}
+
+/*
+ * The footer: real information only (brand, today's real categories,
+ * copyright). No contact details, hours or social links - none of that is
+ * backed by a real endpoint yet (no public GET /stores/{id}), so inventing
+ * them would be exactly the fabricated-trust-signal the brief rules out.
+ */
+.site-footer {
+  background: var(--navy);
+  color: #fff;
+  padding: var(--sp-9) var(--sp-6) var(--sp-7);
+  margin-top: var(--sp-9);
+  text-align: left;
+  font-size: 14px;
+}
+.site-footer-grid {
+  max-width: 1380px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--sp-9);
+  padding-bottom: var(--sp-7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+.site-footer-brand p {
+  margin: var(--sp-3) 0 0;
+  color: #b7c0cd;
+  font-size: 13px;
+  max-width: 42ch;
+  line-height: 1.6;
+}
+.site-footer-brand strong {
+  font-size: 18px;
+}
+.site-footer-links h3 {
+  margin: 0 0 var(--sp-4);
+  font-size: 13px;
+  font-weight: 600;
+  color: #b7c0cd;
+}
+.site-footer-links ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.site-footer-links button {
+  border: 0;
+  background: none;
+  color: #fff;
+  font-size: 14px;
+  padding: 0;
+}
+.site-footer-links button:hover {
+  color: var(--yellow);
+}
+.site-footer-bottom {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding-top: var(--sp-5);
+  color: #8695a8;
+  font-size: 12px;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .site-footer-grid {
+    grid-template-columns: 1fr;
+    gap: var(--sp-6);
+  }
+  .product-section--editorial {
+    margin-inline: calc(var(--sp-4) * -1);
+    padding: var(--sp-5) var(--sp-4);
+  }
+  /* Clears the fixed .mobile-bar (65-72px), same reasoning the old single-line
+     footer already had at `padding-bottom: 75px` before this pass. */
+  .site-footer {
+    padding-bottom: calc(var(--sp-9) + var(--sp-7));
+  }
+}
+
+/*
+ * ================================================================
  * "Đơn hàng của tôi" redesign (delivered package `my-orders-v2`) -
  * ported the same way as the other two blocks above: the delivered
  * CSS adapted onto this page's own markup rather than rewritten, with

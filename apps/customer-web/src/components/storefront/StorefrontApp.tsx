@@ -102,6 +102,7 @@ export function StorefrontApp() {
               onAdd={store.addToCart}
               onToggleFavorite={store.toggleFavorite}
               onSeeAll={store.setCategoryFilter}
+              categoryFilter={store.categoryFilter}
             />
           )}
 
@@ -145,9 +146,41 @@ export function StorefrontApp() {
         <DeliveryBanner />
       </main>
 
-      <footer>
-        © 2026 Bếp nhà mình · Món ngon nhà làm · Giao diện demo Smart Commerce Platform · Giá và
-        hình ảnh minh họa
+      <footer className="site-footer">
+        <div className="site-footer-grid">
+          <div className="site-footer-brand">
+            <strong>Bếp nhà mình</strong>
+            <p>
+              Món ngon nhà làm - đồ ăn sáng, bánh mì, xôi, bún phở và chả đặc sản, chuẩn bị mỗi
+              ngày.
+            </p>
+          </div>
+
+          {store.categories.length === 0 ? null : (
+            <nav className="site-footer-links" aria-label="Danh mục sản phẩm">
+              <h3>Danh mục</h3>
+              <ul>
+                {store.categories.map((category) => (
+                  <li key={category.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        store.setCategoryFilter(category.id);
+                        scrollToSection('menu');
+                      }}
+                    >
+                      {category.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          )}
+        </div>
+
+        <p className="site-footer-bottom">
+          © 2026 Bếp nhà mình · Giao diện demo Smart Commerce Platform · Giá và hình ảnh minh họa
+        </p>
       </footer>
 
       <div className="mobile-bar">
