@@ -174,6 +174,11 @@ Allow validated transitions to `CANCELLED` / `EXPIRED` under explicit rules. Cas
 - The receipt, if any, is shown to staff as a reference on the confirm screen alongside the required self-entered `Số tiền thực nhận` — never auto-filled, never treated as proof, never a reason to skip the manual bank check. Stored per-payment, served only through an authorized admin endpoint (`GET /admin/payments/{payment}/receipt`), never a public media URL.
 - A repeated report (same or another device) simply updates `customer_reported_at`/the receipt and is idempotent; it never regresses a payment already `PAID`/`PARTIALLY_REFUNDED`/`REFUNDED` (refused with `PAYMENT_ALREADY_CONFIRMED`), and never applies to `CASH` (refused with `VALIDATION_FAILED`).
 
+### Order confirmation independent of payment confirmation — approved decision (2026-11-25)
+- Once a customer has reported a bank transfer (`payment.status = PROCESSING`), staff may confirm the order by hand (`PENDING_PAYMENT → CONFIRMED`) from "Đơn hàng mới" or an order's detail view, without waiting to verify the real bank credit first. The two confirmations may now happen in either order: confirm the order, settle payment later; or settle payment first (still auto-places the order via `AdvanceOrderOnPaymentConfirmed`, unchanged) and confirm it after.
+- Confirming the order is never a payment action and never touches `payment.status` — that still only ever reaches `PAID` through manual confirmation on the Payments screen, exactly as before.
+- An order still `PENDING_PAYMENT` with payment untouched (`PENDING`, nothing reported) stays unconfirmable by hand; the server re-checks the real payment status itself for this one edge, never trusting the request alone. `PENDING_PAYMENT → PLACED` by hand (skipping confirmation entirely) is still refused — only `PENDING_PAYMENT → CONFIRMED` was added, once reported.
+
 ### Payment states
 `PENDING`, `PROCESSING`, `PAID`, `FAILED`, `PARTIALLY_REFUNDED`, `REFUNDED` (extend only with documented transitions).
 - Never trust the browser redirect as proof of payment.

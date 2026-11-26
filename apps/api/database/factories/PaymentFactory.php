@@ -87,6 +87,20 @@ final class PaymentFactory extends Factory
     }
 
     /**
+     * A customer's own "I have transferred" report - a notification only,
+     * never proof (CLAUDE.md section 6, decision dated 2026-11-24): moves the
+     * payment to `PROCESSING`, genuinely waiting on staff, as opposed to one
+     * nobody has acted on.
+     */
+    public function reportedByCustomer(): static
+    {
+        return $this->transfer()->state(fn (): array => [
+            'status' => PaymentStatus::Processing,
+            'customer_reported_at' => now()->toImmutable(),
+        ]);
+    }
+
+    /**
      * Money that staff have actually seen.
      *
      * `confirmed_by` is required rather than defaulted: the CHECK constraints

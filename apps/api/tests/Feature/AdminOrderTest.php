@@ -110,6 +110,31 @@ it('leaves finished orders out of the open counts', function (): void {
         ->assertJsonMissingPath('status_counts.COMPLETED');
 });
 
+it('counts PENDING_PAYMENT orders a customer has already reported as transferred', function (): void {
+    [$store, $manager] = storeWithStaff();
+
+    // Reported: genuinely waiting on staff, so the operations queue needs it.
+    $reported = Order::factory()->inStore($store->id)->status(OrderStatus::PendingPayment)->totalling(30_000)->create();
+    OrderItem::factory()->on($reported->id, $store->id)->quantity(1)->create([
+        'product_name' => 'Xôi gà',
+        'unit_price_amount' => 30_000,
+    ]);
+    Payment::factory()->on($reported->id, $store->id, $reported->order_code, 30_000)
+        ->reportedByCustomer()
+        ->create();
+
+    // Not reported: nobody has acted on this one yet, so it is not counted.
+    orderInStore($store->id, OrderStatus::PendingPayment, method: PaymentMethod::BankTransfer);
+
+    // An ordinary PLACED order is unaffected by this count.
+    orderInStore($store->id);
+
+    $this->actingAs($manager, 'sanctum')
+        ->getJson('/api/v1/admin/orders')
+        ->assertOk()
+        ->assertJsonPath('awaiting_payment_confirmation_count', 1);
+});
+
 it('works the queue oldest first, and lists history newest first on request', function (): void {
     [$store, $manager] = storeWithStaff();
     $first = orderInStore($store->id);
@@ -328,6 +353,49 @@ it('will not place an order awaiting a transfer by hand', function (): void {
 
     expect($order->refresh()->status)->toBe(OrderStatus::PendingPayment)
         ->and($order->placed_at)->toBeNull();
+});
+
+it('refuses to confirm an order awaiting a transfer nobody has reported', function (): void {
+    [$store, $manager] = storeWithStaff();
+    $order = orderInStore(
+        $store->id,
+        OrderStatus::PendingPayment,
+        method: PaymentMethod::BankTransfer,
+    );
+
+    $this->actingAs($manager, 'sanctum')
+        ->postJson("/api/v1/admin/orders/{$order->id}/status", ['to_status' => 'CONFIRMED'])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'INVALID_STATE_TRANSITION');
+
+    expect($order->refresh()->status)->toBe(OrderStatus::PendingPayment);
+});
+
+it('lets a reported transfer be confirmed by hand, before its payment is verified', function (): void {
+    [$store, $manager] = storeWithStaff();
+    $order = Order::factory()->inStore($store->id)->status(OrderStatus::PendingPayment)->totalling(30_000)->create();
+    OrderItem::factory()->on($order->id, $store->id)->quantity(1)->create([
+        'product_name' => 'Xôi gà',
+        'unit_price_amount' => 30_000,
+    ]);
+    Payment::factory()->on($order->id, $store->id, $order->order_code, 30_000)
+        ->reportedByCustomer()
+        ->create();
+
+    // Confirming the order never touches payment - that stays PROCESSING
+    // until staff verify the real bank credit on the Payments screen,
+    // whichever order the two confirmations happen in (CLAUDE.md section 6,
+    // approved 2026-11-25).
+    $this->actingAs($manager, 'sanctum')
+        ->postJson("/api/v1/admin/orders/{$order->id}/status", ['to_status' => 'CONFIRMED'])
+        ->assertOk()
+        ->assertJsonPath('status', 'CONFIRMED')
+        ->assertJsonPath('payment.status', 'PROCESSING');
+
+    expect($order->refresh())
+        ->status->toBe(OrderStatus::Confirmed)
+        ->placed_at->not->toBeNull();
+    expect(Payment::query()->where('order_id', $order->id)->sole()->status)->toBe(PaymentStatus::Processing);
 });
 
 it('lets an order awaiting a transfer be cancelled', function (): void {
