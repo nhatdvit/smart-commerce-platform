@@ -375,3 +375,36 @@ a backend gap, not a styling shortcut.
   open. Store-scoped authorization is a backend milestone (CLAUDE.md §8), and
   the admin host is already restricted at the gateway.
 - Realtime order updates, kitchen display, VietQR rendering. All later phases.
+
+## Admin dashboard redesign (2026-11-25)
+
+The admin dashboard (`/`) was redesigned away from the delivered
+`breakfast-admin-responsive-v1` layout. The spec, the audit it came from and
+the decisions that were approved before any code was written are in
+[`docs/specifications/admin-dashboard-redesign.md`](../specifications/admin-dashboard-redesign.md).
+
+What this means for the port:
+
+- **The delivered dashboard is gone.** The welcome banner, the four tinted
+  `.metric` cards, the hardcoded bar chart and the "Món bán chạy" list were
+  replaced by components under `components/admin/dashboard/`, styled by a new
+  `styles/dashboard.css` that loads after `admin-shell.css`. Every other admin
+  screen still renders the delivered design unchanged.
+- **The tokens in `admin-shell.css` moved**, which is the one change that
+  reaches every screen. `:root` now carries the approved palette (navy
+  `#14243b`, gold `#f5b82e`, line `#e5e9f0`, success `#059669`, error
+  `#dc2626`) plus the spacing, radius and duration scales the dashboard is
+  built from. The shifts are a few percent per hue; nothing was re-laid-out.
+- **Five text colours were darkened for contrast**, not for looks: the status
+  badges, the "see all" links, the table action and the active sidebar row
+  were all between 3.2:1 and 3.7:1 against their own backgrounds at 10-11px.
+  They now clear 4.5:1. The hues are unchanged.
+- **The data is real.** `src/data/admin-demo.ts` was deleted. Every figure on
+  the dashboard is derived from `/admin/orders` over a store-local date window
+  and from the menu snapshot; the figures that cannot be derived honestly are
+  absent, and listed as backend requests in the spec.
+- **`ProductThumb` falls back to its icon when a photo fails to load.** The
+  seeded demo products carry storefront-relative paths (`/assets/food-N.jpg`)
+  that exist only in `apps/customer-web/public`, so on the admin host every one
+  of them 404s. The old component rendered the alt text instead, which pushed
+  a Vietnamese dish name out of its 38px box and across the panel below it.

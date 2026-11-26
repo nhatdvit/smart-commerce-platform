@@ -37,6 +37,37 @@ export interface MenuProduct {
 }
 
 /**
+ * When a dish counts as "nearly out".
+ *
+ * A share of what was prepared, not a flat number: eight portions left of ten
+ * is nearly out, eight of eighty is a normal morning. Named once and shared,
+ * so the inventory screen, the dashboard's capacity panel and its alerts
+ * cannot disagree about what "low" means (CLAUDE.md section 12).
+ */
+export const LOW_STOCK_SHARE = 0.2;
+
+/** Percentage of prepared portions still sellable. Null when none were prepared. */
+export function remainingPercent(product: MenuProduct): number | null {
+  if (product.capacity <= 0) {
+    // Dividing by zero rendered `NaN%` as a bar width, which the browser
+    // silently ignored - the bar simply never moved.
+    return null;
+  }
+
+  return Math.min(100, Math.round((product.stock / product.capacity) * 100));
+}
+
+export function isSoldOut(product: MenuProduct): boolean {
+  return product.stock === 0;
+}
+
+export function isLowStock(product: MenuProduct): boolean {
+  const percent = remainingPercent(product);
+
+  return !isSoldOut(product) && percent !== null && percent <= LOW_STOCK_SHARE * 100;
+}
+
+/**
  * The same dish plus what the API needs to change it.
  *
  * Kept out of `MenuProduct` so a draft built from a form cannot accidentally

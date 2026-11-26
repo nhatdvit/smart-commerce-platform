@@ -18,25 +18,66 @@
  *      styling. `text-decoration:none` was added for the same reason.
  *   3. Anchor-compatibility rules appended at the end of the file, so the
  *      "see all" links look exactly like the buttons they replaced.
- *   4. The emoji/symbol icons were replaced by an SVG line set, and the ☕
- *      watermark on the welcome card by a soft radial bloom. Alignment rules
- *      for the icons are appended at the end of the file.
+ *   4. The emoji/symbol icons were replaced by an SVG line set. Alignment
+ *      rules for the icons are appended at the end of the file. (The ☕
+ *      watermark went with the welcome card, which the dashboard redesign
+ *      removed - see docs/architecture/DESIGN_PORT_NOTES.md.)
  *
  * Tailwind and the shared tokens stay configured for components built from
  * here on; this file is the design of record for the admin screens.
  */
+/*
+ * Design tokens.
+ *
+ * The delivered palette, re-grounded on the approved Premium Commerce scale
+ * (docs/specifications/admin-dashboard-redesign.md section 2.2): the hues are
+ * the designer's, the values are the ones that clear WCAG 2.2 AA at the sizes
+ * this dashboard actually renders text at. Everything below is referenced by
+ * name - a colour written into a component is a colour nobody can re-theme.
+ */
 :root {
-  --navy: #162b47;
-  --ink: #23314a;
+  --navy: #14243b;
+  --navy-deep: #0b172a;
+  --ink: #17243a;
   --muted: #8290a4;
-  --yellow: #ffc842;
+  /* Secondary text: the one that has to stay legible, so it is darker. */
+  --muted-strong: #64748b;
+  --yellow: #f5b82e;
+  --yellow-hover: #e5a51b;
   --yellow2: #fff3ce;
+  /*
+   * Gold as TEXT, which is a different problem from gold as a fill: the brand
+   * yellow on white is 1.8:1. This is the darkest gold that still reads as the
+   * brand and clears 4.5:1 for the 11px links it is used on.
+   */
+  --gold-text: #92650a;
   --bg: #f5f7fb;
-  --line: #e9edf3;
+  --line: #e5e9f0;
   --white: #fff;
-  --green: #1a9d6c;
-  --red: #e25757;
+  --green: #059669;
+  --red: #dc2626;
+  --amber: #d97706;
+  --blue: #2563eb;
   --shadow: 0 8px 28px rgba(25, 45, 75, 0.045);
+  --shadow-pop: 0 12px 32px rgba(16, 34, 58, 0.14);
+
+  /* Spacing: the 4/8 scale, so a gap is chosen from a system, not typed. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 48px;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+
+  --t-fast: 150ms;
+  --t-base: 200ms;
 }
 * {
   box-sizing: border-box;
@@ -143,13 +184,17 @@ button:disabled {
   letter-spacing: 1px;
   margin: 15px 13px 9px;
 }
-nav {
+/*
+ * The sidebar menu. Scoped, because the breadcrumb is a <nav> landmark
+ * too and a bare element selector stacked it into three lines.
+ */
+.sidebar nav {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-nav a,
-nav button {
+.sidebar nav a,
+.sidebar nav button {
   border: 0;
   text-decoration: none;
   background: transparent;
@@ -164,24 +209,24 @@ nav button {
   font-weight: 600;
   width: 100%;
 }
-nav a > span,
-nav button > span {
+.sidebar nav a > span,
+.sidebar nav button > span {
   font-size: 20px;
   width: 22px;
   text-align: center;
   font-weight: 400;
 }
-nav a.active,
-nav button.active {
+.sidebar nav a.active,
+.sidebar nav button.active {
   background: #fff4d8;
-  color: #ac7410;
+  color: #8a6008;
 }
-nav a:hover:not(.active),
-nav button:hover:not(.active) {
+.sidebar nav a:hover:not(.active),
+.sidebar nav button:hover:not(.active) {
   background: #f7f8fa;
   color: var(--navy);
 }
-nav em {
+.sidebar nav em {
   font-style: normal;
   margin-left: auto;
   background: #ffe5e5;
@@ -359,7 +404,6 @@ main {
 }
 .metric,
 .panel,
-.welcome,
 .info-card {
   background: white;
   border: 1px solid var(--line);
@@ -407,42 +451,6 @@ main {
 .metric-foot .negative {
   color: var(--red);
 }
-.welcome {
-  padding: 22px 26px;
-  background: linear-gradient(112deg, #172d4d, #24476b);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 20px;
-  overflow: hidden;
-  position: relative;
-}
-.welcome:after {
-  content: '';
-  position: absolute;
-  right: -60px;
-  top: -110px;
-  width: 300px;
-  height: 300px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 68%);
-}
-.welcome h2 {
-  font-size: 19px;
-  margin: 0 0 7px;
-}
-.welcome p {
-  color: #b8c8da;
-  font-size: 11px;
-  margin: 0;
-  line-height: 1.8;
-}
-.welcome .btn {
-  position: relative;
-  z-index: 1;
-}
 .two-col {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(285px, 1fr);
@@ -468,43 +476,9 @@ main {
 .panel-title button {
   border: 0;
   background: none;
-  color: #bc850f;
+  color: var(--gold-text);
   font-size: 11px;
   font-weight: 700;
-}
-.chart-wrap {
-  height: 230px;
-  display: flex;
-  align-items: end;
-  gap: 12px;
-  padding: 14px 3px 0;
-  border-bottom: 1px solid var(--line);
-  background: repeating-linear-gradient(to top, transparent 0, transparent 55px, #f1f3f7 56px);
-  position: relative;
-}
-.bar-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: end;
-  height: 100%;
-  gap: 7px;
-}
-.bar {
-  width: min(34px, 100%);
-  background: #fbd76b;
-  border-radius: 7px 7px 0 0;
-  min-height: 4px;
-}
-.bar.highlight {
-  background: #f0ac16;
-}
-.bar-col small {
-  color: #96a1b1;
-  font-size: 10px;
-  position: absolute;
-  bottom: -24px;
 }
 .chart-foot {
   display: flex;
@@ -516,16 +490,6 @@ main {
 .chart-foot strong {
   color: var(--navy);
 }
-.popular {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-.popular:last-child {
-  border: 0;
-}
 .food-thumb {
   width: 46px;
   height: 46px;
@@ -535,23 +499,6 @@ main {
   background: #fff3df;
   font-size: 25px;
   flex-shrink: 0;
-}
-.popular-info {
-  flex: 1;
-  min-width: 0;
-}
-.popular-info strong {
-  display: block;
-  font-size: 11px;
-  margin-bottom: 5px;
-}
-.popular-info small {
-  color: #9ca6b6;
-  font-size: 10px;
-}
-.popular > b {
-  font-size: 12px;
-  color: var(--navy);
 }
 .table-wrap {
   overflow-x: auto;
@@ -597,28 +544,28 @@ main {
 }
 .status.waiting {
   background: #fff3db;
-  color: #b27b15;
+  color: #8a5e0a;
 }
 .status.preparing {
   background: #e8f0ff;
-  color: #4678bf;
+  color: #2f5fa8;
 }
 .status.ready {
   background: #e9f8ef;
-  color: #299568;
+  color: #137a50;
 }
 .status.done {
   background: #f0f2f6;
-  color: #7b8799;
+  color: #5a6678;
 }
 .status.cancelled {
   background: #ffecec;
-  color: #d45656;
+  color: #b02a2a;
 }
 .table-action {
   border: 0;
   background: transparent;
-  color: #c18a17;
+  color: var(--gold-text);
   font-weight: 700;
   font-size: 11px;
 }
@@ -1121,14 +1068,6 @@ main {
   .metric-foot {
     font-size: 9px;
   }
-  .welcome {
-    padding: 20px;
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .welcome h2 {
-    font-size: 17px;
-  }
   .two-col,
   .info-grid {
     grid-template-columns: 1fr;
@@ -1164,12 +1103,6 @@ main {
     grid-column: 1;
     grid-row: 3;
   }
-  .chart-wrap {
-    height: 190px;
-  }
-  .bar-col small {
-    font-size: 9px;
-  }
   .coupon {
     align-items: flex-start;
   }
@@ -1186,14 +1119,14 @@ main {
  * real routes, and therefore anchors. These rules give an anchor the same
  * appearance the matching button already had - nothing else changes.
  */
-nav a,
+.sidebar nav a,
 .btn,
 .panel-title a {
   text-decoration: none;
 }
 
 .panel-title a {
-  color: #bc850f;
+  color: var(--gold-text);
   font-size: 11px;
   font-weight: 700;
 }
@@ -1219,8 +1152,8 @@ nav a,
 }
 
 /* Sidebar rows: the design reserved a fixed 22px slot for the glyph. */
-nav a > span,
-nav button > span {
+.sidebar nav a > span,
+.sidebar nav button > span {
   display: inline-flex;
   align-items: center;
   justify-content: center;

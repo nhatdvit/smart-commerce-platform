@@ -44,6 +44,15 @@ const GROUP_TONE: Readonly<Record<Exclude<StatusGroup, 'all'>, string>> = {
   cancelled: 'cancelled',
 };
 
+/** The `?status=` a dashboard link may arrive with; anything else is ignored. */
+function requestedGroup(search: string): StatusGroup | null {
+  const value = new URLSearchParams(search).get('status');
+
+  return value === 'placed' || value === 'working' || value === 'completed' || value === 'cancelled'
+    ? value
+    : null;
+}
+
 function groupFor(status: OrderStatus): Exclude<StatusGroup, 'all'> {
   if (status === 'PENDING_PAYMENT' || status === 'PLACED') {
     return 'placed';
@@ -137,6 +146,25 @@ export function OrdersScreen() {
   const [search, setSearch] = useState('');
   const [group, setGroup] = useState<StatusGroup>('all');
   const [sort, setSort] = useState<SortOption>('newest');
+  /*
+   * A deep link from the dashboard opens this screen already filtered.
+   *
+   * Read after mount from `window.location` rather than through
+   * `useSearchParams`, which would opt the whole route out of static
+   * rendering; and the first list request waits for the answer, so arriving
+   * with ?status= costs one request, not two.
+   */
+  const [groupReady, setGroupReady] = useState(false);
+
+  useEffect(() => {
+    const requested = requestedGroup(window.location.search);
+
+    if (requested !== null) {
+      setGroup(requested);
+    }
+
+    setGroupReady(true);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setSearch(query.trim()), SEARCH_DEBOUNCE_MS);
@@ -148,13 +176,17 @@ export function OrdersScreen() {
   // is more orders than one page holds, and a filter that only searched what
   // had already been fetched would quietly hide the rest.
   useEffect(() => {
+    if (!groupReady) {
+      return;
+    }
+
     loadOrders({
       statuses: group === 'all' ? undefined : GROUP_STATUSES[group],
       search,
       newestFirst: true,
       limit: 50,
     });
-  }, [loadOrders, group, search]);
+  }, [loadOrders, group, search, groupReady]);
 
   // Sorting, unlike filtering, is only ever applied to the page already in
   // hand: "giờ nhận gần nhất" has no server-side equivalent to ask for

@@ -158,6 +158,15 @@ export interface OrderQuery {
   /** The queue default is oldest first; a list screen wants the opposite. */
   readonly newestFirst?: boolean;
   readonly limit?: number;
+  /**
+   * Inclusive lower bound on `placed_at`, as a UTC instant.
+   *
+   * An order still waiting for a transfer has no `placed_at` and is outside
+   * every window - which is the honest answer, since it is not a sale yet.
+   */
+  readonly placedFrom?: string;
+  /** Exclusive upper bound on `placed_at`, as a UTC instant. */
+  readonly placedTo?: string;
 }
 
 /**
@@ -403,6 +412,14 @@ function queryString(query: OrderQuery, cursor?: string): string {
     parameters.set('limit', String(query.limit));
   }
 
+  if (query.placedFrom !== undefined) {
+    parameters.set('placed_from', query.placedFrom);
+  }
+
+  if (query.placedTo !== undefined) {
+    parameters.set('placed_to', query.placedTo);
+  }
+
   if (cursor !== undefined) {
     parameters.set('cursor', cursor);
   }
@@ -426,8 +443,12 @@ export function orderQueryKey(query: OrderQuery): string {
  * The store comes from the host the request arrives on, never from the client,
  * so there is no store id to pass (CLAUDE.md section 8).
  */
-export async function loadOrders(query: OrderQuery = {}, cursor?: string): Promise<OrderPage> {
-  return toPage(await api.get<ApiOrderPage>(`/admin/orders${queryString(query, cursor)}`));
+export async function loadOrders(
+  query: OrderQuery = {},
+  cursor?: string,
+  signal?: AbortSignal,
+): Promise<OrderPage> {
+  return toPage(await api.get<ApiOrderPage>(`/admin/orders${queryString(query, cursor)}`, signal));
 }
 
 export async function loadOrderDetail(orderId: string): Promise<AdminOrderDetail> {

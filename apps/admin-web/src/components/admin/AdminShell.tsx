@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+
+import { useIdentity } from '@/hooks/useIdentity';
+import { forgetIdentity, ROLE_LABELS } from '@/lib/session-api';
 
 import { useAdminData } from './AdminDataProvider';
 import { AdminModals } from './AdminModals';
@@ -12,10 +15,14 @@ import {
   IconClose,
   IconHamburger,
   IconHelp,
+  IconPanelLeft,
   IconStorefront,
 } from './icons';
 import { NAV_GROUPS, navLabelFor } from './nav';
 import { SignInPanel } from './SignInPanel';
+
+/** Where the collapsed/expanded choice is remembered. */
+const NAV_STATE_KEY = 'scp.admin.nav';
 
 /**
  * The admin chrome: sidebar, breadcrumb topbar, modal host and toast.
@@ -29,6 +36,60 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const { pendingCount, sidebarOpen, setSidebarOpen, notify, toastMessage, session, signOut } =
     useAdminData();
   const pathname = usePathname();
+  const identity = useIdentity();
+
+  /*
+   * A collapsed sidebar is a preference, so it outlives the page: a counter
+   * screen is 1366px wide and the 254px rail is a tenth of it. Read after
+   * mount rather than during render - the server has no localStorage, and
+   * guessing would mean the first paint disagrees with the browser.
+   */
+  const [collapsed, setCollapsed] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const account = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem(NAV_STATE_KEY) === 'collapsed');
+  }, []);
+
+  const toggleCollapsed = useCallback((): void => {
+    setCollapsed((current) => {
+      const next = !current;
+
+      window.localStorage.setItem(NAV_STATE_KEY, next ? 'collapsed' : 'expanded');
+
+      return next;
+    });
+  }, []);
+
+  // Escape closes the account menu, and so does a click anywhere else: a
+  // popover that can only be dismissed by the control that opened it is a
+  // trap for anyone who opened it by accident.
+  useEffect(() => {
+    if (!accountOpen) {
+      return;
+    }
+
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        setAccountOpen(false);
+      }
+    }
+
+    function onPointerDown(event: MouseEvent): void {
+      if (account.current !== null && !account.current.contains(event.target as Node)) {
+        setAccountOpen(false);
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [accountOpen]);
 
   function closeSidebar() {
     setSidebarOpen(false);
@@ -51,7 +112,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <>
-      <div className="app">
+      <div className={collapsed ? 'app nav-collapsed' : 'app'}>
         <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
           <div className="brand">
             {/*
@@ -103,12 +164,22 @@ export function AdminShell({ children }: { children: ReactNode }) {
                     href={item.href}
                     className={item.href === pathname ? 'active' : undefined}
                     onClick={closeSidebar}
+                    /*
+                     * The collapsed rail's tooltip.
+                     *
+                     * The browser's own, not a styled one: the sidebar is a
+                     * scroll container, and a scroll container clips both
+                     * axes - a CSS tooltip sitting to the right of the rail
+                     * was cut off at the rail's edge. The label also stays in
+                     * the accessibility tree either way (see .nav-label).
+                     */
+                    title={collapsed ? item.label : undefined}
                   >
                     <span>
                       <item.Icon size={18} />
-                    </span>{' '}
-                    {item.label}
-                    {item.badge === 'pending' ? <em>{pendingCount}</em> : null}
+                    </span>
+                    <span className="nav-label">{item.label}</span>
+                    {item.badge === 'pending' && pendingCount > 0 ? <em>{pendingCount}</em> : null}
                   </Link>
                 ))}
               </Fragment>
@@ -143,9 +214,20 @@ export function AdminShell({ children }: { children: ReactNode }) {
               >
                 <IconHamburger size={20} />
               </button>
-              <div className="crumb">
-                Quản trị cửa hàng <span>/</span> <strong>{navLabelFor(pathname)}</strong>
-              </div>
+              <button
+                type="button"
+                className="collapse-nav"
+                onClick={toggleCollapsed}
+                aria-expanded={!collapsed}
+                aria-label={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+                title={collapsed ? 'Mở rộng menu' : 'Thu gọn menu'}
+              >
+                <IconPanelLeft size={18} />
+              </button>
+              <nav className="crumb" aria-label="Đường dẫn">
+                <span className="crumb-root">Quản trị cửa hàng</span>{' '}
+                <span aria-hidden="true">/</span> <strong>{navLabelFor(pathname)}</strong>
+              </nav>
             </div>
             <div className="top-actions">
               <span className="live-pill">
@@ -160,10 +242,53 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 <IconBell size={19} />
                 <b className="notify-dot" />
               </button>
-              <button type="button" className="btn" title="Đăng xuất" onClick={signOut}>
-                Đăng xuất
-              </button>
-              <div className="user-avatar">AD</div>
+              <div className="account" ref={account}>
+                <button
+                  type="button"
+                  className="account-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={accountOpen}
+                  onClick={() => setAccountOpen((open) => !open)}
+                >
+                  <span className="user-avatar" aria-hidden="true">
+                    {identity?.initials ?? ''}
+                  </span>
+                  <span className="account-name">
+                    {identity === null || identity.name === '' ? 'Tài khoản' : identity.name}
+                  </span>
+                  <IconChevronDown size={14} />
+                </button>
+
+                {accountOpen ? (
+                  <div className="account-menu" role="menu">
+                    <div className="account-head">
+                      <strong>
+                        {identity === null || identity.name === '' ? 'Tài khoản' : identity.name}
+                      </strong>
+                      {identity === null || identity.email === '' ? null : (
+                        <small>{identity.email}</small>
+                      )}
+                      {identity === null || identity.role === null ? null : (
+                        <span className="account-role">{ROLE_LABELS[identity.role]}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="account-item"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        // The next operator must not be greeted by this
+                        // one’s name, nor inherit what they could see.
+                        forgetIdentity();
+                        signOut();
+                      }}
+                    >
+                      Đăng xuất
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </header>
 
