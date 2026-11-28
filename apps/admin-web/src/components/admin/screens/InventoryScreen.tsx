@@ -1,49 +1,18 @@
 'use client';
 
-import type { MenuProduct } from '@/lib/menu-api';
+import { isLowStock, isSoldOut, remainingPercent, LOW_STOCK_SHARE } from '@/lib/menu-api';
 
 import { useAdminData } from '../AdminDataProvider';
 import { IconAlert, IconBoxes, IconCheckCircle, IconPlus, IconXCircle } from '../icons';
 import { ProductThumb } from '../ProductThumb';
 import { Metric, PageHeading } from '../primitives';
 
-/**
- * When a dish counts as "nearly out".
- *
- * A share of what was prepared, not a flat number: eight portions left of ten
- * is nearly out, eight of eighty is a normal morning. Named rather than
- * written into three expressions, so the badge, the bar and the counter cannot
- * disagree about what "low" means (CLAUDE.md section 12).
- */
-const LOW_STOCK_SHARE = 0.2;
-
-/** Percentage left, for the bar. Null when nothing was prepared to divide by. */
-function remainingPercent(product: MenuProduct): number | null {
-  if (product.capacity <= 0) {
-    // Dividing by zero rendered `NaN%` as a bar width, which the browser
-    // silently ignored - the bar simply never moved.
-    return null;
-  }
-
-  return Math.min(100, Math.round((product.stock / product.capacity) * 100));
-}
-
-function isSoldOut(product: MenuProduct): boolean {
-  return product.stock === 0;
-}
-
-function isLow(product: MenuProduct): boolean {
-  const percent = remainingPercent(product);
-
-  return !isSoldOut(product) && percent !== null && percent <= LOW_STOCK_SHARE * 100;
-}
-
 export function InventoryScreen() {
   const { products, openModal, menuBusy, menuError } = useAdminData();
 
   const totalCapacity = products.reduce((sum, product) => sum + product.capacity, 0);
   const totalStock = products.reduce((sum, product) => sum + product.stock, 0);
-  const lowCount = products.filter(isLow).length;
+  const lowCount = products.filter(isLowStock).length;
   const soldOutCount = products.filter(isSoldOut).length;
 
   return (
@@ -118,7 +87,7 @@ export function InventoryScreen() {
             const percent = remainingPercent(product);
             const progressClass = [
               'progress',
-              isLow(product) ? 'low' : '',
+              isLowStock(product) ? 'low' : '',
               isSoldOut(product) ? 'empty' : '',
             ]
               .filter((part) => part !== '')

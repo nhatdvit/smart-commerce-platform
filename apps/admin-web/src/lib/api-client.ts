@@ -95,6 +95,7 @@ async function request<T>(
   path: string,
   body?: unknown,
   extraHeaders?: Readonly<Record<string, string>>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const mutating = MUTATING.has(method);
 
@@ -120,6 +121,7 @@ async function request<T>(
     method,
     headers,
     credentials: 'include',
+    signal,
     body:
       body === undefined || body instanceof FormData
         ? (body as BodyInit | undefined)
@@ -141,7 +143,12 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string): Promise<T> => request<T>('GET', path),
+  /**
+   * `signal` is accepted only here: a read the screen no longer needs should
+   * stop, while a write that settles money must never be abandoned halfway.
+   */
+  get: <T>(path: string, signal?: AbortSignal): Promise<T> =>
+    request<T>('GET', path, undefined, undefined, signal),
   post: <T>(path: string, body?: unknown, headers?: Readonly<Record<string, string>>): Promise<T> =>
     request<T>('POST', path, body, headers),
   put: <T>(path: string, body?: unknown, headers?: Readonly<Record<string, string>>): Promise<T> =>

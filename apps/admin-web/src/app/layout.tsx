@@ -5,6 +5,7 @@ import { AdminDataProvider } from '@/components/admin/AdminDataProvider';
 import { AdminShell } from '@/components/admin/AdminShell';
 import '@/styles/globals.css';
 import '@/styles/admin-shell.css';
+import '@/styles/dashboard.css';
 
 export const metadata: Metadata = {
   title: {

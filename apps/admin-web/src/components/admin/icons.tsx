@@ -147,6 +147,16 @@ export function IconSettings({ size }: IconProps) {
 
 // ------------------------------------------------------------------ chrome
 
+/** Thu gọn / mở rộng sidebar: a panel with its rail marked. */
+export function IconPanelLeft({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+      <path d="M9.5 4.5v15" />
+    </Icon>
+  );
+}
+
 export function IconHamburger({ size }: IconProps) {
   return (
     <Icon size={size}>

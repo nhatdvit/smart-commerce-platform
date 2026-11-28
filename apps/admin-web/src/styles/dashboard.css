@@ -1,0 +1,1942 @@
+/*
+ * The dashboard.
+ *
+ * Loaded after admin-shell.css, which stays the design of record for the rest
+ * of the admin screens (docs/architecture/DESIGN_PORT_NOTES.md). Everything
+ * here is built from the tokens declared there - no colour, radius, spacing
+ * step or duration is written as a literal below unless it is geometry that
+ * belongs to one component (a ring's radius, a bar's height).
+ *
+ * Structure, in order: utilities, header, alerts, KPI cards, charts, panels,
+ * tables, skeletons, shared chrome, then every breakpoint in one block at the
+ * end so the responsive behaviour can be read in one place.
+ */
+
+/* ------------------------------------------------------------------ chart ramp
+ * The five status colours of the donut, validated as a set rather than picked
+ * by eye: every adjacent pair clears ΔE 11 under deuteranopia and protanopia
+ * and ΔE 20 with normal vision, so no two neighbouring segments blur together.
+ * They are a deliberate second ramp from the badge colours: a badge is text on
+ * a tint, a segment is a filled shape, and the two have different contrast
+ * problems. "Hoàn thành" is the brand navy - a settled order is finished, not
+ * another hue competing for attention.
+ */
+:root {
+  --chart-waiting: #d97706;
+  --chart-preparing: #2563eb;
+  --chart-ready: #0d9488;
+  --chart-done: #14243b;
+  --chart-cancelled: #be123c;
+  --chart-line: #c08608;
+  --chart-grid: #eef1f6;
+}
+
+/* ------------------------------------------------------------------ utilities */
+table.sr-only {
+  table-layout: fixed;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.dashboard .dim {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Money and counts line up column-wise only with tabular figures. */
+.dashboard .num,
+.kpi-value,
+.chart-total strong,
+.pay-value,
+.legend-count,
+.legend-share,
+.donut-value,
+.orders-table .num,
+.top-figures b {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/*
+ * One focus ring for the whole screen, and a visible one. The default outline
+ * disappears against the navy buttons, which is how keyboard users lose their
+ * place on a dense page.
+ */
+.dashboard a:focus-visible,
+.dashboard button:focus-visible,
+.dashboard input:focus-visible,
+.dashboard [tabindex]:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* The ported design spaces its cards with margins; here the flow owns it. */
+.dashboard .panel {
+  margin-bottom: 0;
+  padding: var(--sp-5);
+}
+
+/* ------------------------------------------------------------------ header */
+.dash-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.dash-header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.dash-header h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -0.9px;
+  color: var(--navy);
+  margin: 0 0 6px;
+}
+
+.dash-greeting {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted-strong);
+  max-width: 62ch;
+}
+
+.dash-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.dash-actions .btn {
+  transition:
+    background var(--t-fast) ease-out,
+    border-color var(--t-fast) ease-out;
+}
+
+.dash-actions .btn-primary:hover {
+  background: var(--yellow-hover);
+  border-color: var(--yellow-hover);
+  filter: none;
+}
+
+.btn-badge {
+  font-style: normal;
+  background: var(--navy);
+  color: #fff;
+  border-radius: 20px;
+  min-width: 18px;
+  padding: 1px 6px;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ range filter */
+.range-filter {
+  position: relative;
+}
+
+.range-chips {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted-strong);
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background var(--t-fast) ease-out,
+    color var(--t-fast) ease-out,
+    border-color var(--t-fast) ease-out;
+}
+
+.chip:hover {
+  border-color: #d7dde8;
+  color: var(--navy);
+}
+
+.chip.is-on {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
+.range-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  padding: var(--sp-4);
+  display: grid;
+  gap: var(--sp-3);
+  min-width: 260px;
+}
+
+.range-panel label {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted-strong);
+}
+
+.range-panel input {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.range-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 11px;
+}
+
+/* ------------------------------------------------------------------ alerts */
+.ops-strip {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.ops-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: #fff;
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    border-color var(--t-fast) ease-out,
+    transform var(--t-fast) ease-out;
+}
+
+.ops-item:hover {
+  transform: translateY(-1px);
+}
+
+.ops-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+}
+
+.ops-count {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--navy);
+}
+
+.ops-label {
+  color: var(--muted-strong);
+  font-weight: 600;
+}
+
+.ops-go {
+  color: var(--muted);
+  margin-left: 2px;
+}
+
+.ops-danger {
+  border-color: #f6d9d9;
+  background: #fff8f8;
+}
+.ops-danger .ops-icon {
+  background: #fdeaea;
+  color: var(--red);
+}
+.ops-danger:hover {
+  border-color: #eebcbc;
+}
+
+.ops-warn {
+  border-color: #f6e4cc;
+  background: #fffbf5;
+}
+.ops-warn .ops-icon {
+  background: #fdf0dc;
+  color: var(--amber);
+}
+.ops-warn:hover {
+  border-color: #efd0a8;
+}
+
+.ops-info {
+  border-color: #dde6f7;
+  background: #f9fbff;
+}
+.ops-info .ops-icon {
+  background: #e8f0fe;
+  color: var(--blue);
+}
+.ops-info:hover {
+  border-color: #c6d6f2;
+}
+
+.dash-warning {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: #fffbf5;
+  border: 1px solid #f6e4cc;
+  color: #7a5415;
+  font-size: 12px;
+}
+
+/* ------------------------------------------------------------- body + busy */
+.dash-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/*
+ * Switching range dims the old figures instead of replacing them with a
+ * skeleton: the layout cannot jump if nothing is removed, and the numbers on
+ * screen stay readable while the new ones are fetched.
+ */
+.dash-body.is-busy > *:not(.dash-progress) {
+  opacity: 0.55;
+  transition: opacity var(--t-base) ease-out;
+  pointer-events: none;
+}
+
+.dash-progress {
+  position: absolute;
+  top: -8px;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.dash-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  border-radius: 3px;
+  background: var(--yellow);
+  animation: dash-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes dash-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+/* --------------------------------------------------------------- KPI cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.kpi {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: var(--sp-5);
+  min-width: 0;
+}
+
+.kpi-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.kpi-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-strong);
+  line-height: 1.4;
+}
+
+.kpi-hint {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 50%;
+}
+
+.kpi-hint:hover {
+  color: var(--navy);
+}
+
+.kpi-bubble {
+  position: absolute;
+  z-index: 25;
+  top: calc(100% + 8px);
+  left: -8px;
+  width: max-content;
+  max-width: 240px;
+  background: var(--navy-deep);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.55;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
+  display: none;
+}
+
+.kpi-hint:hover .kpi-bubble,
+.kpi-hint:focus-visible .kpi-bubble {
+  display: block;
+}
+
+.kpi-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+}
+
+.kpi-gold .kpi-icon {
+  background: #fff4dc;
+  color: #9a6b08;
+}
+.kpi-blue .kpi-icon {
+  background: #e8f0fe;
+  color: var(--chart-preparing);
+}
+.kpi-teal .kpi-icon {
+  background: #e3f5f1;
+  color: var(--chart-ready);
+}
+.kpi-navy .kpi-icon {
+  background: #eef1f6;
+  color: var(--navy);
+}
+
+.kpi-value {
+  display: block;
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: -1.1px;
+  color: var(--navy);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kpi-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+  min-height: 18px;
+}
+
+.kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-trend.up {
+  background: #e7f6f0;
+  color: #0a6b4a;
+}
+
+.kpi-trend.down {
+  background: #fdeaea;
+  color: #a3242a;
+}
+
+.kpi-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.spark {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: var(--sp-3);
+}
+
+.spark polyline {
+  stroke: var(--chart-line);
+}
+.spark-blue polyline {
+  stroke: var(--chart-preparing);
+}
+.spark-teal polyline {
+  stroke: var(--chart-ready);
+}
+.spark-navy polyline {
+  stroke: var(--navy);
+}
+
+.kpi-action {
+  margin-top: var(--sp-3);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold-text);
+  text-decoration: none;
+}
+
+.kpi-action:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------- rows */
+.dash-row {
+  display: grid;
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.dash-row-chart {
+  grid-template-columns: 7fr 5fr;
+}
+
+.dash-row-split {
+  grid-template-columns: 5fr 7fr;
+}
+
+/* A kitchen account sees one panel per row; it should fill the row. */
+.dash-row > *:only-child {
+  grid-column: 1 / -1;
+}
+
+/* ------------------------------------------------------------- panel heads */
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.2px;
+}
+
+.panel-sub {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.panel-link {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.panel-link:hover {
+  text-decoration: underline;
+}
+
+.panel-empty {
+  margin: var(--sp-4) 0;
+  padding: var(--sp-5);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.dashboard .panel-note {
+  margin: var(--sp-4) 0 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ----------------------------------------------------------- revenue chart */
+.chart-total {
+  text-align: right;
+}
+
+.chart-total strong {
+  display: block;
+  font-size: 20px;
+  color: var(--navy);
+  letter-spacing: -0.6px;
+}
+
+.chart-frame {
+  position: relative;
+  width: 100%;
+  min-height: 250px;
+  touch-action: pan-y;
+}
+
+.chart-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.chart-axis {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--chart-line);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-cross {
+  stroke: var(--navy);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.45;
+}
+
+.chart-dot {
+  fill: var(--chart-line);
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.chart-tip {
+  position: absolute;
+  top: 6px;
+  transform: translateX(-50%);
+  background: var(--navy-deep);
+  color: #fff;
+  border-radius: var(--r-sm);
+  padding: 8px 11px;
+  font-size: 11px;
+  line-height: 1.6;
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+  display: grid;
+  white-space: nowrap;
+}
+
+.chart-tip strong {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chart-tip .dim {
+  color: #b9c4d4;
+}
+
+/* ------------------------------------------------------------------ donut */
+.donut-wrap {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: center;
+}
+
+.donut {
+  width: 140px;
+  height: 140px;
+}
+
+.donut-track {
+  fill: none;
+  stroke: #f1f4f9;
+}
+
+.donut-slice {
+  fill: none;
+  /* Starts the ring at twelve o'clock instead of three. */
+  transform: rotate(-90deg);
+  transform-origin: 70px 70px;
+  transition: stroke-width var(--t-fast) ease-out;
+}
+
+.slice-waiting {
+  stroke: var(--chart-waiting);
+  background: var(--chart-waiting);
+}
+.slice-preparing {
+  stroke: var(--chart-preparing);
+  background: var(--chart-preparing);
+}
+.slice-ready {
+  stroke: var(--chart-ready);
+  background: var(--chart-ready);
+}
+.slice-done {
+  stroke: var(--chart-done);
+  background: var(--chart-done);
+}
+.slice-cancelled {
+  stroke: var(--chart-cancelled);
+  background: var(--chart-cancelled);
+}
+
+.donut-value {
+  fill: var(--navy);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.donut-unit {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.status-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.status-legend a {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 12px;
+  transition: background var(--t-fast) ease-out;
+}
+
+.status-legend a:hover {
+  background: #f7f9fc;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.legend-label {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend-count {
+  font-weight: 800;
+  color: var(--navy);
+}
+
+.legend-share {
+  color: var(--muted);
+  font-size: 11px;
+  min-width: 34px;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- payments */
+.pay-total {
+  display: grid;
+  gap: 2px;
+  margin-bottom: var(--sp-4);
+}
+
+.pay-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-strong);
+}
+
+.pay-value {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: var(--navy);
+}
+
+.pay-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #f1f4f9;
+}
+
+.pay-seg {
+  display: block;
+  height: 100%;
+}
+
+.pay-cash {
+  background: var(--chart-ready);
+}
+
+.pay-transfer {
+  background: var(--chart-preparing);
+}
+
+.pay-split {
+  list-style: none;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+  display: flex;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted-strong);
+}
+
+.pay-split li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pay-split b {
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.pay-rows {
+  margin-top: var(--sp-4);
+  display: grid;
+  gap: 2px;
+}
+
+.pay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 11px 12px;
+  border-radius: var(--r-sm);
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.pay-row small {
+  display: block;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.pay-row b {
+  color: var(--navy);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pay-row b em {
+  display: block;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.pay-row.is-warn {
+  background: #fffbf5;
+  box-shadow: inset 2px 0 0 var(--amber);
+}
+
+/* ------------------------------------------------------------- bestsellers */
+.top-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  counter-reset: none;
+}
+
+.top-row {
+  display: grid;
+  grid-template-columns: 20px 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 10px 6px;
+  border-radius: var(--r-sm);
+}
+
+.top-row + .top-row {
+  border-top: 1px solid var(--line);
+}
+
+.top-rank {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.top-rank.is-first {
+  color: var(--gold-text);
+}
+
+/*
+ * A fixed, clipped box for the photo. The old list let a broken image push
+ * its alt text through the card and across the panel below; a square that
+ * cannot grow, with the text hidden, is what stops that happening again.
+ */
+.top-thumb,
+.cap-thumb {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-sm);
+  background: #fff6e3;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cap-thumb {
+  width: 30px;
+  height: 30px;
+}
+
+.top-info {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.top-info strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.top-info small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.top-bar {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: #f1f4f9;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.top-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--yellow);
+}
+
+.top-figures {
+  text-align: right;
+  display: grid;
+  gap: 2px;
+}
+
+.top-figures b {
+  font-size: 14px;
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+.top-figures small {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------ recent orders */
+.orders-table-wrap {
+  position: relative;
+  overflow-x: auto;
+}
+
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  min-width: 720px;
+}
+
+.orders-table th {
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  background: #f8fafc;
+  padding: 11px 12px;
+  white-space: nowrap;
+}
+
+.orders-table th:first-child {
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+}
+
+.orders-table th:last-child {
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+
+.orders-table td {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  vertical-align: middle;
+}
+
+.orders-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.orders-table tbody tr {
+  transition: background var(--t-fast) ease-out;
+}
+
+.orders-table tbody tr:hover {
+  background: #fafbfd;
+}
+
+.orders-table strong {
+  color: var(--navy);
+  font-weight: 700;
+}
+
+.orders-table .cell-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orders-table tr.is-new td {
+  background: #fffaf0;
+}
+
+.row-end {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pay-tag {
+  display: inline-block;
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #f0f2f6;
+  color: #5a6678;
+}
+
+.pay-tag.pay-ok {
+  background: #e7f6f0;
+  color: #0a6b4a;
+}
+
+.pay-tag.pay-warn {
+  background: #fdf0dc;
+  color: #8a5e0a;
+}
+
+.pay-tag.pay-bad {
+  background: #fdeaea;
+  color: #a3242a;
+}
+
+/* ---------------------------------------------------------------- capacity */
+.capacity-counts {
+  display: flex;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.cap-stat {
+  font-size: 12px;
+  color: var(--muted-strong);
+}
+
+.cap-stat b {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--navy);
+  margin-right: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cap-stat b.is-bad {
+  color: var(--red);
+}
+
+.cap-stat b.is-warn {
+  color: var(--amber);
+}
+
+.cap-list {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.cap-list li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: 12px;
+}
+
+.cap-name {
+  font-weight: 600;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cap-tag {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cap-tag.is-bad {
+  color: var(--red);
+}
+
+.cap-tag.is-warn {
+  color: var(--amber);
+}
+
+.cap-bar {
+  grid-column: 2 / -1;
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: #f1f4f9;
+  overflow: hidden;
+}
+
+.cap-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--amber);
+}
+
+.cap-bar span.is-bad {
+  background: var(--red);
+}
+
+.cap-slots {
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+.cap-slots h3 {
+  margin: 0 0 var(--sp-3);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.cap-slots ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.cap-slots li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: #f8fafc;
+  font-size: 11px;
+  color: var(--muted-strong);
+}
+
+.cap-slots b {
+  color: var(--navy);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------- loading + empties */
+.dash-skeleton,
+.skel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.skel-row {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.skel-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.skel-split {
+  grid-template-columns: 7fr 5fr;
+}
+
+.skel {
+  border-radius: var(--r-lg);
+  background: linear-gradient(100deg, #eef1f6 30%, #f6f8fb 50%, #eef1f6 70%);
+  background-size: 300% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+
+.skel-kpi {
+  height: 148px;
+}
+.skel-chart {
+  height: 330px;
+}
+.skel-side {
+  height: 330px;
+}
+.skel-table {
+  height: 260px;
+}
+
+@keyframes skel-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+.dash-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+  padding: var(--sp-9) var(--sp-5);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+
+.dash-placeholder-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-md);
+  background: #f3f6fa;
+  color: var(--muted-strong);
+}
+
+.dash-placeholder strong {
+  font-size: 15px;
+  color: var(--navy);
+}
+
+.dash-placeholder p {
+  margin: 0 0 var(--sp-3);
+  font-size: 12px;
+  color: var(--muted-strong);
+  max-width: 46ch;
+}
+
+/* ------------------------------------------------------------ shared chrome
+ * Two fixes that belong to the shell, not to one screen: a dish photo that
+ * cannot break its box, and a status pill that still says something when the
+ * topbar narrows.
+ */
+.product-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* The alt text of a photo that failed to load, boxed and clipped, instead
+     of flowing across the panel underneath. */
+  font-size: 9px;
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.food-thumb,
+.top-thumb,
+.cap-thumb {
+  position: relative;
+}
+
+/* ------------------------------------------------------------- breakpoints */
+@media (max-width: 1280px) {
+  .kpi-grid,
+  .skel-kpis {
+    gap: var(--sp-3);
+  }
+
+  .kpi {
+    padding: var(--sp-4);
+  }
+
+  .kpi-value {
+    font-size: 26px;
+  }
+
+  .dash-header h1 {
+    font-size: 25px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .kpi-grid,
+  .skel-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Two columns: the right-hand card's tooltip opens leftwards or it would
+     hang off the screen. */
+  .kpi-grid > .kpi:nth-child(even) .kpi-bubble {
+    left: auto;
+    right: -8px;
+  }
+
+  .dash-row-chart,
+  .dash-row-split,
+  .skel-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dash-header-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dash-actions .btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard {
+    gap: var(--sp-4);
+  }
+
+  .dashboard .panel {
+    padding: var(--sp-4);
+  }
+
+  .dash-header h1 {
+    font-size: 22px;
+  }
+
+  .dash-greeting {
+    font-size: 12px;
+  }
+
+  /* The chips scroll sideways rather than wrapping to three rows. */
+  .range-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+    /* Bleeds to the page edge so the row looks scrollable. 15px, not 16:
+       it has to match main's own padding at this width exactly, or the page
+       itself gains a pixel of horizontal scroll. */
+    margin: 0 -15px;
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+
+  .range-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chip {
+    padding: 10px 14px;
+  }
+
+  .range-panel {
+    left: 0;
+    right: auto;
+    width: calc(100vw - 48px);
+    max-width: 320px;
+  }
+
+  .ops-strip {
+    flex-direction: column;
+  }
+
+  .ops-item {
+    width: 100%;
+  }
+
+  .ops-label {
+    flex: 1;
+  }
+
+  .kpi {
+    padding: var(--sp-3);
+  }
+
+  .kpi-value {
+    font-size: 22px;
+  }
+
+  .kpi-label {
+    font-size: 11px;
+  }
+
+  .kpi-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .chart-frame {
+    min-height: 190px;
+  }
+
+  .panel-head {
+    gap: var(--sp-2);
+  }
+
+  .chart-total {
+    text-align: left;
+  }
+
+  .donut-wrap {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: var(--sp-4);
+  }
+
+  .status-legend {
+    width: 100%;
+  }
+
+  .top-row {
+    grid-template-columns: 18px 34px minmax(0, 1fr) auto;
+    gap: var(--sp-2);
+  }
+
+  /*
+   * The orders table becomes a stack of cards. The explicit ARIA roles in the
+   * markup keep it a table for assistive technology once `display` stops
+   * being `table-row`, and each cell carries its own label.
+   */
+  .orders-table-wrap {
+    overflow-x: visible;
+  }
+
+  .orders-table,
+  .orders-table tbody,
+  .orders-table tr,
+  .orders-table td {
+    display: block;
+    min-width: 0;
+    width: auto;
+  }
+
+  .orders-table thead {
+    display: none;
+  }
+
+  .orders-table tbody tr {
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: var(--sp-3);
+    margin-bottom: var(--sp-2);
+  }
+
+  .orders-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    border-bottom: 0;
+    padding: 5px 0;
+    text-align: right;
+  }
+
+  .orders-table td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--muted);
+    text-align: left;
+    flex-shrink: 0;
+  }
+
+  .orders-table td.row-end {
+    padding-top: var(--sp-3);
+    margin-top: var(--sp-2);
+    border-top: 1px solid var(--line);
+  }
+
+  .orders-table td.row-end::before {
+    content: '';
+  }
+
+  .orders-table .row-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /*
+   * Inside a card the cell is a flex row, so the customer's name and the
+   * items summary compete for it. The name wins and stays on one line - "Do
+   * Van Nhat" stacked into three lines is not a card anybody wants to read -
+   * and the summary takes what is left, with its ellipsis.
+   */
+  .orders-table td strong {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .orders-table .cell-sub {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    margin-top: 0;
+    text-align: right;
+  }
+
+  .skel-kpi {
+    height: 120px;
+  }
+  .skel-chart,
+  .skel-side {
+    height: 240px;
+  }
+}
+
+@media (max-width: 480px) {
+  /*
+   * The topbar runs out of room for six controls. The breadcrumb is the one
+   * that repeats itself - the page's own <h1> sits directly below it - so it
+   * goes, and "Đang nhận đơn" keeps its words.
+   */
+  .crumb {
+    display: none;
+  }
+}
+
+@media (max-width: 380px) {
+  .kpi-value {
+    font-size: 20px;
+    letter-spacing: -0.8px;
+  }
+
+  .capacity-counts {
+    gap: var(--sp-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-progress::after,
+  .skel {
+    animation: none;
+  }
+
+  .dashboard *,
+  .dashboard *::before,
+  .dashboard *::after {
+    transition-duration: 0.01ms !important;
+  }
+
+  .ops-item:hover {
+    transform: none;
+  }
+}
+
+/* ----------------------------------------------------------- sidebar rail
+ * The collapse control and what the rail looks like once it is used. Below
+ * 1025px the sidebar is already a drawer, so none of this applies there.
+ */
+/*
+ * The row's label.
+ *
+ * It has to undo three things the 22px glyph slot sets on its sibling, which
+ * the same selector also matches: the fixed width, the centring, and - the
+ * one that actually broke it - `display: inline-flex`, which turned the
+ * label into a flex container that centred its own text whatever
+ * `text-align` said.
+ */
+.sidebar nav a > span.nav-label,
+.sidebar nav button > span.nav-label {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.collapse-nav {
+  display: none;
+}
+
+.crumb {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.crumb-root {
+  color: inherit;
+}
+
+@media (min-width: 1025px) {
+  /* Takes the slot the drawer's hamburger occupies below this width. */
+  .collapse-nav {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: transparent;
+    color: #566579;
+    transition:
+      background var(--t-fast) ease-out,
+      color var(--t-fast) ease-out;
+  }
+
+  .collapse-nav:hover {
+    background: #f3f6fa;
+    color: var(--navy);
+  }
+
+  .app.nav-collapsed .sidebar {
+    width: 78px;
+    padding: 25px 12px;
+  }
+
+  .app.nav-collapsed .brand {
+    justify-content: center;
+    padding: 0 0 var(--sp-5);
+  }
+
+  .app.nav-collapsed .brand > div {
+    display: none;
+  }
+
+  .app.nav-collapsed .store-card {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .app.nav-collapsed .store-card > div,
+  .app.nav-collapsed .store-card > span:last-child {
+    display: none;
+  }
+
+  /* The group heading becomes the rule it was already acting as. */
+  .app.nav-collapsed .nav-title {
+    height: 1px;
+    margin: var(--sp-3) 8px;
+    padding: 0;
+    overflow: hidden;
+    text-indent: -999px;
+    background: var(--line);
+  }
+
+  .app.nav-collapsed nav a {
+    position: relative;
+    justify-content: center;
+    padding: 12px 0;
+  }
+
+  .app.nav-collapsed .nav-label {
+    flex: 0;
+  }
+
+  /*
+   * Hidden to the eye, not to a screen reader: `display: none` here would
+   * leave every rail link without an accessible name.
+   */
+  .app.nav-collapsed .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .app.nav-collapsed nav em {
+    position: absolute;
+    top: 3px;
+    right: 8px;
+    padding: 1px 5px;
+  }
+
+  .app.nav-collapsed .sidebar-bottom {
+    justify-content: center;
+  }
+
+  .app.nav-collapsed .sidebar-bottom > div:last-child {
+    display: none;
+  }
+}
+
+/* --------------------------------------------------------------- topbar */
+.topbar .user-avatar {
+  font-variant-numeric: normal;
+}
+
+@media (max-width: 1024px) {
+  /* The page you are on is the useful half of a breadcrumb on a small screen. */
+  .crumb-root,
+  .crumb > span {
+    display: none;
+  }
+
+  .crumb > strong {
+    display: inline;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 760px) {
+  /*
+   * The design shrank this pill to `font-size: 0`, leaving a green dot as the
+   * only sign that the shop is open - colour as the sole carrier of meaning,
+   * and the one state an operator most needs to be sure of.
+   */
+  .live-pill {
+    font-size: 10px;
+    padding: 8px 10px;
+    white-space: nowrap;
+  }
+
+  .live-pill i {
+    margin-right: 5px;
+  }
+}
+
+/* ---------------------------------------------------------- account menu */
+.account {
+  position: relative;
+}
+
+.account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 10px 4px 4px;
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 600;
+  transition: border-color var(--t-fast) ease-out;
+}
+
+.account-trigger:hover {
+  border-color: #d7dde8;
+}
+
+.account-name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+
+.account-head {
+  display: grid;
+  gap: 3px;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.account-head strong {
+  font-size: 13px;
+  color: var(--navy);
+}
+
+.account-head small {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.account-role {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #f1f4f9;
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.account-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 11px var(--sp-4);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  transition: background var(--t-fast) ease-out;
+}
+
+.account-item:hover {
+  background: #f7f9fc;
+}
+
+@media (max-width: 760px) {
+  .account-name {
+    display: none;
+  }
+
+  .account-trigger {
+    padding: 4px;
+    border-color: transparent;
+  }
+}
+
+/*
+ * Only between 1025 and 1280, where the delivered design narrows the rail to
+ * 228px: eight more pixels keep "Tích điểm & đổi món" on one line now that
+ * the labels are left-aligned rather than centred.
+ */
+@media (min-width: 1025px) and (max-width: 1280px) {
+  .sidebar {
+    width: 236px;
+  }
+}

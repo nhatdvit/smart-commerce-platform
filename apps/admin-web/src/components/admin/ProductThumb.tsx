@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 import { mediaUrl } from '@/lib/api-client';
 import type { MenuProduct } from '@/lib/menu-api';
 
@@ -23,7 +25,19 @@ export function ProductThumb({
   readonly product: Pick<MenuProduct, 'name' | 'icon' | 'imageUrl'>;
   readonly size?: number;
 }) {
-  if (product.imageUrl === null) {
+  /*
+   * A photo that 404s used to render its alt text instead, which on a
+   * Vietnamese dish name is a paragraph: it pushed out of the 38px square and
+   * across the panel below it. The icon this component already owns is a
+   * better answer than the browser's broken-image box, so a failed load falls
+   * back to it.
+   */
+  const [failed, setFailed] = useState(false);
+
+  // A different dish in the same slot deserves its own attempt.
+  useEffect(() => setFailed(false), [product.imageUrl]);
+
+  if (product.imageUrl === null || failed) {
     return <FoodIcon name={product.icon} size={size} />;
   }
 
@@ -35,6 +49,8 @@ export function ProductThumb({
       width={size}
       height={size}
       loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
     />
   );
 }
