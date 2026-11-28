@@ -12,7 +12,7 @@ import {
   type LoyaltyStanding,
 } from '@/lib/auth-api';
 import { addToStoredCart } from '@/lib/cart-storage';
-import { loadTodayMenu, type MenuItem } from '@/lib/menu-api';
+import { isSellable, loadTodayMenu, type MenuItem } from '@/lib/menu-api';
 import { money } from '@/lib/money';
 import {
   cancelOrder,
@@ -703,7 +703,7 @@ export function OrdersPage() {
           for (const line of detail.items) {
             const match = byVariant.get(`${line.productId}:${line.variantId}`);
 
-            if (match === undefined || !match.isAvailable) {
+            if (match === undefined || !isSellable(match)) {
               unavailable += 1;
               continue;
             }

@@ -173,6 +173,47 @@ it('refuses an item that is sold out', function (): void {
         ->assertJsonPath('code', 'OUT_OF_STOCK');
 });
 
+it('refuses an item whose portions for today have run out', function (): void {
+    $store = Store::factory()->create();
+    config(['commerce.default_store_slug' => $store->slug]);
+    enableCash($store->id);
+    $menu = Menu::query()->create([
+        'store_id' => $store->id,
+        'name' => 'Thực đơn hằng ngày',
+        'name_key' => 'thuc-don-hang-ngay',
+        'status' => MenuStatus::Active->value,
+    ]);
+    $item = menuItemFor($store->id, $menu->id, 'Xôi', 'Xôi gà xé', 30_000);
+    // Still switched on: the kitchen simply served the last portion. This is
+    // how a breakfast shop actually sells out.
+    $item->forceFill(['is_available' => true, 'available_quantity' => 0])->save();
+
+    $this->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($item->id))
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'OUT_OF_STOCK');
+});
+
+it('still sells an item nobody counts - a null portion count is not zero', function (): void {
+    $store = Store::factory()->create();
+    config(['commerce.default_store_slug' => $store->slug]);
+    enableCash($store->id);
+    $menu = Menu::query()->create([
+        'store_id' => $store->id,
+        'name' => 'Thực đơn hằng ngày',
+        'name_key' => 'thuc-don-hang-ngay',
+        'status' => MenuStatus::Active->value,
+    ]);
+    $item = menuItemFor($store->id, $menu->id, 'Đồ uống', 'Trà tắc mật ong', 22_000);
+    $item->forceFill(['available_quantity' => null, 'daily_capacity' => null])->save();
+
+    $this->withHeaders(CHECKOUT_HEADERS)
+        ->withHeader('Idempotency-Key', idempotencyKey())
+        ->postJson('/api/v1/orders', checkoutPayload($item->id))
+        ->assertCreated();
+});
+
 it('refuses a stale expected total - the menu price moved since the client last saw it', function (): void {
     [$storeId, $itemId] = readyStore();
 

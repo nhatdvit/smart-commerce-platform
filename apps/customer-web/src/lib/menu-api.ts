@@ -68,6 +68,14 @@ export interface MenuItem {
   /** Integer đồng. */
   readonly price: number;
   readonly isAvailable: boolean;
+  /**
+   * Portions left today, or null for an item nobody counts.
+   *
+   * Null and zero are NOT the same thing: null is a bottled drink the kitchen
+   * never counts, zero is a dish that has run out (CLAUDE.md section 6, and
+   * the API's own MenuItem entity). Reading null as zero would close the shop.
+   */
+  readonly availableQuantity: number | null;
   readonly sortOrder: number;
 }
 
@@ -98,6 +106,7 @@ function toMenuItem(item: ApiMenuItem): MenuItem {
     variantName: item.variant.name,
     price: toAmount(item.price),
     isAvailable: item.is_available,
+    availableQuantity: item.available_quantity,
     sortOrder: item.sort_order,
   };
 }
@@ -155,6 +164,19 @@ export interface MenuProductCard {
 }
 
 /**
+ * Whether this variant can still be added to a cart.
+ *
+ * Two different ways a dish stops being sellable: staff switched it off
+ * (`isAvailable`), or today's portions ran out (`availableQuantity === 0`).
+ * The API refuses both at checkout; this is the same rule, applied early so
+ * the customer sees "Hết hàng" instead of filling a cart that will be
+ * rejected.
+ */
+export function isSellable(item: MenuItem): boolean {
+  return item.isAvailable && item.availableQuantity !== 0;
+}
+
+/**
  * Groups menu items back into dishes.
  *
  * The menu is a flat list of sellable variants - "Chả ốc 250g" and "Chả ốc
@@ -188,7 +210,7 @@ export function groupIntoCards(items: readonly MenuItem[]): readonly MenuProduct
       continue;
     }
 
-    const options = variants.filter((variant) => variant.isAvailable);
+    const options = variants.filter(isSellable);
 
     cards.push({
       productId,

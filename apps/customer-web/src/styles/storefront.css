@@ -2680,3 +2680,48 @@ body {
     flex-direction: row;
   }
 }
+
+/* ----------------------------------------------------------- sold out
+ * A dish the kitchen has switched off, or whose portions for today have
+ * run out. It stays on the menu rather than disappearing: a customer who
+ * came for xôi should be told it is gone, not left wondering whether they
+ * misremembered the menu. The API refuses these at checkout either way
+ * (CreateOrder), so this is the early, polite half of the same rule.
+ */
+.product.sold-out .product-photo img,
+.product.sold-out .product-photo .storefront-icon {
+  filter: grayscale(0.85);
+  opacity: 0.55;
+}
+
+.product.sold-out .product-name,
+.product.sold-out .product-sub {
+  color: var(--muted);
+}
+
+.sold-out-flag {
+  position: absolute;
+  left: 7px;
+  top: 7px;
+  z-index: 1;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(16, 36, 66, 0.88);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+
+.product.sold-out .product-price {
+  color: var(--muted);
+}
+
+.product .add:disabled {
+  background: #eef1f6;
+  color: #8a97a8;
+  border-color: #e3e8ef;
+  cursor: not-allowed;
+  box-shadow: none;
+}

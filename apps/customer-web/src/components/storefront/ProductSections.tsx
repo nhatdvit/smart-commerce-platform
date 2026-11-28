@@ -79,6 +79,12 @@ function ProductCard({ card, liked, onAdd, onToggleFavorite }: ProductCardProps)
         ) : (
           <img src={card.imageUrl} alt={card.name} loading="lazy" />
         )}
+        {/*
+          Said on the photo, not only in the price slot: a customer scanning a
+          grid reads the pictures, and "Hết hàng" where the price would be is
+          easy to take for a price that failed to load.
+        */}
+        {card.isSoldOut ? <span className="sold-out-flag">Hết hàng</span> : null}
         <button
           type="button"
           className={liked ? 'heart liked' : 'heart'}
@@ -96,11 +102,11 @@ function ProductCard({ card, liked, onAdd, onToggleFavorite }: ProductCardProps)
           <button
             type="button"
             className="add"
-            aria-label={`Thêm ${card.name}`}
+            aria-label={card.isSoldOut ? `${card.name} đã hết hàng` : `Thêm ${card.name}`}
             disabled={card.isSoldOut}
             onClick={() => onAdd(card)}
           >
-            {card.isSoldOut ? '✕' : '+'}
+            <span aria-hidden="true">{card.isSoldOut ? '✕' : '+'}</span>
           </button>
         </div>
       </div>

@@ -667,13 +667,20 @@ paths:
           unit price and totals. Editing a product tomorrow must never rewrite
           what someone agreed to pay today.
 
-        **Not yet built: stock reservation.** `stock_reservations` and the row
-        locking that would stop two customers both winning the last portion
-        are Inventory module work (CLAUDE.md section 15 leaves the reservation
-        policy open); today only the already-built `is_available` flag is
-        checked, answering `OUT_OF_STOCK` for a sold-out item but not for a
-        race on the last one. Likewise, no coupon/discount is applied here yet
-        — Pricing's coupon module has no action that prices an order against
+        **Not yet built: stock reservation.** Two things are checked, and both
+        answer `OUT_OF_STOCK`: the `is_available` flag staff switch by hand,
+        and an `available_quantity` of zero - today's portions having run out,
+        which is how a breakfast shop usually sells out. A null
+        `available_quantity` is an item nobody counts and stays sellable.
+
+        What is still missing is everything that happens *between* those two
+        reads: placing an order does not decrement the count, and
+        `stock_reservations` plus the row locking that would stop two
+        customers both winning the last portion are Inventory module work
+        (CLAUDE.md section 15 leaves the reservation policy open). So a race
+        on the last portion is still possible, and the count only moves when
+        staff set it. Likewise, no coupon/discount is applied here yet -
+        Pricing's coupon module has no action that prices an order against
         one.
 
         A guest order answers with a one-time `guest_order_token`, needed for

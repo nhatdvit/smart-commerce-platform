@@ -223,6 +223,28 @@ final readonly class CreateOrder
                 );
             }
 
+            /*
+             * Out of portions is a different fact from switched off, and it
+             * has to be checked here too: the kitchen prepares a fixed number
+             * of each dish every morning, and the count running out is the
+             * usual way a breakfast shop sells out - nobody goes and flips
+             * `is_available` by hand when the last xôi leaves the counter.
+             *
+             * Only zero means sold out. Null is an item nobody counts, a
+             * bottled drink, and the domain entity says so (MenuItem: "Both
+             * null means this item is not counted at all").
+             */
+            if ($view->item->availableQuantity === 0) {
+                throw new BusinessRuleViolation(
+                    ErrorCode::OutOfStock,
+                    'An item in the cart has no portions left today',
+                    [[
+                        'field' => sprintf('items.%d.menu_item_id', $sortOrder),
+                        'message' => sprintf('"%s" đã hết suất hôm nay.', $view->variant->productName),
+                    ]],
+                );
+            }
+
             $lines[] = OrderItemEntity::create(
                 id: null,
                 productId: $view->variant->productId,
